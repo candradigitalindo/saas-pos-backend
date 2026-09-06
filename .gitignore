@@ -1,0 +1,20 @@
+# Environment & secrets
+.env
+.env.local
+*.env
+
+# Build artifacts
+tmp/
+/main
+/POS
+*.exe
+
+# OS files
+.DS_Store
+
+# Editor
+.idea/
+.vscode/
+
+# Logs
+*.log
