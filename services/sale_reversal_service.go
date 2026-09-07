@@ -48,6 +48,11 @@ func VoidSale(ctx context.Context, saleID, reason string) (*structs.SaleResponse
 		if err := repositories.MarkSaleCanceled(ctx, tx, saleID, reason); err != nil {
 			return err
 		}
+		// Hitung ulang agregat laporan hari transaksi asal — setelah statusnya
+		// 'canceled', rekalkulasi otomatis membuang kontribusinya (§13.2).
+		if err := repositories.RefreshDailySummary(ctx, tx, sale.OutletID, sale.BusinessDate); err != nil {
+			return err
+		}
 		return repositories.FindSaleInTenant(ctx, tx, saleID, &result)
 	})
 	if err != nil {
@@ -144,6 +149,11 @@ func RefundSale(ctx context.Context, saleID, reason string) (*structs.SaleRespon
 			return err
 		}
 		if err := reverseSaleStock(ctx, tx, orig.ID, ret.ID, "refund", bizDate); err != nil {
+			return err
+		}
+		// Retur bernilai negatif dicatat pada hari retur — hitung ulang agregat
+		// hari itu agar omzet & laba turun sesuai (§13.2).
+		if err := repositories.RefreshDailySummary(ctx, tx, orig.OutletID, bizDate); err != nil {
 			return err
 		}
 		return repositories.FindSaleInTenant(ctx, tx, ret.ID, &result)

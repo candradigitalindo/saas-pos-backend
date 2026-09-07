@@ -33,6 +33,7 @@ Sebuah framework backend REST API berbasis Golang dan Gin, dengan struktur modul
 - **Pembelian** — stok masuk (idempoten), harga modal = harga beli terakhir
 - **Opname & transfer** — hitung fisik (draft → post), transfer antar outlet (draft → kirim → terima)
 - **Resep F&B** — `PUT /products/:id/recipe`; bahan baku otomatis terpotong saat menu terjual
+- **Dashboard & laporan** — agregat `daily_sales_summaries` (dipelihara inkremental saat checkout, dihitung ulang saat void/retur); dashboard, laporan penjualan (`group_by` day/channel/cashier/payment), laba bersih per kanal, ekspor CSV; dashboard < 1 detik pada 100.000 transaksi
 - **Autentikasi JWT** — access token pendek (15 mnt) + refresh token (30 hari) dengan rotasi & deteksi pemakaian ulang
 - **Manajemen Outlet / User / Role** — CRUD tenant-scoped + Pagination ala Laravel
 - **Migrasi skema berversi** (`cmd/migrate`) — `AutoMigrate` dimatikan
@@ -140,7 +141,12 @@ Semua endpoint bisnis di bawah prefiks `/api/v1`.
 | `POST /api/v1/sales` (header `Idempotency-Key`) | `sale.create` | Checkout |
 | `GET  /api/v1/sales` · `GET /api/v1/sales/:id` | `sale.create` | Daftar / detail transaksi |
 | `POST /api/v1/sales/:id/void` · `.../refund` | `sale.void` / `sale.refund` | Batal / retur penuh |
-| `GET  /api/v1/sales-summary?from=&to=` | `report.view` | Ringkasan omzet/laba |
+| `GET  /api/v1/sales-summary?from=&to=` | `report.view` | Ringkasan omzet/laba (langsung dari `sales`) |
+| `GET  /api/v1/reports/dashboard?outlet_id=&date=` | `report.view` | Ringkasan hari + bulan berjalan + per kanal (dari agregat) |
+| `GET  /api/v1/reports/sales?from=&to=&group_by=` | `report.view` | Laporan penjualan; `group_by` = day\|channel\|cashier\|payment |
+| `GET  /api/v1/reports/profit?from=&to=` | `report.profit` | Laba bersih per kanal (§13.5) |
+| `GET  /api/v1/reports/export?type=&format=csv` | `report.export` | Ekspor CSV (`type` = sales\|profit\|dashboard) |
+| `POST /api/v1/reports/rebuild-summaries?from=&to=&outlet_id=` | `report.view` | Bangun ulang `daily_sales_summaries` dari `sales` |
 | `POST /api/v1/shifts/open` · `/shifts/:id/close` | `shift.open` / `shift.close` | Buka / tutup shift |
 | `POST/GET /api/v1/cash-movements` | `cash.movement` | Kas masuk/keluar |
 | `GET  /api/v1/stocks?outlet_id=&low=` | `stock.view` | Saldo stok |

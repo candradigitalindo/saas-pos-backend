@@ -191,7 +191,12 @@ func Checkout(ctx context.Context, in CheckoutInput) (int, []byte, error) {
 			}
 		}
 
-		// 10. Bentuk response, simpan ke idempotency_keys, kembalikan.
+		// 10. Perbarui agregat laporan harian (UPSERT inkremental, §13.1 langkah 10).
+		if err := repositories.ApplySaleToSummary(ctx, tx, &sale); err != nil {
+			return err
+		}
+
+		// 11. Bentuk response, simpan ke idempotency_keys, kembalikan.
 		body, err := marshalSaleResponse(&sale, "Transaksi berhasil")
 		if err != nil {
 			return err

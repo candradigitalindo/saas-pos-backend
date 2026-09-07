@@ -201,6 +201,15 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	t.GET("/receivables/:id", middlewares.Require("receivable.manage"), controllers.GetReceivable)
 	t.POST("/receivable-payments", middlewares.Require("receivable.manage"), controllers.AddReceivablePayment)
 
+	// Laporan & dashboard — agregat dari daily_sales_summaries (Fase 5, §8).
+	// Semua path statis di bawah /reports; tak ada :id → tak bentrok wildcard.
+	rep := t.Group("/reports")
+	rep.GET("/dashboard", middlewares.Require("report.view"), controllers.ReportDashboard)
+	rep.GET("/sales", middlewares.Require("report.view"), controllers.ReportSales)
+	rep.GET("/profit", middlewares.Require("report.profit"), controllers.ReportProfit)
+	rep.GET("/export", middlewares.Require("report.export"), controllers.ReportExport)
+	rep.POST("/rebuild-summaries", middlewares.Require("report.view"), controllers.RebuildReportSummaries)
+
 	// Stok: baca + penyesuaian manual (saldo awal / koreksi).
 	t.GET("/stocks", middlewares.Require("stock.view"), controllers.ListStocks)
 	t.GET("/stock-movements", middlewares.Require("stock.view"), controllers.ListStockMovements)
