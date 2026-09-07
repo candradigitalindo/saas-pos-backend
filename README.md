@@ -37,6 +37,7 @@ Sebuah framework backend REST API berbasis Golang dan Gin, dengan struktur modul
 - **Sinkronisasi offline** — `POST /sync/push` (batch penjualan dari perangkat offline, idempoten per ULID + Idempotency-Key, satu operasi gagal tidak menjatuhkan batch, `business_date` dihitung ulang di server) + `GET /sync/pull` (master data + stok + batu nisan, kursor `sync_version` lewat pemicu database)
 - **Langganan platform** — paket + tangga diskon prabayar (1/3/6/9/12 bulan), trial, tagihan & pembayaran idempoten, pendapatan diterima di muka diakui bulanan (`deferred_revenue_entries` + `cmd/recognize-revenue`), pembatalan di tengah masa dihitung ulang pada harga bulanan normal, prorata ganti paket
 - **CRM tenant** — pipeline & tahap yang bisa diatur, deal + alasan menang/kalah, aktivitas follow-up; penawaran → proyek otomatis → invoice bertermin → pembayaran parsial; **pelunasan invoice tercatat sebagai satu penjualan di tabel `sales` yang sama dengan POS** (omzet & laba satu pintu). Visibilitas kepemilikan (lapis 3, `scopeVisibility`): sales hanya melihat datanya sendiri
+- **CRM sales lapangan** — rencana kunjungan (call plan), check-in/out dengan GPS + foto (direkam **hanya** saat check-in/out), kunjungan tanpa pesanan + alasan; kunjungan offline disinkron idempoten lewat `/sync/push` (`op: visit.upsert`); target sales + pencapaian; **komisi berbasis nilai TERTAGIH** (pembayaran non-kredit + setoran piutang lapangan), bukan terkirim
 - **Autentikasi JWT** — access token pendek (15 mnt) + refresh token (30 hari) dengan rotasi & deteksi pemakaian ulang
 - **Manajemen Outlet / User / Role** — CRUD tenant-scoped + Pagination ala Laravel
 - **Migrasi skema berversi** (`cmd/migrate`) — `AutoMigrate` dimatikan
@@ -166,6 +167,11 @@ Semua endpoint bisnis di bawah prefiks `/api/v1`.
 | `GET/POST/PUT /api/v1/projects[/:id]` · `.../tasks` · `.../expenses` | `crm.lead.view.*` / `crm.deal.edit` | Proyek, tugas, biaya (→ modal saat lunas) |
 | `POST /api/v1/invoices` · `.../send` · `.../void` | `invoice.issue` / `invoice.void` | Invoice pelanggan bertermin |
 | `POST /api/v1/invoice-payments` (header `Idempotency-Key`) | `invoice.issue` | Pembayaran parsial; lunas → penjualan di `sales` |
+| `GET/POST /api/v1/visit-plans[/:id]` | `crm.visit.checkin` | Rencana kunjungan harian + kunjungan `pending` per toko |
+| `GET/POST /api/v1/visits[/:id]` · `.../checkout` | `crm.visit.checkin` | Check-in (GPS+foto) & check-out; idempoten per id klien |
+| `POST /api/v1/sync/push` `op: visit.upsert` | `sale.create` | Sinkron kunjungan offline (tanpa duplikat) |
+| `GET/POST /api/v1/sales-targets` | `crm.commission.view` | Target sales + pencapaian (kunjungan & tertagih) |
+| `GET/POST /api/v1/commissions` · `.../approve` · `.../pay` | `crm.commission.view` | Hitung komisi dari nilai tertagih → setujui → bayar |
 | `POST /api/v1/shifts/open` · `/shifts/:id/close` | `shift.open` / `shift.close` | Buka / tutup shift |
 | `POST/GET /api/v1/cash-movements` | `cash.movement` | Kas masuk/keluar |
 | `GET  /api/v1/stocks?outlet_id=&low=` | `stock.view` | Saldo stok |

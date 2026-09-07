@@ -278,6 +278,35 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	inv.POST("/:id/void", middlewares.Require("invoice.void"), controllers.VoidInvoice)
 	t.POST("/invoice-payments", middlewares.Require("invoice.issue"), controllers.PayInvoice)
 
+	// CRM sales lapangan (Fase 10, §5.9). Kunjungan & rencana dijaga
+	// crm.visit.checkin; target & komisi butuh crm.commission.view (pengawas).
+	visitView := middlewares.Require("crm.visit.checkin", "crm.lead.view.all")
+	visitEdit := middlewares.Require("crm.visit.checkin")
+	commView := middlewares.Require("crm.commission.view")
+
+	vp := t.Group("/visit-plans")
+	vp.GET("", visitView, controllers.ListVisitPlans)
+	vp.POST("", visitEdit, controllers.CreateVisitPlan)
+	vp.GET("/:id", visitView, controllers.GetVisitPlan)
+
+	vis := t.Group("/visits")
+	vis.GET("", visitView, controllers.ListVisits)
+	vis.POST("", visitEdit, controllers.UpsertVisit)
+	vis.GET("/:id", visitView, controllers.GetVisit)
+	vis.POST("/:id/checkout", visitEdit, controllers.CheckoutVisit)
+
+	st := t.Group("/sales-targets")
+	st.GET("", commView, controllers.ListSalesTargets)
+	st.POST("", commView, controllers.SetSalesTarget)
+
+	// POST /commissions = hitung (bukan /commissions/compute — path statis di
+	// posisi yang sama dengan :id membuat gin panik).
+	com := t.Group("/commissions", commView)
+	com.GET("", controllers.ListCommissions)
+	com.POST("", controllers.ComputeCommission)
+	com.POST("/:id/approve", controllers.ApproveCommission)
+	com.POST("/:id/pay", controllers.PayCommission)
+
 	// Stok: baca + penyesuaian manual (saldo awal / koreksi).
 	t.GET("/stocks", middlewares.Require("stock.view"), controllers.ListStocks)
 	t.GET("/stock-movements", middlewares.Require("stock.view"), controllers.ListStockMovements)

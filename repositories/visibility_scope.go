@@ -30,6 +30,17 @@ func scopeVisibility(ctx context.Context, db *gorm.DB, table string) *gorm.DB {
 	return db.Where("("+table+".owner_id = ? OR "+table+".owner_id IS NULL)", reqctx.UserID(ctx))
 }
 
+// scopeOwnUnless membatasi query ke `col = user konteks` KECUALI user memegang
+// salah satu `bypassPerms`. Dipakai untuk tabel yang di-scope ke pemakainya
+// lewat kolom selain `owner_id` (mis. sales_targets/commissions → `user_id`),
+// di mana pengawas dengan izin tertentu boleh melihat seluruh tim.
+func scopeOwnUnless(ctx context.Context, db *gorm.DB, col string, bypassPerms ...string) *gorm.DB {
+	if reqctx.HasAnyPermission(ctx, bypassPerms...) {
+		return db
+	}
+	return db.Where(col+" = ?", reqctx.UserID(ctx))
+}
+
 // currentUserID mengambil user_id dari context (mis. untuk stempel owner_id saat
 // membuat data CRM). Kosong hanya bila rute tak melewati middleware Auth.
 func currentUserID(ctx context.Context) string {

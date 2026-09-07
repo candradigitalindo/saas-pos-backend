@@ -120,6 +120,31 @@ func applySyncOp(ctx context.Context, op structs.SyncOperation) (structs.SyncOpR
 			return structs.SyncOpResult{ID: op.ID, Status: "applied"}, nil
 		}
 
+	case "visit.upsert":
+		var payload structs.VisitUpsertRequest
+		if err := binding.JSON.BindBody(op.Payload, &payload); err != nil {
+			return reject("payload tidak valid: " + err.Error()), nil
+		}
+		if payload.ID == "" {
+			payload.ID = op.ID // ULID operasi = ULID kunjungan
+		}
+		_, err := UpsertVisit(ctx, VisitUpsertInput{
+			ID: payload.ID, VisitPlanID: payload.VisitPlanID, CustomerID: payload.CustomerID,
+			CheckinAt: payload.CheckinAt, CheckoutAt: payload.CheckoutAt,
+			CheckinLat: payload.CheckinLat, CheckinLng: payload.CheckinLng,
+			PhotoURL: payload.PhotoURL, Result: payload.Result,
+			NoOrderReason: payload.NoOrderReason, SaleID: payload.SaleID,
+		})
+		switch {
+		case err != nil && helpers.StatusForError(err) >= 500:
+			return structs.SyncOpResult{}, err // fatal
+		case err != nil:
+			return reject(cleanReason(err)), nil
+		default:
+			// Upsert idempoten: kirim ulang kunjungan yang sama = satu baris.
+			return structs.SyncOpResult{ID: op.ID, Status: "applied"}, nil
+		}
+
 	default:
 		return reject("operasi tidak dikenal: " + op.Op), nil
 	}
