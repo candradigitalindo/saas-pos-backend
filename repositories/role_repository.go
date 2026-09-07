@@ -4,17 +4,18 @@ import (
 	"context"
 	"errors"
 
-	"candra/backend-api/database"
 	"candra/backend-api/models"
 
-	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 )
 
-// ErrRoleInUse dikembalikan saat mencoba menghapus role yang masih digunakan oleh user.
+// ErrRoleInUse dikembalikan saat mencoba menghapus role yang masih dipakai user.
 var ErrRoleInUse = errors.New("role sedang digunakan oleh satu atau lebih user dan tidak dapat dihapus")
 
-// roleSearchCondition membangun klausa WHERE untuk pencarian role.
+// ErrRoleNotFound dikembalikan bila role tidak ada di tenant konteks.
+var ErrRoleNotFound = errors.New("role tidak ditemukan")
+
+// roleSearchCondition membangun klausa WHERE pencarian role.
 func roleSearchCondition(search string) (string, []interface{}) {
 	if search == "" {
 		return "", nil
@@ -22,17 +23,16 @@ func roleSearchCondition(search string) (string, []interface{}) {
 	return "name ILIKE ?", []interface{}{"%" + escapeLike(search) + "%"}
 }
 
-// ListRoles mengambil satu halaman role beserta total keseluruhannya.
-// Order by id (ULID terurut kronologis) menjamin paginasi deterministik.
+// ListRoles mengambil satu halaman role milik TENANT KONTEKS + total-nya.
 func ListRoles(ctx context.Context, search string, limit, offset int) ([]models.Role, int64, error) {
 	cond, args := roleSearchCondition(search)
 
-	var total int64
-	countQuery := database.DB.WithContext(ctx).Model(&models.Role{})
+	countQ := scopeTenant(ctx, tenantDB(ctx, nil).Model(&models.Role{}))
 	if cond != "" {
-		countQuery = countQuery.Where(cond, args...)
+		countQ = countQ.Where(cond, args...)
 	}
-	if err := countQuery.Count(&total).Error; err != nil {
+	var total int64
+	if err := countQ.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 	if total == 0 {
@@ -40,61 +40,86 @@ func ListRoles(ctx context.Context, search string, limit, offset int) ([]models.
 	}
 
 	roles := make([]models.Role, 0, limit)
-	query := database.DB.WithContext(ctx).
-		Model(&models.Role{}).
+	q := scopeTenant(ctx, tenantDB(ctx, nil)).
 		Order("id DESC").
 		Limit(limit).
 		Offset(offset)
 	if cond != "" {
-		query = query.Where(cond, args...)
+		q = q.Where(cond, args...)
 	}
-	if err := query.Find(&roles).Error; err != nil {
+	if err := q.Find(&roles).Error; err != nil {
 		return nil, 0, err
 	}
-
 	return roles, total, nil
 }
 
-func FindRoleByID(ctx context.Context, id string, role *models.Role) error {
-	return database.DB.WithContext(ctx).First(role, "id = ?", id).Error
-}
-
-// FindRoleByName mencari role berdasarkan namanya. Dipakai untuk menetapkan
-// role default ('user') saat registrasi mandiri.
-func FindRoleByName(ctx context.Context, name string, role *models.Role) error {
-	return database.DB.WithContext(ctx).First(role, "name = ?", name).Error
-}
-
-func CreateRole(ctx context.Context, role *models.Role) error {
-	return database.DB.WithContext(ctx).Create(role).Error
-}
-
-// UpdateRoleModel menyimpan perubahan pada model role.
-func UpdateRoleModel(ctx context.Context, role *models.Role) error {
-	return database.DB.WithContext(ctx).Save(role).Error
-}
-
-// DeleteRole menghapus role dan mengembalikan ErrRoleInUse bila masih dipakai user.
-//
-// Optimasi: cukup SATU query DELETE, tanpa transaksi COUNT-lalu-DELETE.
-// Perlindungan diserahkan ke foreign key constraint di database, sehingga:
-//   - bebas race condition (pendekatan COUNT lalu DELETE masih bisa kebobolan
-//     bila ada user baru memakai role tersebut di antara kedua query), dan
-//   - lebih cepat karena menghemat satu round-trip + overhead transaksi.
-//
-// PostgreSQL mengembalikan SQLSTATE 23503 (foreign_key_violation) bila role
-// masih direferensikan oleh baris di tabel users.
-func DeleteRole(ctx context.Context, id string) error {
-	result := database.DB.WithContext(ctx).Delete(&models.Role{}, "id = ?", id)
-	if err := result.Error; err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
-			return ErrRoleInUse
-		}
-		return err
+// FindRoleInTenant mengambil satu role milik tenant konteks. tx opsional.
+// ErrRoleNotFound juga muncul bila id valid tapi milik tenant lain.
+func FindRoleInTenant(ctx context.Context, tx *gorm.DB, id string, role *models.Role) error {
+	err := scopeTenant(ctx, tenantDB(ctx, tx)).First(role, "id = ?", id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return ErrRoleNotFound
 	}
-	if result.RowsAffected == 0 {
-		return gorm.ErrRecordNotFound
+	return err
+}
+
+// CreateRole menyimpan role baru. Pemanggil mengisi TenantID dari konteks. tx
+// opsional (registration service memakainya di dalam transaksinya).
+func CreateRole(ctx context.Context, tx *gorm.DB, role *models.Role) error {
+	return tenantDB(ctx, tx).Create(role).Error
+}
+
+// UpdateRole menyimpan perubahan role milik tenant konteks (nama & deskripsi).
+func UpdateRole(ctx context.Context, tx *gorm.DB, role *models.Role) error {
+	res := scopeTenant(ctx, tenantDB(ctx, tx)).
+		Model(role).
+		Select("name", "description").
+		Updates(role)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return ErrRoleNotFound
 	}
 	return nil
+}
+
+// DeleteRole menandai role terhapus (soft delete) di tenant konteks.
+//
+// Karena soft delete = UPDATE, FK ON DELETE RESTRICT tidak ikut menjaga. Jadi di
+// dalam satu transaksi: tolak bila masih ada user aktif yang memakainya
+// (ErrRoleInUse) atau bila role bawaan (is_system). Cek + hapus dalam satu
+// transaksi menutup celah race "user baru menyelip di antara cek dan hapus".
+func DeleteRole(ctx context.Context, id string) error {
+	return WithTenant(ctx, func(tx *gorm.DB) error {
+		var role models.Role
+		if err := scopeTenant(ctx, tx).First(&role, "id = ?", id).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrRoleNotFound
+			}
+			return err
+		}
+		if role.IsSystem {
+			return ErrRoleInUse
+		}
+
+		var inUse int64
+		if err := scopeTenant(ctx, tx.Model(&models.User{})).
+			Where("role_id = ?", id).
+			Count(&inUse).Error; err != nil {
+			return err
+		}
+		if inUse > 0 {
+			return ErrRoleInUse
+		}
+
+		res := scopeTenant(ctx, tx).Delete(&models.Role{}, "id = ?", id)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return ErrRoleNotFound
+		}
+		return nil
+	})
 }

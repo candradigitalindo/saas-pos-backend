@@ -1,234 +1,291 @@
 package controllers
 
 import (
-	"candra/backend-api/helpers"
-	"candra/backend-api/models"
-	"candra/backend-api/repositories"
-	"candra/backend-api/structs"
 	"errors"
 	"net/http"
 
+	"candra/backend-api/helpers"
+	"candra/backend-api/internal/reqctx"
+	"candra/backend-api/models"
+	"candra/backend-api/repositories"
+	"candra/backend-api/structs"
+
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
-// Tampilkan semua role dengan pagination
+// roleToResponse memetakan model Role + kode permission-nya (opsional) ke DTO.
+func roleToResponse(r models.Role, permCodes []string) structs.RoleResponse {
+	return structs.RoleResponse{
+		ID:              r.ID,
+		Name:            r.Name,
+		Description:     r.Description,
+		IsSystem:        r.IsSystem,
+		PermissionCodes: permCodes,
+		CreatedAt:       r.CreatedAt.Format(timeLayout),
+		UpdatedAt:       r.UpdatedAt.Format(timeLayout),
+	}
+}
+
+// GetAllRoles mengembalikan peran milik tenant, berpaginasi (tanpa daftar
+// permission per baris agar hemat query).
 func GetAllRoles(c *gin.Context) {
 	page, limit, offset := helpers.ParsePaginationParams(c)
 	search := c.Query("search")
 
-	// Satu pemanggilan repository mengambil data halaman + total sekaligus,
-	// dengan context request agar query batal saat klien memutus koneksi.
 	roles, total, err := repositories.ListRoles(c.Request.Context(), search, limit, offset)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, structs.ErrorResponse{
-			Success: false,
-			Message: "Gagal mengambil data role",
-			Errors:  helpers.TranslateErrorMessage(err),
-		})
+		respondServiceError(c, err)
 		return
 	}
 
-	roleResponses := make([]structs.RoleResponse, len(roles))
-	for i, role := range roles {
-		roleResponses[i] = structs.RoleResponse{
-			ID:        role.ID,
-			Name:      role.Name,
-			CreatedAt: role.CreatedAt.Format("2006-01-02 15:04:05"),
-			UpdatedAt: role.UpdatedAt.Format("2006-01-02 15:04:05"),
-		}
+	items := make([]structs.RoleResponse, len(roles))
+	for i, r := range roles {
+		items[i] = roleToResponse(r, nil)
 	}
-
-	pagination := helpers.BuildPaginationResponse(c, page, limit, total, roleResponses)
-
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.PaginatedResponse[structs.RoleResponse]]{
 		Success: true,
 		Message: "Berhasil mengambil data role",
-		Data:    pagination,
+		Data:    helpers.BuildPaginationResponse(c, page, limit, total, items),
 	})
 }
 
-// Fungsi untuk membuat role baru
-func CreateRole(c *gin.Context) {
-	var req structs.RoleCreateRequest
+// GetRoleByID mengembalikan satu peran beserta kode permission-nya.
+func GetRoleByID(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		badRequest(c, "id", "ID role tidak boleh kosong")
+		return
+	}
+	ctx := c.Request.Context()
 
-	// Validasi input
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, structs.ErrorResponse{
-			Success: false,
-			Message: "Validasi gagal",
-			Errors:  helpers.TranslateErrorMessage(err),
-		})
+	var role models.Role
+	if err := repositories.FindRoleInTenant(ctx, nil, id, &role); err != nil {
+		if errors.Is(err, repositories.ErrRoleNotFound) {
+			notFound(c, "Role tidak ditemukan")
+			return
+		}
+		respondServiceError(c, err)
 		return
 	}
 
-	role := models.Role{Name: req.Name}
+	codes, err := repositories.EffectivePermissionCodes(ctx, role.ID)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
 
-	if err := repositories.CreateRole(c.Request.Context(), &role); err != nil {
-		// Tentukan status HTTP dan pesan umum berdasarkan jenis error
-		status := http.StatusInternalServerError
-		message := "Gagal membuat role"
+	c.JSON(http.StatusOK, structs.SuccessResponse[structs.RoleResponse]{
+		Success: true,
+		Message: "Berhasil mengambil data role",
+		Data:    roleToResponse(role, codes),
+	})
+}
 
-		if helpers.IsDuplicateEntryError(err) {
-			status = http.StatusConflict
-			message = "Role dengan nama ini sudah ada"
+// CreateRole menambah peran baru dalam tenant, opsional langsung dengan
+// pemetaan permission.
+func CreateRole(c *gin.Context) {
+	var req structs.RoleCreateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		validationFailed(c, err)
+		return
+	}
+	ctx := c.Request.Context()
+
+	permIDs, err := repositories.PermissionIDsByCode(ctx, nil, req.PermissionCodes)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	if len(permIDs) != len(req.PermissionCodes) {
+		badRequest(c, "permission_codes", "Ada kode permission yang tidak dikenal")
+		return
+	}
+
+	role := models.Role{
+		TenantID:    reqctx.TenantID(ctx),
+		Name:        req.Name,
+		Description: req.Description,
+		IsSystem:    false,
+	}
+	if err := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
+		if err := repositories.CreateRole(ctx, tx, &role); err != nil {
+			return err
 		}
-
-		// Selalu gunakan TranslateErrorMessage untuk mendapatkan detail error yang konsisten
-		c.JSON(status, structs.ErrorResponse{Success: false, Message: message, Errors: helpers.TranslateErrorMessage(err)})
+		return repositories.AssignRolePermissions(ctx, tx, role.ID, permIDs)
+	}); err != nil {
+		if helpers.IsDuplicateEntryError(err) {
+			c.JSON(http.StatusConflict, structs.ErrorResponse{
+				Success: false,
+				Message: "Nama role sudah dipakai",
+				Errors:  map[string]string{"name": "sudah dipakai"},
+			})
+			return
+		}
+		respondServiceError(c, err)
 		return
 	}
 
 	c.JSON(http.StatusCreated, structs.SuccessResponse[structs.RoleResponse]{
 		Success: true,
 		Message: "Role berhasil dibuat",
-		Data: structs.RoleResponse{
-			ID:        role.ID,
-			Name:      role.Name,
-			CreatedAt: role.CreatedAt.Format("2006-01-02 15:04:05"),
-			UpdatedAt: role.UpdatedAt.Format("2006-01-02 15:04:05"),
-		},
+		Data:    roleToResponse(role, req.PermissionCodes),
 	})
 }
 
-// Fungsi untuk mengambil detail role berdasarkan ID
-func GetRoleByID(c *gin.Context) {
-	id := c.Param("id")
-	if id == "" {
-		c.JSON(http.StatusBadRequest, structs.ErrorResponse{
-			Success: false,
-			Message: "ID role tidak boleh kosong",
-			Errors:  map[string]string{"id": "ID role tidak boleh kosong"},
-		})
-		return
-	}
-
-	var role models.Role
-	if err := repositories.FindRoleByID(c.Request.Context(), id, &role); err != nil {
-		c.JSON(http.StatusNotFound, structs.ErrorResponse{
-			Success: false,
-			Message: "Data role tidak ditemukan",
-			Errors:  helpers.TranslateErrorMessage(err),
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, structs.SuccessResponse[structs.RoleResponse]{
-		Success: true,
-		Message: "Berhasil mengambil data role",
-		Data: structs.RoleResponse{
-			ID:        role.ID,
-			Name:      role.Name,
-			CreatedAt: role.CreatedAt.Format("2006-01-02 15:04:05"),
-			UpdatedAt: role.UpdatedAt.Format("2006-01-02 15:04:05"),
-		},
-	})
-}
-
-// Fungsi untuk mengupdate role
+// UpdateRole mengubah nama/deskripsi peran. Peran bawaan (is_system) tidak boleh
+// diganti namanya.
 func UpdateRole(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
-		c.JSON(http.StatusBadRequest, structs.ErrorResponse{
-			Success: false,
-			Message: "ID role tidak boleh kosong",
-			Errors:  map[string]string{"id": "ID role tidak boleh kosong"},
-		})
+		badRequest(c, "id", "ID role tidak boleh kosong")
 		return
 	}
 
 	var req structs.RoleUpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, structs.ErrorResponse{
-			Success: false,
-			Message: "Validasi gagal",
-			Errors:  helpers.TranslateErrorMessage(err),
-		})
+		validationFailed(c, err)
 		return
 	}
+	ctx := c.Request.Context()
 
-	// 1. Ambil model role yang ada dari database
 	var role models.Role
-	if err := repositories.FindRoleByID(c.Request.Context(), id, &role); err != nil {
-		c.JSON(http.StatusNotFound, structs.ErrorResponse{
-			Success: false,
-			Message: "Data role tidak ditemukan",
-			Errors:  helpers.TranslateErrorMessage(err),
-		})
+	if err := repositories.FindRoleInTenant(ctx, nil, id, &role); err != nil {
+		if errors.Is(err, repositories.ErrRoleNotFound) {
+			notFound(c, "Role tidak ditemukan")
+			return
+		}
+		respondServiceError(c, err)
 		return
 	}
 
-	// 2. Perbarui field pada model dari request
-	role.Name = req.Name
+	if role.IsSystem && req.Name != "" && req.Name != role.Name {
+		badRequest(c, "name", "Nama peran bawaan tidak boleh diubah")
+		return
+	}
+	if req.Name != "" {
+		role.Name = req.Name
+	}
+	if req.Description != "" {
+		role.Description = req.Description
+	}
 
-	// 3. Simpan model yang sudah diperbarui
-	if err := repositories.UpdateRoleModel(c.Request.Context(), &role); err != nil {
-		c.JSON(http.StatusInternalServerError, structs.ErrorResponse{
-			Success: false,
-			Message: "Gagal mengupdate role",
-			Errors:  helpers.TranslateErrorMessage(err),
-		})
+	if err := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
+		return repositories.UpdateRole(ctx, tx, &role)
+	}); err != nil {
+		if errors.Is(err, repositories.ErrRoleNotFound) {
+			notFound(c, "Role tidak ditemukan")
+			return
+		}
+		if helpers.IsDuplicateEntryError(err) {
+			c.JSON(http.StatusConflict, structs.ErrorResponse{
+				Success: false,
+				Message: "Nama role sudah dipakai",
+				Errors:  map[string]string{"name": "sudah dipakai"},
+			})
+			return
+		}
+		respondServiceError(c, err)
 		return
 	}
 
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.RoleResponse]{
 		Success: true,
-		Message: "Role berhasil diupdate",
-		Data: structs.RoleResponse{
-			ID:        role.ID,
-			Name:      role.Name,
-			CreatedAt: role.CreatedAt.Format("2006-01-02 15:04:05"),
-			UpdatedAt: role.UpdatedAt.Format("2006-01-02 15:04:05"),
-		},
+		Message: "Role berhasil diperbarui",
+		Data:    roleToResponse(role, nil),
 	})
 }
 
-// Fungsi untuk menghapus role
-func DeleteRole(c *gin.Context) {
+// SetRolePermissions mengganti SELURUH pemetaan permission sebuah peran.
+func SetRolePermissions(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
-		c.JSON(http.StatusBadRequest, structs.ErrorResponse{
-			Success: false,
-			Message: "ID role tidak boleh kosong",
-			Errors:  map[string]string{"id": "ID role tidak boleh kosong"},
-		})
+		badRequest(c, "id", "ID role tidak boleh kosong")
 		return
 	}
 
-	// Tambahkan pengecekan: Pastikan role ada sebelum mencoba menghapus.
-	// Ini untuk memberikan response 404 yang benar jika ID tidak ditemukan.
+	var req structs.RolePermissionsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		validationFailed(c, err)
+		return
+	}
+	ctx := c.Request.Context()
+
 	var role models.Role
-	if err := repositories.FindRoleByID(c.Request.Context(), id, &role); err != nil {
-		c.JSON(http.StatusNotFound, structs.ErrorResponse{
-			Success: false,
-			Message: "Data role tidak ditemukan",
-			Errors:  helpers.TranslateErrorMessage(err),
-		})
+	if err := repositories.FindRoleInTenant(ctx, nil, id, &role); err != nil {
+		if errors.Is(err, repositories.ErrRoleNotFound) {
+			notFound(c, "Role tidak ditemukan")
+			return
+		}
+		respondServiceError(c, err)
+		return
+	}
+
+	permIDs, err := repositories.PermissionIDsByCode(ctx, nil, req.PermissionCodes)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	if len(permIDs) != len(req.PermissionCodes) {
+		badRequest(c, "permission_codes", "Ada kode permission yang tidak dikenal")
+		return
+	}
+
+	if err := repositories.ReplaceRolePermissions(ctx, role.ID, permIDs); err != nil {
+		respondServiceError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, structs.SuccessResponse[structs.RoleResponse]{
+		Success: true,
+		Message: "Hak akses role berhasil diperbarui",
+		Data:    roleToResponse(role, req.PermissionCodes),
+	})
+}
+
+// DeleteRole menghapus (soft delete) peran non-bawaan yang tidak sedang dipakai.
+func DeleteRole(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		badRequest(c, "id", "ID role tidak boleh kosong")
 		return
 	}
 
 	err := repositories.DeleteRole(c.Request.Context(), id)
-	if err != nil {
-		// Periksa custom error secara spesifik untuk penanganan yang lebih andal
-		if errors.Is(err, repositories.ErrRoleInUse) {
-			c.JSON(http.StatusConflict, structs.ErrorResponse{
-				Success: false,
-				Message: "Role tidak dapat dihapus karena sedang digunakan oleh user.",
-				Errors:  map[string]string{"role": err.Error()},
-			})
-			return
-		}
-		// Tangani error potensial lainnya
-		c.JSON(http.StatusInternalServerError, structs.ErrorResponse{
+	switch {
+	case errors.Is(err, repositories.ErrRoleNotFound):
+		notFound(c, "Role tidak ditemukan")
+	case errors.Is(err, repositories.ErrRoleInUse):
+		c.JSON(http.StatusConflict, structs.ErrorResponse{
 			Success: false,
-			Message: "Gagal menghapus role",
-			Errors:  helpers.TranslateErrorMessage(err),
+			Message: "Role tidak dapat dihapus: masih dipakai user atau merupakan peran bawaan",
+			Errors:  map[string]string{"role": "sedang dipakai"},
 		})
+	case err != nil:
+		respondServiceError(c, err)
+	default:
+		c.JSON(http.StatusOK, structs.SuccessResponse[any]{
+			Success: true,
+			Message: "Role berhasil dihapus",
+			Data:    nil,
+		})
+	}
+}
+
+// ListPermissions mengembalikan katalog permission untuk UI pengaturan peran.
+func ListPermissions(c *gin.Context) {
+	perms, err := repositories.ListPermissions(c.Request.Context())
+	if err != nil {
+		respondServiceError(c, err)
 		return
 	}
-
-	c.JSON(http.StatusOK, structs.SuccessResponse[any]{
+	items := make([]structs.PermissionResponse, len(perms))
+	for i, p := range perms {
+		items[i] = structs.PermissionResponse{Code: p.Code, GroupName: p.GroupName, Description: p.Description}
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[[]structs.PermissionResponse]{
 		Success: true,
-		Message: "Role berhasil dihapus",
-		Data:    nil, // Menggunakan 'any' untuk response tanpa data
+		Message: "Katalog permission",
+		Data:    items,
 	})
 }

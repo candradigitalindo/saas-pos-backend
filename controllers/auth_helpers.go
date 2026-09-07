@@ -19,9 +19,11 @@ func userToResponse(user models.User) structs.UserResponse {
 		Name:      user.Name,
 		Username:  user.Username,
 		Email:     user.Email,
+		RoleID:    user.RoleID,
 		RoleName:  user.Role.Name,
-		CreatedAt: user.CreatedAt.Format("2006-01-02 15:04:05"),
-		UpdatedAt: user.UpdatedAt.Format("2006-01-02 15:04:05"),
+		IsActive:  user.IsActive,
+		CreatedAt: user.CreatedAt.Format(timeLayout),
+		UpdatedAt: user.UpdatedAt.Format(timeLayout),
 	}
 }
 

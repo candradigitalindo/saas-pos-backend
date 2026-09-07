@@ -8,37 +8,36 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// SeedData menjalankan semua seeder data awal. Aman dijalankan berulang
-// (idempoten). Tidak fatal bila gagal: kegagalan paling umum adalah tabel belum
-// ada karena migrasi belum dijalankan — dan itu sudah diperingatkan terpisah
-// oleh WarnIfMigrationsPending. Server tetap boleh naik agar /health bisa
-// dipakai untuk diagnosa.
+// SeedData menjalankan semua seeder data awal. Idempoten (aman dijalankan
+// berulang). Tidak fatal bila gagal: kegagalan paling umum adalah tabel belum
+// ada karena migrasi belum dijalankan — sudah diperingatkan oleh
+// WarnIfMigrationsPending. Server tetap boleh naik agar /health bisa dipakai
+// untuk diagnosa.
 func SeedData() {
-	if err := seedRoles(); err != nil {
-		slog.Error("seeder roles gagal — sudah menjalankan `go run ./cmd/migrate up`?", slog.Any("error", err))
+	if err := seedPermissions(); err != nil {
+		slog.Error("seeder permissions gagal — sudah `go run ./cmd/migrate up`?", slog.Any("error", err))
 		return
 	}
 	slog.Info("seeding database selesai")
 }
 
-// seedRoles memastikan peran default ('admin', 'user') ada.
+// seedPermissions mengisi katalog `permissions` dari permissionCatalog.
 //
-// ON CONFLICT (name) WHERE deleted_at IS NULL DO NOTHING dipilih agar:
-//   - idempoten & bebas race saat beberapa instance start bersamaan;
-//   - cocok dengan partial unique index uq_roles_name (yang juga ber-predikat
-//     deleted_at IS NULL) — ON CONFLICT tanpa predikat akan ditolak PostgreSQL;
-//   - satu query untuk semua role, bukan satu per role.
-//
-// ID di-generate hook BeforeCreate tiap model.
-func seedRoles() error {
-	roles := []models.Role{
-		{Name: "admin"},
-		{Name: "user"},
+// ON CONFLICT (code) DO NOTHING → idempoten & bebas race saat beberapa instance
+// start bersamaan. `permissions` bukan tabel bertenant, jadi tidak terkena RLS.
+// ULID di-generate lewat hook BeforeCreate tiap baris.
+func seedPermissions() error {
+	rows := make([]models.Permission, 0, len(permissionCatalog))
+	for _, p := range permissionCatalog {
+		rows = append(rows, models.Permission{
+			Code:        p.Code,
+			GroupName:   p.Group,
+			Description: p.Description,
+		})
 	}
 
 	return DB.Clauses(clause.OnConflict{
-		Columns:     []clause.Column{{Name: "name"}},
-		TargetWhere: clause.Where{Exprs: []clause.Expression{clause.Expr{SQL: "deleted_at IS NULL"}}},
-		DoNothing:   true,
-	}).Create(&roles).Error
+		Columns:   []clause.Column{{Name: "code"}},
+		DoNothing: true,
+	}).Create(&rows).Error
 }

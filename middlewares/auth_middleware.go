@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"candra/backend-api/helpers"
+	"candra/backend-api/internal/reqctx"
 	"candra/backend-api/structs"
 
 	"github.com/gin-gonic/gin"
@@ -20,11 +21,11 @@ const (
 // authorizationPayloadKey dan CurrentUserKey dideklarasikan di context.go
 // (dipakai lintas middleware).
 
-// AuthMiddleware memverifikasi access token Bearer dan menaruh USER ID
-// (subject token) ke gin.Context. Ini satu-satunya yang dilakukan di sini:
-// tenant_id dan permission dibaca dari database oleh middleware berikutnya
-// setiap permintaan (§9), bukan dari isi token.
-func AuthMiddleware() gin.HandlerFunc {
+// Auth memverifikasi access token Bearer dan menaruh USER ID (subject token) ke
+// gin.Context serta ke context.Context request. Ini satu-satunya yang dilakukan
+// di sini: tenant_id dan permission dibaca dari database oleh middleware
+// TenantScope setiap permintaan (§9), bukan dari isi token.
+func Auth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader(authorizationHeaderKey)
 		if authHeader == "" {
@@ -63,6 +64,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		}
 
 		c.Set(authorizationPayloadKey, claims.Subject)
+		c.Request = c.Request.WithContext(reqctx.WithUserID(c.Request.Context(), claims.Subject))
 		c.Next()
 	}
 }

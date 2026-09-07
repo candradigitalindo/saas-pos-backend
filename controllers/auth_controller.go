@@ -10,18 +10,20 @@ import (
 	"candra/backend-api/middlewares"
 	"candra/backend-api/models"
 	"candra/backend-api/repositories"
+	"candra/backend-api/services"
 	"candra/backend-api/structs"
 
 	"github.com/gin-gonic/gin"
 )
 
-// Register menangani registrasi user baru (endpoint publik).
+// Register mendaftarkan USAHA BARU (endpoint publik, di-rate-limit).
 //
-// KEAMANAN: registrasi mandiri SELALU mendapat role default 'user'. role_id dari
-// input SENGAJA diabaikan agar penyerang anonim tidak bisa mendaftar sebagai
-// admin (§4 CONVENTIONS). Penetapan role lain hanya lewat endpoint admin.
+// Membuat tenant + outlet pertama + peran bawaan + user pemilik dalam satu
+// transaksi (services.RegisterTenant), lalu langsung menerbitkan sesi login
+// untuk pemilik. role & tenant TIDAK berasal dari input pemakai — semuanya
+// ditentukan server (§4 CONVENTIONS).
 func Register(c *gin.Context) {
-	var req structs.UserCreateRequest
+	var req structs.RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusUnprocessableEntity, structs.ErrorResponse{
 			Success: false,
@@ -31,50 +33,43 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	const defaultRoleName = "user"
-	var roleCheck models.Role
-	if err := repositories.FindRoleByName(c.Request.Context(), defaultRoleName, &roleCheck); err != nil {
-		helpers.LoggerFromContext(c.Request.Context()).Error("role default tidak tersedia", slog.Any("error", err))
-		c.JSON(http.StatusInternalServerError, structs.ErrorResponse{
-			Success: false,
-			Message: "Registrasi belum bisa diproses",
-			Errors:  map[string]string{"role": "Role default 'user' belum di-seed"},
-		})
-		return
-	}
-
-	hashedPassword, err := helpers.HashPassword(req.Password)
+	ctx := c.Request.Context()
+	result, err := services.RegisterTenant(ctx, services.RegisterTenantInput{
+		BusinessName:     req.BusinessName,
+		BusinessType:     req.BusinessType,
+		Phone:            req.Phone,
+		OutletName:       req.OutletName,
+		Timezone:         req.Timezone,
+		BusinessDayStart: req.BusinessDayStart,
+		ReferralCode:     req.ReferralCode,
+		OwnerName:        req.Owner.Name,
+		OwnerUsername:    req.Owner.Username,
+		OwnerEmail:       req.Owner.Email,
+		OwnerPassword:    req.Owner.Password,
+	})
 	if err != nil {
-		helpers.LoggerFromContext(c.Request.Context()).Error("gagal hash password", slog.Any("error", err))
-		c.JSON(http.StatusInternalServerError, structs.ErrorResponse{
-			Success: false,
-			Message: "Registrasi belum bisa diproses",
-			Errors:  map[string]string{"password": "Gagal memproses password"},
-		})
+		respondServiceError(c, err)
 		return
 	}
 
-	user := models.User{
-		Name:     req.Name,
-		Username: req.Username,
-		Email:    req.Email,
-		RoleID:   roleCheck.ID, // selalu role default, bukan dari input
-		Password: hashedPassword,
-	}
-	if err := repositories.CreateUser(c.Request.Context(), &user); err != nil {
-		status, message := http.StatusInternalServerError, "Gagal membuat user"
-		if helpers.IsDuplicateEntryError(err) {
-			status, message = http.StatusConflict, "Username atau email sudah terdaftar"
-		}
-		c.JSON(status, structs.ErrorResponse{Success: false, Message: message, Errors: helpers.TranslateErrorMessage(err)})
+	// Pemilik langsung masuk. issueFreshSession butuh tenant di context untuk
+	// menulis refresh token lewat jalur biasa — tapi refresh_tokens bukan tabel
+	// bertenant, jadi cukup context user; kita pakai owner apa adanya.
+	auth, err := issueFreshSession(ctx, result.Owner, req.Owner.DeviceName)
+	if err != nil {
+		helpers.LoggerFromContext(ctx).Error("gagal menerbitkan sesi setelah registrasi", slog.Any("error", err))
+		internalError(c)
 		return
 	}
 
-	user.Role = roleCheck // agar userToResponse punya nama role tanpa query ulang
-	c.JSON(http.StatusCreated, structs.SuccessResponse[structs.UserResponse]{
+	c.JSON(http.StatusCreated, structs.SuccessResponse[structs.RegisterResponse]{
 		Success: true,
-		Message: "User berhasil dibuat",
-		Data:    userToResponse(user),
+		Message: "Pendaftaran berhasil",
+		Data: structs.RegisterResponse{
+			Tenant: tenantToResponse(result.Tenant),
+			Outlet: outletToResponse(result.Outlet),
+			Auth:   auth,
+		},
 	})
 }
 
@@ -103,6 +98,15 @@ func Login(c *gin.Context) {
 	if err := helpers.CheckPassword(req.Password, user.Password); err != nil {
 		unauthorized(c, "Username atau password salah")
 		return
+	}
+	if !user.IsActive {
+		unauthorized(c, "Akun dinonaktifkan")
+		return
+	}
+
+	// Stempel waktu login terakhir; best-effort, kegagalannya tidak membatalkan login.
+	if err := repositories.UpdateLastLogin(c.Request.Context(), user.ID, time.Now().UTC()); err != nil {
+		helpers.LoggerFromContext(c.Request.Context()).Warn("gagal mencatat last_login_at", slog.Any("error", err))
 	}
 
 	auth, err := issueFreshSession(c.Request.Context(), user, req.DeviceName)

@@ -81,7 +81,7 @@ func SetupRouter() *gin.Engine {
 
 	v1 := r.Group("/api/v1")
 	registerAuthRoutes(v1)
-	registerAdminRoutes(v1)
+	registerTenantRoutes(v1)
 
 	return r
 }
@@ -111,31 +111,54 @@ func registerValidators() {
 }
 
 // registerAuthRoutes memasang endpoint autentikasi di bawah /api/v1/auth.
-// Endpoint publik di-rate-limit ketat untuk meredam brute-force & pembuatan akun
-// massal (~0.2 req/detik, burst 5).
+// Endpoint publik di-rate-limit untuk meredam brute-force & pembuatan akun
+// massal. Laju & burst dapat dikonfigurasi (AUTH_RATELIMIT_RPS / _BURST);
+// default ~0.2 req/detik, burst 5. /register kini = pendaftaran USAHA baru.
 func registerAuthRoutes(v1 *gin.RouterGroup) {
-	authLimiter := middlewares.RateLimit(0.2, 5)
+	authLimiter := middlewares.RateLimit(
+		config.GetFloatEnv("AUTH_RATELIMIT_RPS", 0.2),
+		float64(config.GetIntEnv("AUTH_RATELIMIT_BURST", 5)),
+	)
 
 	auth := v1.Group("/auth")
 	auth.POST("/register", authLimiter, controllers.Register)
 	auth.POST("/login", authLimiter, controllers.Login)
 	auth.POST("/refresh", authLimiter, controllers.Refresh)
-	auth.POST("/logout", middlewares.AuthMiddleware(), controllers.Logout)
+	auth.POST("/logout", middlewares.Auth(), controllers.Logout)
 }
 
-// registerAdminRoutes memasang manajemen user & role. Semua butuh token valid
-// dan peran 'admin'.
-func registerAdminRoutes(v1 *gin.RouterGroup) {
-	admin := v1.Group("", middlewares.AuthMiddleware(), middlewares.RoleMiddleware("admin"))
+// registerTenantRoutes memasang seluruh endpoint yang beroperasi di dalam satu
+// tenant. Rantai middleware: Auth (token → user id) → TenantScope (user id →
+// tenant_id + permission ke context) → Require(...) per-endpoint.
+func registerTenantRoutes(v1 *gin.RouterGroup) {
+	t := v1.Group("", middlewares.Auth(), middlewares.TenantScope())
 
-	admin.GET("/roles", controllers.GetAllRoles)
-	admin.GET("/roles/:id", controllers.GetRoleByID)
-	admin.POST("/roles", controllers.CreateRole)
-	admin.PUT("/roles/:id", controllers.UpdateRole)
-	admin.DELETE("/roles/:id", controllers.DeleteRole)
+	// Profil pengguna — semua user tenant boleh.
+	t.GET("/me", controllers.Me)
 
-	admin.GET("/users", controllers.GetAllUsers)
-	admin.GET("/users/:id", controllers.GetUserByID)
-	admin.PUT("/users/:id", controllers.UpdateUser)
-	admin.DELETE("/users/:id", controllers.DeleteUser)
+	// Outlet.
+	outlet := t.Group("/outlets", middlewares.Require("outlet.manage"))
+	outlet.GET("", controllers.ListOutlets)
+	outlet.POST("", controllers.CreateOutlet)
+	outlet.GET("/:id", controllers.GetOutlet)
+	outlet.PUT("/:id", controllers.UpdateOutlet)
+	outlet.DELETE("/:id", controllers.DeleteOutlet)
+
+	// Manajemen user staf.
+	user := t.Group("/users", middlewares.Require("user.manage"))
+	user.GET("", controllers.GetAllUsers)
+	user.POST("", controllers.CreateUser)
+	user.GET("/:id", controllers.GetUserByID)
+	user.PUT("/:id", controllers.UpdateUser)
+	user.DELETE("/:id", controllers.DeleteUser)
+
+	// Peran & hak akses.
+	t.GET("/permissions", middlewares.Require("role.manage"), controllers.ListPermissions)
+	role := t.Group("/roles", middlewares.Require("role.manage"))
+	role.GET("", controllers.GetAllRoles)
+	role.POST("", controllers.CreateRole)
+	role.GET("/:id", controllers.GetRoleByID)
+	role.PUT("/:id", controllers.UpdateRole)
+	role.PUT("/:id/permissions", controllers.SetRolePermissions)
+	role.DELETE("/:id", controllers.DeleteRole)
 }

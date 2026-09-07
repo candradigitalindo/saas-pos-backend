@@ -58,6 +58,21 @@ func GetIntEnv(key string, defaultValue int) int {
 	return valueInt
 }
 
+// GetFloatEnv mengambil variabel environment sebagai float64.
+// Nilai default dipakai bila key tidak ada atau bukan angka yang valid.
+func GetFloatEnv(key string, defaultValue float64) float64 {
+	valueStr, ok := lookup(key)
+	if !ok {
+		return defaultValue
+	}
+	valueFloat, err := strconv.ParseFloat(valueStr, 64)
+	if err != nil {
+		log.Printf("Peringatan: Nilai untuk env key '%s' bukan angka yang valid. Menggunakan nilai default %v.", key, defaultValue)
+		return defaultValue
+	}
+	return valueFloat
+}
+
 // GetBoolEnv mengambil variabel environment sebagai boolean.
 // Menerima nilai yang dikenali strconv.ParseBool: 1/t/T/true/TRUE/True dan
 // 0/f/F/false/FALSE/False.

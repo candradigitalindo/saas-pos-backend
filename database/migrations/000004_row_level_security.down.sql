@@ -1,0 +1,22 @@
+-- Membatalkan 000004. Lepas policy, matikan FORCE lalu RLS.
+-- Runner membungkus berkas ini dalam satu transaksi; jangan tulis BEGIN/COMMIT.
+
+DROP POLICY IF EXISTS tenant_isolation ON user_outlets;
+ALTER TABLE user_outlets NO FORCE ROW LEVEL SECURITY;
+ALTER TABLE user_outlets DISABLE  ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS tenant_isolation ON roles;
+ALTER TABLE roles NO FORCE ROW LEVEL SECURITY;
+ALTER TABLE roles DISABLE  ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS tenant_isolation ON users;
+ALTER TABLE users NO FORCE ROW LEVEL SECURITY;
+ALTER TABLE users DISABLE  ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS tenant_isolation ON outlets;
+ALTER TABLE outlets NO FORCE ROW LEVEL SECURITY;
+ALTER TABLE outlets DISABLE  ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS tenant_isolation ON tenants;
+ALTER TABLE tenants NO FORCE ROW LEVEL SECURITY;
+ALTER TABLE tenants DISABLE  ROW LEVEL SECURITY;

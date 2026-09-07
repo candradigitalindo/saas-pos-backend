@@ -22,20 +22,19 @@ Sebuah framework backend REST API berbasis Golang dan Gin, dengan struktur modul
 
 ## Fitur Utama
 
+- **Multi-tenancy** — isolasi data per usaha di tiga lapisan: `scopeTenant` (repo), Row Level Security PostgreSQL, dan visibilitas kepemilikan (menyusul)
+- **Pendaftaran usaha 1 transaksi** — `POST /api/v1/auth/register` membuat tenant + outlet + peran bawaan + user pemilik sekaligus
+- **Otorisasi granular** — 38 permission, peran per-tenant, middleware `Require(...)` per-endpoint
 - **Autentikasi JWT** — access token pendek (15 mnt) + refresh token (30 hari) dengan rotasi & deteksi pemakaian ulang
-- **Manajemen User** (CRUD + Pagination ala Laravel)
-- **Manajemen Role** (CRUD + Pagination)
-- **Middleware Auth + Role**
+- **Manajemen Outlet / User / Role** — CRUD tenant-scoped + Pagination ala Laravel
 - **Migrasi skema berversi** (`cmd/migrate`) — `AutoMigrate` dimatikan
 - **Soft delete** + partial unique index (baris terhapus tidak memblokir pendaftaran ulang)
 - **Health check** — `/health` (liveness) & `/health/ready` (readiness)
 - **Log terstruktur** (slog) dengan `request_id` per permintaan
 - **ULID** sebagai primary key, dibuat terpusat di `internal/ulid`
-- **Zona waktu** — server & DB selalu UTC; `business_date` dihitung per zona outlet (`internal/timez`)
-- **Struktur folder modular (MVC + Repository)**
-- **Konfigurasi via .env**
+- **Zona waktu** — server & DB selalu UTC; `business_date` per zona outlet (`internal/timez`)
+- **Struktur folder modular** (routes → middleware → controller → service → repository → model)
 - **Response JSON konsisten dan standar**
-- **Pagination response mirip Laravel**
 
 ---
 
@@ -44,17 +43,20 @@ Sebuah framework backend REST API berbasis Golang dan Gin, dengan struktur modul
 ```
 /cmd/migrate         # Runner migrasi skema (up / down / status)
 /config              # Konfigurasi aplikasi (baca .env)
-/controllers         # Handler endpoint
+/controllers         # Handler endpoint (tipis)
 /database            # Koneksi, connection pool, runner migrasi, seeder
 /database/migrations # Berkas SQL migrasi berversi (NNNNNN_judul.up/.down.sql)
-/helpers             # Fungsi bantu (hash, jwt, token, logger, pagination, dsb)
+/helpers             # Fungsi bantu (hash, jwt, token, logger, errors, pagination)
+/internal/reqctx     # Kunci context lintas-lapisan (tenant_id, user_id, permission)
+/internal/timez      # Zona waktu, business_date, tipe Clock (kolom TIME)
 /internal/ulid       # Pembuatan & validasi ULID
-/internal/timez      # Konversi zona waktu & perhitungan business_date
-/middlewares         # Middleware (auth, role, rate limit, observability)
+/middlewares         # auth, tenant scope, permission (Require), rate limit, observability
 /models              # Model database (GORM)
-/repositories        # Query ke database
+/repositories        # Query ke database (satu tabel per repo) + scopeTenant / WithTenant
 /routes              # Routing API
-/structs             # Struct untuk request/response
+/services            # Logika bisnis lintas tabel + transaksi (mis. pendaftaran tenant)
+/structs             # Struct request/response
+/tests               # Uji integrasi (butuh PostgreSQL; skip otomatis bila tak ada)
 main.go              # Bootstrap aplikasi
 .env                 # Konfigurasi environment
 ```
@@ -84,9 +86,25 @@ main.go              # Bootstrap aplikasi
 
 > **Upgrade dari versi ber-`AutoMigrate`:** database lama yang tabel `users`/`roles`-nya
 > dibuat `AutoMigrate` perlu disiapkan sekali. Untuk DB dev yang datanya boleh hilang:
-> `DROP TABLE users, roles CASCADE;` lalu `go run ./cmd/migrate up`. Untuk DB berisi data,
-> samakan skema manual ke migrasi `000001`/`000002` lalu catat versinya di tabel
-> `schema_migrations`.
+> `DROP SCHEMA public CASCADE; CREATE SCHEMA public;` lalu `go run ./cmd/migrate up`.
+
+### Menjalankan Test
+
+```sh
+go test ./...            # unit test selalu jalan
+go test ./... -race
+```
+
+Uji integrasi di `/tests` butuh PostgreSQL. Jika tak tersedia, test itu **di-skip**
+(bukan gagal). Untuk menjalankannya, siapkan database kosong lalu:
+
+```sh
+createdb saas_pos_test                       # dimiliki role non-superuser (RLS wajib berlaku)
+TEST_DB_NAME=saas_pos_test TEST_DB_USER=<role> go test ./tests/ -v
+```
+
+> Peringatan: `TestMain` menjalankan `DROP SCHEMA public CASCADE` pada database target.
+> Jangan arahkan ke database berisi data.
 
 ---
 
@@ -94,18 +112,21 @@ main.go              # Bootstrap aplikasi
 
 Semua endpoint bisnis di bawah prefiks `/api/v1`.
 
-| Method & Path | Keterangan |
-|---|---|
-| `GET  /health` | Liveness — proses hidup |
-| `GET  /health/ready` | Readiness — termasuk cek database |
-| `POST /api/v1/auth/register` | Registrasi user (role dipaksa `user`) |
-| `POST /api/v1/auth/login` | → access token + refresh token |
-| `POST /api/v1/auth/refresh` | Tukar refresh token (rotasi) |
-| `POST /api/v1/auth/logout` | Cabut refresh token (butuh access token) |
-| `GET  /api/v1/users?page=1&limit=10` | Daftar user (admin) |
-| `GET  /api/v1/users/:id` | Detail user (admin) |
-| `POST /api/v1/roles` | Buat role (admin) |
-| `GET  /api/v1/roles?page=1&limit=10` | Daftar role (admin) |
+| Method & Path | Izin | Keterangan |
+|---|---|---|
+| `GET  /health`, `/health/ready` | — | Liveness / readiness (cek DB) |
+| `POST /api/v1/auth/register` | publik | Daftar USAHA: tenant + outlet + peran + pemilik (1 transaksi) |
+| `POST /api/v1/auth/login` | publik | → access + refresh token |
+| `POST /api/v1/auth/refresh` | publik | Tukar refresh token (rotasi + deteksi reuse) |
+| `POST /api/v1/auth/logout` | token | Cabut refresh token |
+| `GET  /api/v1/me` | token | Profil: user, tenant, permission, outlet |
+| `GET/POST/PUT/DELETE /api/v1/outlets[/:id]` | `outlet.manage` | CRUD outlet |
+| `GET/POST/PUT/DELETE /api/v1/users[/:id]` | `user.manage` | CRUD user staf |
+| `GET/POST/PUT/DELETE /api/v1/roles[/:id]` | `role.manage` | CRUD peran |
+| `PUT  /api/v1/roles/:id/permissions` | `role.manage` | Ganti pemetaan permission peran |
+| `GET  /api/v1/permissions` | `role.manage` | Katalog permission |
+
+Semua rute `/api/v1` selain `/auth/*` butuh rantai `Auth → TenantScope → Require(...)`.
 
 ---
 
