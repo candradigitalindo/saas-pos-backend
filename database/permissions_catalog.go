@@ -53,6 +53,7 @@ var permissionCatalog = []struct {
 	{"role.manage", "Administrasi", "Mengelola peran & hak akses"},
 	{"outlet.manage", "Administrasi", "Mengelola outlet"},
 	{"setting.manage", "Administrasi", "Mengubah pengaturan usaha"},
+	{"billing.manage", "Administrasi", "Mengelola langganan & tagihan platform"},
 
 	// CRM
 	{"crm.lead.view.own", "CRM", "Melihat prospek milik sendiri"},

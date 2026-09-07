@@ -24,7 +24,7 @@ Sebuah framework backend REST API berbasis Golang dan Gin, dengan struktur modul
 
 - **Multi-tenancy** — isolasi data per usaha di tiga lapisan: `scopeTenant` (repo), Row Level Security PostgreSQL, dan visibilitas kepemilikan (menyusul)
 - **Pendaftaran usaha 1 transaksi** — `POST /api/v1/auth/register` membuat tenant + outlet + peran bawaan + user pemilik sekaligus
-- **Otorisasi granular** — 38 permission, peran per-tenant, middleware `Require(...)` per-endpoint
+- **Otorisasi granular** — 39 permission, peran per-tenant, middleware `Require(...)` per-endpoint
 - **Master data** — kategori, satuan, produk (+ pencarian trigram < 200 ms), supplier
 - **Impor produk CSV** — pratinjau (`dry_run`), impor sebagian, laporan baris gagal per baris
 - **Kasir** — checkout 1 transaksi (harga dari server, hitung & bulat per baris), idempoten via `Idempotency-Key`, penomoran struk terkunci, void & retur, kasbon → piutang
@@ -35,6 +35,7 @@ Sebuah framework backend REST API berbasis Golang dan Gin, dengan struktur modul
 - **Resep F&B** — `PUT /products/:id/recipe`; bahan baku otomatis terpotong saat menu terjual
 - **Dashboard & laporan** — agregat `daily_sales_summaries` (dipelihara inkremental saat checkout, dihitung ulang saat void/retur); dashboard, laporan penjualan (`group_by` day/channel/cashier/payment), laba bersih per kanal, ekspor CSV; dashboard < 1 detik pada 100.000 transaksi
 - **Sinkronisasi offline** — `POST /sync/push` (batch penjualan dari perangkat offline, idempoten per ULID + Idempotency-Key, satu operasi gagal tidak menjatuhkan batch, `business_date` dihitung ulang di server) + `GET /sync/pull` (master data + stok + batu nisan, kursor `sync_version` lewat pemicu database)
+- **Langganan platform** — paket + tangga diskon prabayar (1/3/6/9/12 bulan), trial, tagihan & pembayaran idempoten, pendapatan diterima di muka diakui bulanan (`deferred_revenue_entries` + `cmd/recognize-revenue`), pembatalan di tengah masa dihitung ulang pada harga bulanan normal, prorata ganti paket
 - **Autentikasi JWT** — access token pendek (15 mnt) + refresh token (30 hari) dengan rotasi & deteksi pemakaian ulang
 - **Manajemen Outlet / User / Role** — CRUD tenant-scoped + Pagination ala Laravel
 - **Migrasi skema berversi** (`cmd/migrate`) — `AutoMigrate` dimatikan
@@ -52,6 +53,7 @@ Sebuah framework backend REST API berbasis Golang dan Gin, dengan struktur modul
 
 ```
 /cmd/migrate         # Runner migrasi skema (up / down / status)
+/cmd/recognize-revenue # Pekerjaan harian: akui pendapatan diterima di muka (§13.4)
 /config              # Konfigurasi aplikasi (baca .env)
 /controllers         # Handler endpoint (tipis)
 /database            # Koneksi, connection pool, runner migrasi, seeder
@@ -150,6 +152,12 @@ Semua endpoint bisnis di bawah prefiks `/api/v1`.
 | `POST /api/v1/reports/rebuild-summaries?from=&to=&outlet_id=` | `report.view` | Bangun ulang `daily_sales_summaries` dari `sales` |
 | `POST /api/v1/sync/push` | `sale.create` | Batch penjualan offline; hasil per operasi (applied/duplicate/rejected) |
 | `GET  /api/v1/sync/pull?since=&outlet_id=&limit=` | `sale.create` | Master data + stok + batu nisan sejak kursor `sync_version` |
+| `GET  /api/v1/plans` | token | Katalog paket + harga per masa langganan |
+| `GET/POST /api/v1/subscription` | `billing.manage` | Status langganan / mulai (trial) |
+| `POST /api/v1/subscription/invoices` · `GET` | `billing.manage` | Terbitkan / daftar tagihan langganan |
+| `POST /api/v1/subscription-payments` (header `Idempotency-Key`) | `billing.manage` | Bayar tagihan; lunas → aktif + `deferred_revenue_entries` |
+| `POST /api/v1/subscription/cancel` | `billing.manage` | Batal + refund (harga bulanan normal) |
+| `POST /api/v1/subscription/change-plan` | `billing.manage` | Ganti paket dengan kredit prorata |
 | `POST /api/v1/shifts/open` · `/shifts/:id/close` | `shift.open` / `shift.close` | Buka / tutup shift |
 | `POST/GET /api/v1/cash-movements` | `cash.movement` | Kas masuk/keluar |
 | `GET  /api/v1/stocks?outlet_id=&low=` | `stock.view` | Saldo stok |

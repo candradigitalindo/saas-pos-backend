@@ -216,6 +216,19 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	sync.POST("/push", controllers.SyncPush)
 	sync.GET("/pull", controllers.SyncPull)
 
+	// Langganan & tagihan platform (Fase 7, §5.13). Tabel platform (tanpa RLS);
+	// isolasi dijaga filter tenant_id di repo. Katalog paket cukup terautentikasi;
+	// selebihnya butuh billing.manage.
+	t.GET("/plans", controllers.ListPlans)
+	sub := t.Group("/subscription", middlewares.Require("billing.manage"))
+	sub.GET("", controllers.GetSubscription)
+	sub.POST("", controllers.StartSubscription)
+	sub.POST("/invoices", controllers.GenerateSubInvoice)
+	sub.GET("/invoices", controllers.ListSubInvoices)
+	sub.POST("/cancel", controllers.CancelSubscription)
+	sub.POST("/change-plan", controllers.ChangeSubscriptionPlan)
+	t.POST("/subscription-payments", middlewares.Require("billing.manage"), controllers.PaySubscription)
+
 	// Stok: baca + penyesuaian manual (saldo awal / koreksi).
 	t.GET("/stocks", middlewares.Require("stock.view"), controllers.ListStocks)
 	t.GET("/stock-movements", middlewares.Require("stock.view"), controllers.ListStockMovements)

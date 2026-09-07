@@ -5,6 +5,7 @@ import (
 
 	"candra/backend-api/models"
 
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm/clause"
 )
 
@@ -16,6 +17,10 @@ import (
 func SeedData() {
 	if err := seedPermissions(); err != nil {
 		slog.Error("seeder permissions gagal — sudah `go run ./cmd/migrate up`?", slog.Any("error", err))
+		return
+	}
+	if err := seedPlans(); err != nil {
+		slog.Error("seeder plans gagal — sudah `go run ./cmd/migrate up`?", slog.Any("error", err))
 		return
 	}
 	slog.Info("seeding database selesai")
@@ -40,4 +45,39 @@ func seedPermissions() error {
 		Columns:   []clause.Column{{Name: "code"}},
 		DoNothing: true,
 	}).Create(&rows).Error
+}
+
+// seedPlans mengisi katalog `plans` & tangga `plan_term_discounts` (§5.13).
+//
+// ON CONFLICT DO NOTHING → idempoten & bebas race. Tabel platform, tanpa RLS.
+// Harga yang sudah diubah admin TIDAK ditimpa (DO NOTHING, bukan upsert).
+func seedPlans() error {
+	plans := make([]models.Plan, 0, len(planCatalog))
+	for _, p := range planCatalog {
+		plans = append(plans, models.Plan{
+			Code: p.Code, Name: p.Name, MonthlyPrice: p.Monthly,
+			Features: []byte(p.Features), IsActive: true,
+		})
+	}
+	if err := DB.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "code"}},
+		DoNothing: true,
+	}).Create(&plans).Error; err != nil {
+		return err
+	}
+
+	discounts := make([]models.PlanTermDiscount, 0, len(termDiscountCatalog))
+	for _, d := range termDiscountCatalog {
+		rate, err := decimal.NewFromString(d.Rate)
+		if err != nil {
+			return err
+		}
+		discounts = append(discounts, models.PlanTermDiscount{
+			TermMonths: d.Term, DiscountRate: rate, IsActive: true,
+		})
+	}
+	return DB.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "term_months"}},
+		DoNothing: true,
+	}).Create(&discounts).Error
 }
