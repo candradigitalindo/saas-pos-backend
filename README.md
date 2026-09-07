@@ -36,6 +36,7 @@ Sebuah framework backend REST API berbasis Golang dan Gin, dengan struktur modul
 - **Dashboard & laporan** — agregat `daily_sales_summaries` (dipelihara inkremental saat checkout, dihitung ulang saat void/retur); dashboard, laporan penjualan (`group_by` day/channel/cashier/payment), laba bersih per kanal, ekspor CSV; dashboard < 1 detik pada 100.000 transaksi
 - **Sinkronisasi offline** — `POST /sync/push` (batch penjualan dari perangkat offline, idempoten per ULID + Idempotency-Key, satu operasi gagal tidak menjatuhkan batch, `business_date` dihitung ulang di server) + `GET /sync/pull` (master data + stok + batu nisan, kursor `sync_version` lewat pemicu database)
 - **Langganan platform** — paket + tangga diskon prabayar (1/3/6/9/12 bulan), trial, tagihan & pembayaran idempoten, pendapatan diterima di muka diakui bulanan (`deferred_revenue_entries` + `cmd/recognize-revenue`), pembatalan di tengah masa dihitung ulang pada harga bulanan normal, prorata ganti paket
+- **CRM tenant** — pipeline & tahap yang bisa diatur, deal + alasan menang/kalah, aktivitas follow-up; penawaran → proyek otomatis → invoice bertermin → pembayaran parsial; **pelunasan invoice tercatat sebagai satu penjualan di tabel `sales` yang sama dengan POS** (omzet & laba satu pintu). Visibilitas kepemilikan (lapis 3, `scopeVisibility`): sales hanya melihat datanya sendiri
 - **Autentikasi JWT** — access token pendek (15 mnt) + refresh token (30 hari) dengan rotasi & deteksi pemakaian ulang
 - **Manajemen Outlet / User / Role** — CRUD tenant-scoped + Pagination ala Laravel
 - **Migrasi skema berversi** (`cmd/migrate`) — `AutoMigrate` dimatikan
@@ -158,6 +159,13 @@ Semua endpoint bisnis di bawah prefiks `/api/v1`.
 | `POST /api/v1/subscription-payments` (header `Idempotency-Key`) | `billing.manage` | Bayar tagihan; lunas → aktif + `deferred_revenue_entries` |
 | `POST /api/v1/subscription/cancel` | `billing.manage` | Batal + refund (harga bulanan normal) |
 | `POST /api/v1/subscription/change-plan` | `billing.manage` | Ganti paket dengan kredit prorata |
+| `GET/POST /api/v1/pipelines` · `/lead-sources` | `crm.lead.view.*` / `crm.deal.edit` | Konfigurasi pipeline & sumber prospek |
+| `GET/POST/PUT /api/v1/deals[/:id]` · `.../win` · `.../lose` | `crm.lead.view.*` / `crm.deal.edit` | Deal + menang/kalah (alasan wajib) |
+| `GET/POST /api/v1/activities` · `.../complete` · `.../cancel` | `crm.lead.view.*` / `crm.deal.edit` | Aktivitas follow-up |
+| `POST /api/v1/quotations` · `.../send` · `.../accept` | `crm.deal.edit` / `quotation.approve` | Penawaran; accept → proyek otomatis |
+| `GET/POST/PUT /api/v1/projects[/:id]` · `.../tasks` · `.../expenses` | `crm.lead.view.*` / `crm.deal.edit` | Proyek, tugas, biaya (→ modal saat lunas) |
+| `POST /api/v1/invoices` · `.../send` · `.../void` | `invoice.issue` / `invoice.void` | Invoice pelanggan bertermin |
+| `POST /api/v1/invoice-payments` (header `Idempotency-Key`) | `invoice.issue` | Pembayaran parsial; lunas → penjualan di `sales` |
 | `POST /api/v1/shifts/open` · `/shifts/:id/close` | `shift.open` / `shift.close` | Buka / tutup shift |
 | `POST/GET /api/v1/cash-movements` | `cash.movement` | Kas masuk/keluar |
 | `GET  /api/v1/stocks?outlet_id=&low=` | `stock.view` | Saldo stok |

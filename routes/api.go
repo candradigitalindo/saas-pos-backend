@@ -229,6 +229,55 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	sub.POST("/change-plan", controllers.ChangeSubscriptionPlan)
 	t.POST("/subscription-payments", middlewares.Require("billing.manage"), controllers.PaySubscription)
 
+	// CRM tenant (Fase 9, §5.9). Baca butuh salah satu izin lihat prospek;
+	// tulis butuh crm.deal.edit. Visibilitas kepemilikan (lapis 3) dijaga repo.
+	crmView := middlewares.Require("crm.lead.view.own", "crm.lead.view.all")
+	crmEdit := middlewares.Require("crm.deal.edit")
+
+	t.GET("/lead-sources", crmView, controllers.ListLeadSources)
+	t.POST("/lead-sources", crmEdit, controllers.CreateLeadSource)
+
+	t.GET("/pipelines", crmView, controllers.ListPipelines)
+	t.POST("/pipelines", crmEdit, controllers.CreatePipeline)
+
+	deal := t.Group("/deals")
+	deal.GET("", crmView, controllers.ListDeals)
+	deal.POST("", crmEdit, controllers.CreateDeal)
+	deal.GET("/:id", crmView, controllers.GetDeal)
+	deal.PUT("/:id", crmEdit, controllers.UpdateDeal)
+	deal.POST("/:id/win", crmEdit, controllers.WinDeal)
+	deal.POST("/:id/lose", crmEdit, controllers.LoseDeal)
+
+	act := t.Group("/activities")
+	act.GET("", crmView, controllers.ListActivities)
+	act.POST("", crmEdit, controllers.CreateActivity)
+	act.POST("/:id/complete", crmEdit, controllers.CompleteActivity)
+	act.POST("/:id/cancel", crmEdit, controllers.CancelActivity)
+
+	quo := t.Group("/quotations")
+	quo.GET("", crmView, controllers.ListQuotations)
+	quo.POST("", crmEdit, controllers.CreateQuotation)
+	quo.GET("/:id", crmView, controllers.GetQuotation)
+	quo.POST("/:id/send", crmEdit, controllers.SendQuotation)
+	quo.POST("/:id/accept", middlewares.Require("quotation.approve"), controllers.AcceptQuotation)
+	quo.POST("/:id/reject", crmEdit, controllers.RejectQuotation)
+
+	proj := t.Group("/projects")
+	proj.GET("", crmView, controllers.ListProjects)
+	proj.POST("", crmEdit, controllers.CreateProject)
+	proj.GET("/:id", crmView, controllers.GetProject)
+	proj.PUT("/:id", crmEdit, controllers.UpdateProject)
+	proj.POST("/:id/tasks", crmEdit, controllers.AddProjectTask)
+	proj.POST("/:id/expenses", crmEdit, controllers.AddProjectExpense)
+
+	inv := t.Group("/invoices")
+	inv.GET("", crmView, controllers.ListInvoices)
+	inv.POST("", middlewares.Require("invoice.issue"), controllers.CreateInvoice)
+	inv.GET("/:id", crmView, controllers.GetInvoice)
+	inv.POST("/:id/send", middlewares.Require("invoice.issue"), controllers.SendInvoice)
+	inv.POST("/:id/void", middlewares.Require("invoice.void"), controllers.VoidInvoice)
+	t.POST("/invoice-payments", middlewares.Require("invoice.issue"), controllers.PayInvoice)
+
 	// Stok: baca + penyesuaian manual (saldo awal / koreksi).
 	t.GET("/stocks", middlewares.Require("stock.view"), controllers.ListStocks)
 	t.GET("/stock-movements", middlewares.Require("stock.view"), controllers.ListStockMovements)

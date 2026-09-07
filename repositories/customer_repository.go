@@ -26,8 +26,47 @@ func ListCustomers(ctx context.Context, search string, limit, offset int) ([]mod
 }
 
 // FindCustomerInTenant memuat satu pelanggan milik tenant konteks. tx opsional.
+//
+// TANPA lapis visibilitas — dipakai jalur transaksi internal (checkout, dokumen
+// CRM) yang boleh menunjuk pelanggan mana pun di tenant. Untuk endpoint yang
+// menghadap pengguna, pakai FindCustomerVisible.
 func FindCustomerInTenant(ctx context.Context, tx *gorm.DB, id string, out *models.Customer) error {
 	err := firstTenant(ctx, tx, id, out)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return ErrCustomerNotFound
+	}
+	return err
+}
+
+// ListCustomersVisible seperti ListCustomers tetapi juga menerapkan lapis 3
+// (visibilitas kepemilikan, §6): sales hanya melihat pelanggan miliknya + yang
+// belum ber-owner. Dipakai GET /customers.
+func ListCustomersVisible(ctx context.Context, search string, limit, offset int) ([]models.Customer, int64, error) {
+	where, args := customerSearch(search)
+	build := func() *gorm.DB {
+		q := scopeVisibility(ctx, scopeTenant(ctx, tenantDB(ctx, nil).Model(&models.Customer{})), "customers")
+		if where != "" {
+			q = q.Where(where, args...)
+		}
+		return q
+	}
+	var total int64
+	if err := build().Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if total == 0 {
+		return []models.Customer{}, 0, nil
+	}
+	rows := make([]models.Customer, 0, limit)
+	err := build().Order("name ASC, id ASC").Limit(limit).Offset(offset).Find(&rows).Error
+	return rows, total, err
+}
+
+// FindCustomerVisible memuat satu pelanggan yang TERLIHAT oleh user konteks
+// (lapis 1 + lapis 3). Dipakai GET /customers/:id.
+func FindCustomerVisible(ctx context.Context, id string, out *models.Customer) error {
+	err := scopeVisibility(ctx, scopeTenant(ctx, tenantDB(ctx, nil)), "customers").
+		First(out, "customers.id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return ErrCustomerNotFound
 	}

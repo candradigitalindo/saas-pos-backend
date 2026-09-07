@@ -145,6 +145,7 @@ func RegisterTenant(ctx context.Context, in RegisterTenantInput) (*RegisterTenan
 			Timezone:         in.Timezone,
 			BusinessDayStart: dayStart,
 			Currency:         "IDR",
+			IsActive:         true,
 		}
 		if err := repositories.CreateOutlet(ctx, tx, &outlet); err != nil {
 			return err

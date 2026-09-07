@@ -16,7 +16,7 @@ import (
 // ListCustomers mengembalikan pelanggan tenant, berpaginasi.
 func ListCustomers(c *gin.Context) {
 	page, limit, offset := helpers.ParsePaginationParams(c)
-	rows, total, err := repositories.ListCustomers(c.Request.Context(), c.Query("search"), limit, offset)
+	rows, total, err := repositories.ListCustomersVisible(c.Request.Context(), c.Query("search"), limit, offset)
 	if err != nil {
 		respondServiceError(c, err)
 		return
@@ -34,7 +34,7 @@ func ListCustomers(c *gin.Context) {
 // GetCustomer mengembalikan satu pelanggan tenant.
 func GetCustomer(c *gin.Context) {
 	var row models.Customer
-	if err := repositories.FindCustomerInTenant(c.Request.Context(), nil, c.Param("id"), &row); err != nil {
+	if err := repositories.FindCustomerVisible(c.Request.Context(), c.Param("id"), &row); err != nil {
 		notFoundOr(c, err, repositories.ErrCustomerNotFound, "Pelanggan tidak ditemukan")
 		return
 	}
@@ -51,6 +51,7 @@ func CreateCustomer(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
+	ownerID := reqctx.UserID(ctx)
 	row := models.Customer{
 		TenantID:    reqctx.TenantID(ctx),
 		Code:        nilIfEmpty(req.Code),
@@ -60,6 +61,7 @@ func CreateCustomer(c *gin.Context) {
 		Address:     req.Address,
 		Type:        orDefault(req.Type, "person"),
 		PriceListID: nilIfEmpty(req.PriceListID),
+		OwnerID:     nilIfEmpty(ownerID), // lapis 3: pemilik data CRM (§6, blueprint E.5)
 		CreditLimit: req.CreditLimit,
 		Note:        req.Note,
 	}
