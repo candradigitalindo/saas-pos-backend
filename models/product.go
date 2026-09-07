@@ -27,9 +27,9 @@ type Product struct {
 
 	SellPrice  int64           `json:"sell_price" gorm:"not null;default:0"`
 	CostPrice  int64           `json:"cost_price" gorm:"not null;default:0"` // wajib agar laba bisa dihitung
-	TrackStock bool            `json:"track_stock" gorm:"not null;default:true"`
+	TrackStock bool            `json:"track_stock" gorm:"not null"`
 	MinStock   decimal.Decimal `json:"min_stock" gorm:"type:numeric(14,3);not null;default:0"`
-	IsActive   bool            `json:"is_active" gorm:"not null;default:true"`
+	IsActive   bool            `json:"is_active" gorm:"not null"`
 	ImageURL   string          `json:"image_url"`
 
 	// Diisi lewat Joins pada query list/detail; kosong pada operasi tulis.
@@ -59,7 +59,7 @@ type ProductVariant struct {
 	SKU        *string `json:"sku" gorm:"column:sku"`
 	Barcode    *string `json:"barcode"`
 	PriceDelta int64   `json:"price_delta" gorm:"not null;default:0"`
-	IsActive   bool    `json:"is_active" gorm:"not null;default:true"`
+	IsActive   bool    `json:"is_active" gorm:"not null"`
 
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`

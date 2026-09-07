@@ -28,8 +28,11 @@ Sebuah framework backend REST API berbasis Golang dan Gin, dengan struktur modul
 - **Master data** — kategori, satuan, produk (+ pencarian trigram < 200 ms), supplier
 - **Impor produk CSV** — pratinjau (`dry_run`), impor sebagian, laporan baris gagal per baris
 - **Kasir** — checkout 1 transaksi (harga dari server, hitung & bulat per baris), idempoten via `Idempotency-Key`, penomoran struk terkunci, void & retur, kasbon → piutang
-- **Buku besar stok** — `stock_movements` sumber kebenaran, `stocks` cache; penguncian baris urut `product_id` (anti-deadlock); stok minus diizinkan (kasir tak dihentikan)
+- **Buku besar stok** — `stock_movements` sumber kebenaran, `stocks` cache; satu jalur `ApplyStockDeltas` (kunci urut `product_id`, saldo berjalan) dipakai penjualan/void/retur/opname/transfer/pembelian; rekonsiliasi cache dari buku besar
 - **Shift & kas** — buka/tutup shift, rekonsiliasi `expected_cash`, gerakan kas non-penjualan
+- **Pembelian** — stok masuk (idempoten), harga modal = harga beli terakhir
+- **Opname & transfer** — hitung fisik (draft → post), transfer antar outlet (draft → kirim → terima)
+- **Resep F&B** — `PUT /products/:id/recipe`; bahan baku otomatis terpotong saat menu terjual
 - **Autentikasi JWT** — access token pendek (15 mnt) + refresh token (30 hari) dengan rotasi & deteksi pemakaian ulang
 - **Manajemen Outlet / User / Role** — CRUD tenant-scoped + Pagination ala Laravel
 - **Migrasi skema berversi** (`cmd/migrate`) — `AutoMigrate` dimatikan
@@ -143,6 +146,11 @@ Semua endpoint bisnis di bawah prefiks `/api/v1`.
 | `GET  /api/v1/stocks?outlet_id=&low=` | `stock.view` | Saldo stok |
 | `GET  /api/v1/stock-movements?product_id=` | `stock.view` | Kartu stok |
 | `POST /api/v1/stock-adjustments` | `stock.adjust` | Saldo awal / koreksi stok |
+| `POST /api/v1/stock-reconcile?outlet_id=` | `stock.opname` | Hitung ulang cache stok dari buku besar |
+| `POST /api/v1/purchases` (header `Idempotency-Key`) | `stock.adjust` | Terima barang (stok masuk) |
+| `POST /api/v1/stock-opnames` · `/:id/items` · `/:id/post` | `stock.opname` | Hitung fisik → posting selisih |
+| `POST /api/v1/stock-transfers` · `/:id/send` · `/:id/receive` | `stock.transfer` | Transfer antar outlet |
+| `GET/PUT /api/v1/products/:id/recipe` | `product.view` / `product.edit` | Resep menu F&B |
 | `GET  /api/v1/receivables` · `POST /api/v1/receivable-payments` | `receivable.manage` | Piutang & pelunasan |
 | `GET/POST/PUT/DELETE /api/v1/users[/:id]` | `user.manage` | CRUD user staf |
 | `GET/POST/PUT/DELETE /api/v1/roles[/:id]` | `role.manage` | CRUD peran |

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -15,7 +14,6 @@ import (
 	"candra/backend-api/repositories"
 	"candra/backend-api/structs"
 
-	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -185,11 +183,11 @@ func saleBusinessDate(ctx context.Context, tx *gorm.DB, outletID string) (time.T
 	return timez.BusinessDate(time.Now().UTC(), outlet.Timezone, outlet.DayStartOffset())
 }
 
-// reverseSaleStock menulis gerakan pembalik untuk setiap gerakan kind='sale'
-// milik `origSaleID`, dengan `newKind` dan qty_delta berlawanan tanda; RefID
-// gerakan baru = `reversalSaleID`. Saldo cache stok diperbarui.
+// reverseSaleStock menulis gerakan pembalik untuk SETIAP gerakan (kind 'sale'
+// maupun 'recipe') milik `origSaleID`, dengan qty_delta berlawanan tanda dan
+// kind 'void'/'refund'; RefID gerakan baru = `reversalSaleID`.
 func reverseSaleStock(ctx context.Context, tx *gorm.DB, origSaleID, reversalSaleID, newKind string, bizDate time.Time) error {
-	orig, err := repositories.MovementsByRef(ctx, tx, "sales", origSaleID, "sale")
+	orig, err := repositories.MovementsByRef(ctx, tx, "sales", origSaleID, "") // semua kind
 	if err != nil {
 		return err
 	}
@@ -197,53 +195,20 @@ func reverseSaleStock(ctx context.Context, tx *gorm.DB, origSaleID, reversalSale
 		return nil
 	}
 
-	ids := map[string]struct{}{}
-	for _, m := range orig {
-		ids[m.ProductID] = struct{}{}
-	}
-	sorted := make([]string, 0, len(ids))
-	for id := range ids {
-		sorted = append(sorted, id)
-	}
-	sort.Strings(sorted)
-
-	locked, err := repositories.LockStocks(ctx, tx, orig[0].OutletID, sorted)
-	if err != nil {
-		return err
-	}
-
-	uid := reqctx.UserID(ctx)
-	now := time.Now().UTC()
-	refID := reversalSaleID
-	moves := make([]models.StockMovement, 0, len(orig))
-
+	deltas := make([]repositories.StockDelta, 0, len(orig))
 	for _, m := range orig {
 		variantID := ""
 		if m.VariantID != nil {
 			variantID = *m.VariantID
 		}
-		key := repositories.StockKey{OutletID: m.OutletID, ProductID: m.ProductID, VariantID: variantID}
-		before := decimal.Zero
-		if s, ok := locked[key]; ok {
-			before = s.Qty
-		}
-		delta := m.QtyDelta.Neg() // gerakan 'sale' negatif → pembalik positif
-		after := before.Add(delta)
-
-		mv := models.StockMovement{
-			OutletID: m.OutletID, ProductID: m.ProductID, VariantID: m.VariantID,
-			Kind: newKind, QtyDelta: delta, BalanceAfter: after,
-			UnitCost: m.UnitCost, RefTable: "sales", RefID: &refID,
-			OccurredAt: now, BusinessDate: bizDate,
-		}
-		if uid != "" {
-			mv.CreatedBy = &uid
-		}
-		moves = append(moves, mv)
-
-		if err := repositories.UpsertStockQty(ctx, tx, m.OutletID, m.ProductID, variantID, after); err != nil {
-			return err
-		}
+		deltas = append(deltas, repositories.StockDelta{
+			ProductID: m.ProductID, VariantID: variantID,
+			Delta: m.QtyDelta.Neg(), UnitCost: m.UnitCost, Kind: newKind,
+		})
 	}
-	return repositories.RecordMovements(ctx, tx, moves)
+	_, err = repositories.ApplyStockDeltas(ctx, tx, orig[0].OutletID, deltas, repositories.MovementMeta{
+		Kind: newKind, RefTable: "sales", RefID: reversalSaleID,
+		OccurredAt: time.Now().UTC(), BusinessDate: bizDate,
+	})
+	return err
 }

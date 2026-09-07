@@ -21,7 +21,7 @@ type User struct {
 	RoleID string `json:"role_id" gorm:"type:char(26);index"` // FK ke roles.id
 	Role   Role   `json:"role" gorm:"foreignKey:RoleID"`      // Relasi ke Role
 
-	IsActive    bool       `json:"is_active" gorm:"not null;default:true"` // false = akun dinonaktifkan, tidak bisa login
+	IsActive    bool       `json:"is_active" gorm:"not null"` // false = akun dinonaktifkan, tidak bisa login
 	LastLoginAt *time.Time `json:"last_login_at"`
 
 	CreatedAt time.Time      `json:"created_at"`

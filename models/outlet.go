@@ -39,11 +39,11 @@ type Outlet struct {
 	Currency          string          `json:"currency" gorm:"not null;default:IDR"`
 	TaxEnabled        bool            `json:"tax_enabled" gorm:"not null;default:false"`
 	TaxRate           decimal.Decimal `json:"tax_rate" gorm:"type:numeric(7,4);not null;default:0"` // pecahan: 0.1100 = 11%
-	TaxInclusive      bool            `json:"tax_inclusive" gorm:"not null;default:true"`
+	TaxInclusive      bool            `json:"tax_inclusive" gorm:"not null"`
 	ServiceChargeRate decimal.Decimal `json:"service_charge_rate" gorm:"type:numeric(7,4);not null;default:0"`
 	ReceiptHeader     string          `json:"receipt_header"`
 	ReceiptFooter     string          `json:"receipt_footer"`
-	IsActive          bool            `json:"is_active" gorm:"not null;default:true"`
+	IsActive          bool            `json:"is_active" gorm:"not null"`
 
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`

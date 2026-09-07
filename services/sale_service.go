@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"sort"
 	"strings"
@@ -124,19 +123,19 @@ func Checkout(ctx context.Context, in CheckoutInput) (int, []byte, error) {
 			return err
 		}
 
-		// 2. Kunci baris stok, URUT product_id MENAIK.
+		// 2. Muat produk, varian, dan resep (F&B) → SNAPSHOT. Harga dari master,
+		//    bukan klien. Penguncian baris stok dilakukan ApplyStockDeltas di
+		//    langkah 8 (URUT product_id MENAIK atas gabungan produk + bahan baku).
 		productIDs := sortedUniqueProductIDs(in.Items)
-		locked, err := repositories.LockStocks(ctx, tx, in.OutletID, productIDs)
-		if err != nil {
-			return err
-		}
-
-		// 3. Muat produk & varian → SNAPSHOT. Harga dari master, bukan klien.
 		products, err := repositories.ProductsByIDs(ctx, tx, productIDs)
 		if err != nil {
 			return err
 		}
 		variants, err := repositories.ProductVariantsByIDs(ctx, tx, variantIDs(in.Items))
+		if err != nil {
+			return err
+		}
+		recipes, err := repositories.RecipesByProductIDs(ctx, tx, productIDs)
 		if err != nil {
 			return err
 		}
@@ -166,8 +165,15 @@ func Checkout(ctx context.Context, in CheckoutInput) (int, []byte, error) {
 			return err
 		}
 
-		// 8. Gerakan stok + perbarui cache untuk item ber-track_stock.
-		if err := writeStockMovements(ctx, tx, sale, priced, products, locked, bizDate, now); err != nil {
+		// 8. Gerakan stok: 'sale' untuk produk ber-track_stock + 'recipe' untuk
+		//    bahan baku menu (F&B). Satu penguncian, saldo minus diizinkan (§13.1).
+		deltas, derr := stockDeltasForSale(priced, recipes, sale.OutletID)
+		if derr != nil {
+			return derr
+		}
+		if _, err := repositories.ApplyStockDeltas(ctx, tx, sale.OutletID, deltas, repositories.MovementMeta{
+			Kind: "sale", RefTable: "sales", RefID: sale.ID, OccurredAt: now, BusinessDate: bizDate,
+		}); err != nil {
 			return err
 		}
 
@@ -429,54 +435,41 @@ func buildSale(ctx context.Context, in CheckoutInput, shift models.Shift, bizDat
 	return sale
 }
 
-// writeStockMovements menulis gerakan kind='sale' & memperbarui cache stok untuk
-// tiap item ber-track_stock. Stok minus DIIZINKAN (§13.1) — hanya dicatat di log.
-func writeStockMovements(ctx context.Context, tx *gorm.DB, sale models.Sale, priced []pricedItem, products map[string]models.Product, locked map[repositories.StockKey]models.Stock, bizDate, now time.Time) error {
-	uid := reqctx.UserID(ctx)
-	log := helpers.LoggerFromContext(ctx)
-	moves := make([]models.StockMovement, 0, len(priced))
+// stockDeltasForSale menyusun perubahan saldo untuk sebuah checkout:
+//   - kind='sale'   : produk ber-track_stock → −qty
+//   - kind='recipe' : bahan baku menu ber-resep → −(qty_bahan × qty_jual / yield)
+//
+// Satu menu F&B biasanya track_stock=false sehingga hanya bahannya yang
+// berkurang; produk retail track_stock=true dan tak punya resep.
+func stockDeltasForSale(priced []pricedItem, recipes map[string]repositories.RecipeWithItems, outletID string) ([]repositories.StockDelta, error) {
+	var deltas []repositories.StockDelta
 
-	for i := range sale.Items {
-		it := sale.Items[i]
-		p := priced[i]
-		if !p.trackStock {
+	for _, p := range priced {
+		if p.trackStock {
+			deltas = append(deltas, repositories.StockDelta{
+				ProductID: p.in.ProductID, VariantID: p.in.VariantID,
+				Delta: p.in.Qty.Neg(), UnitCost: p.unitCost, Kind: "sale",
+			})
+		}
+
+		rec, ok := recipes[p.in.ProductID]
+		if !ok || len(rec.Items) == 0 {
 			continue
 		}
-		variantID := ""
-		if it.VariantID != nil {
-			variantID = *it.VariantID
+		yield := rec.Recipe.YieldQty
+		if yield.LessThanOrEqual(decimal.Zero) {
+			yield = decimal.NewFromInt(1)
 		}
-		before := decimal.Zero
-		if s, ok := locked[repositories.StockKey{OutletID: sale.OutletID, ProductID: it.ProductID, VariantID: variantID}]; ok {
-			before = s.Qty
-		}
-		after := before.Sub(it.Qty)
-		if after.IsNegative() {
-			log.Warn("checkout menyebabkan stok minus",
-				slog.String("sale_id", sale.ID), slog.String("product_id", it.ProductID),
-				slog.String("balance_after", after.String()))
-		}
-
-		refID := sale.ID
-		mv := models.StockMovement{
-			OutletID: sale.OutletID, ProductID: it.ProductID,
-			Kind: "sale", QtyDelta: it.Qty.Neg(), BalanceAfter: after,
-			UnitCost: it.UnitCost, RefTable: "sales", RefID: &refID,
-			OccurredAt: now, BusinessDate: bizDate,
-		}
-		if variantID != "" {
-			mv.VariantID = &variantID
-		}
-		if uid != "" {
-			mv.CreatedBy = &uid
-		}
-		moves = append(moves, mv)
-
-		if err := repositories.UpsertStockQty(ctx, tx, sale.OutletID, it.ProductID, variantID, after); err != nil {
-			return err
+		factor := p.in.Qty.Div(yield) // porsi terjual relatif terhadap hasil resep
+		for _, ing := range rec.Items {
+			deltas = append(deltas, repositories.StockDelta{
+				ProductID: ing.IngredientProductID,
+				Delta:     ing.Qty.Mul(factor).Neg(),
+				Kind:      "recipe",
+			})
 		}
 	}
-	return repositories.RecordMovements(ctx, tx, moves)
+	return deltas, nil
 }
 
 // formatReceiptNo: <KODE>-<YYMMDD>-<URUT4>, YYMMDD dari business_date (§13.7).

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"candra/backend-api/helpers"
-	"candra/backend-api/internal/reqctx"
 	"candra/backend-api/models"
 	"candra/backend-api/repositories"
 
@@ -49,54 +48,48 @@ func AdjustStock(ctx context.Context, in StockAdjustInput) (models.StockMovement
 			return fmt.Errorf("%w: produk tidak ditemukan", helpers.ErrValidation)
 		}
 
+		// Baca saldo saat ini (dikunci) untuk menentukan delta bila new_qty
+		// mode, dan kind ('initial' bila baris belum ada).
 		locked, err := repositories.LockStocks(ctx, tx, in.OutletID, []string{in.ProductID})
 		if err != nil {
 			return err
 		}
 		key := repositories.StockKey{OutletID: in.OutletID, ProductID: in.ProductID, VariantID: in.VariantID}
+		cur, existed := locked[key]
 		before := decimal.Zero
-		_, existed := locked[key]
 		if existed {
-			before = locked[key].Qty
+			before = cur.Qty
 		}
 
-		var after, delta decimal.Decimal
+		var delta decimal.Decimal
 		if in.NewQty != nil {
-			after = *in.NewQty
-			delta = after.Sub(before)
+			delta = in.NewQty.Sub(before)
 		} else {
 			delta = *in.Delta
-			after = before.Add(delta)
 		}
-
 		kind := "adjustment"
 		if !existed {
 			kind = "initial"
 		}
-		now := time.Now().UTC()
 		bizDate, err := saleBusinessDate(ctx, tx, in.OutletID)
 		if err != nil {
 			return err
 		}
-		uid := reqctx.UserID(ctx)
 
-		mv = models.StockMovement{
-			OutletID: in.OutletID, ProductID: in.ProductID,
-			Kind: kind, QtyDelta: delta, BalanceAfter: after,
-			UnitCost: prod.CostPrice, Reason: in.Reason,
-			OccurredAt: now, BusinessDate: bizDate,
-		}
-		if in.VariantID != "" {
-			vid := in.VariantID
-			mv.VariantID = &vid
-		}
-		if uid != "" {
-			mv.CreatedBy = &uid
-		}
-		if err := repositories.RecordMovements(ctx, tx, []models.StockMovement{mv}); err != nil {
+		moves, err := repositories.ApplyStockDeltas(ctx, tx, in.OutletID,
+			[]repositories.StockDelta{{
+				ProductID: in.ProductID, VariantID: in.VariantID,
+				Delta: delta, UnitCost: prod.CostPrice, Kind: kind,
+			}},
+			repositories.MovementMeta{
+				Kind: kind, Reason: in.Reason,
+				OccurredAt: time.Now().UTC(), BusinessDate: bizDate,
+			})
+		if err != nil {
 			return err
 		}
-		return repositories.UpsertStockQty(ctx, tx, in.OutletID, in.ProductID, in.VariantID, after)
+		mv = moves[0]
+		return nil
 	})
 	return mv, err
 }

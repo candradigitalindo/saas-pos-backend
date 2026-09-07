@@ -205,6 +205,32 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	t.GET("/stocks", middlewares.Require("stock.view"), controllers.ListStocks)
 	t.GET("/stock-movements", middlewares.Require("stock.view"), controllers.ListStockMovements)
 	t.POST("/stock-adjustments", middlewares.Require("stock.adjust"), controllers.AdjustStock)
+	t.POST("/stock-reconcile", middlewares.Require("stock.opname"), controllers.ReconcileStocks)
+
+	// Pembelian (stok masuk). Wajib Idempotency-Key.
+	t.POST("/purchases", middlewares.Require("stock.adjust"), controllers.ReceivePurchase)
+	t.GET("/purchases", middlewares.Require("stock.view"), controllers.ListPurchases)
+	t.GET("/purchases/:id", middlewares.Require("stock.view"), controllers.GetPurchase)
+
+	// Stok opname.
+	op := t.Group("/stock-opnames")
+	op.POST("", middlewares.Require("stock.opname"), controllers.CreateOpname)
+	op.GET("", middlewares.Require("stock.view"), controllers.ListOpnames)
+	op.GET("/:id", middlewares.Require("stock.view"), controllers.GetOpname)
+	op.POST("/:id/items", middlewares.Require("stock.opname"), controllers.SetOpnameItems)
+	op.POST("/:id/post", middlewares.Require("stock.opname"), controllers.PostOpname)
+
+	// Transfer stok antar outlet.
+	tr := t.Group("/stock-transfers")
+	tr.POST("", middlewares.Require("stock.transfer"), controllers.CreateTransfer)
+	tr.GET("", middlewares.Require("stock.view"), controllers.ListTransfers)
+	tr.GET("/:id", middlewares.Require("stock.view"), controllers.GetTransfer)
+	tr.POST("/:id/send", middlewares.Require("stock.transfer"), controllers.SendTransfer)
+	tr.POST("/:id/receive", middlewares.Require("stock.transfer"), controllers.ReceiveTransfer)
+
+	// Resep (F&B) — bahan baku dipotong saat menu terjual.
+	prod.GET("/:id/recipe", middlewares.Require("product.view"), controllers.GetProductRecipe)
+	prod.PUT("/:id/recipe", middlewares.Require("product.edit"), controllers.UpsertProductRecipe)
 
 	// Manajemen user staf.
 	user := t.Group("/users", middlewares.Require("user.manage"))
