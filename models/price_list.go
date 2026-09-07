@@ -25,6 +25,9 @@ type PriceList struct {
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
+
+	// SyncVersion diisi pemicu `bump_sync_version` (migrasi 000014); read-only.
+	SyncVersion int64 `json:"sync_version" gorm:"->;column:sync_version"`
 }
 
 // BeforeCreate meng-generate ULID bila ID belum diisi.
@@ -49,6 +52,9 @@ type ProductPrice struct {
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+
+	// SyncVersion diisi pemicu `bump_sync_version` (migrasi 000014); read-only.
+	SyncVersion int64 `json:"sync_version" gorm:"->;column:sync_version"`
 }
 
 // BeforeCreate meng-generate ULID bila ID belum diisi.

@@ -34,6 +34,7 @@ Sebuah framework backend REST API berbasis Golang dan Gin, dengan struktur modul
 - **Opname & transfer** — hitung fisik (draft → post), transfer antar outlet (draft → kirim → terima)
 - **Resep F&B** — `PUT /products/:id/recipe`; bahan baku otomatis terpotong saat menu terjual
 - **Dashboard & laporan** — agregat `daily_sales_summaries` (dipelihara inkremental saat checkout, dihitung ulang saat void/retur); dashboard, laporan penjualan (`group_by` day/channel/cashier/payment), laba bersih per kanal, ekspor CSV; dashboard < 1 detik pada 100.000 transaksi
+- **Sinkronisasi offline** — `POST /sync/push` (batch penjualan dari perangkat offline, idempoten per ULID + Idempotency-Key, satu operasi gagal tidak menjatuhkan batch, `business_date` dihitung ulang di server) + `GET /sync/pull` (master data + stok + batu nisan, kursor `sync_version` lewat pemicu database)
 - **Autentikasi JWT** — access token pendek (15 mnt) + refresh token (30 hari) dengan rotasi & deteksi pemakaian ulang
 - **Manajemen Outlet / User / Role** — CRUD tenant-scoped + Pagination ala Laravel
 - **Migrasi skema berversi** (`cmd/migrate`) — `AutoMigrate` dimatikan
@@ -147,6 +148,8 @@ Semua endpoint bisnis di bawah prefiks `/api/v1`.
 | `GET  /api/v1/reports/profit?from=&to=` | `report.profit` | Laba bersih per kanal (§13.5) |
 | `GET  /api/v1/reports/export?type=&format=csv` | `report.export` | Ekspor CSV (`type` = sales\|profit\|dashboard) |
 | `POST /api/v1/reports/rebuild-summaries?from=&to=&outlet_id=` | `report.view` | Bangun ulang `daily_sales_summaries` dari `sales` |
+| `POST /api/v1/sync/push` | `sale.create` | Batch penjualan offline; hasil per operasi (applied/duplicate/rejected) |
+| `GET  /api/v1/sync/pull?since=&outlet_id=&limit=` | `sale.create` | Master data + stok + batu nisan sejak kursor `sync_version` |
 | `POST /api/v1/shifts/open` · `/shifts/:id/close` | `shift.open` / `shift.close` | Buka / tutup shift |
 | `POST/GET /api/v1/cash-movements` | `cash.movement` | Kas masuk/keluar |
 | `GET  /api/v1/stocks?outlet_id=&low=` | `stock.view` | Saldo stok |

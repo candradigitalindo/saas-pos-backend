@@ -73,35 +73,38 @@ type CheckoutInput struct {
 // sale + item + payment + gerakan stok + (opsional) piutang, idempoten lewat
 // Idempotency-Key.
 //
-// Mengembalikan (status HTTP, body JSON siap kirim, error). Pada pengulangan
-// permintaan yang identik, body lama dikembalikan tanpa mengerjakan ulang.
-func Checkout(ctx context.Context, in CheckoutInput) (int, []byte, error) {
+// Mengembalikan (status HTTP, body JSON siap kirim, replayed, error). `replayed`
+// true berarti Idempotency-Key ini sudah pernah dipakai dan body lama
+// dikembalikan tanpa mengerjakan ulang — dipakai /sync/push untuk menandai
+// operasi sebagai "duplicate", bukan "applied".
+func Checkout(ctx context.Context, in CheckoutInput) (int, []byte, bool, error) {
 	if in.IdempotencyKey == "" {
-		return 0, nil, fmt.Errorf("%w: header Idempotency-Key wajib untuk checkout", helpers.ErrValidation)
+		return 0, nil, false, fmt.Errorf("%w: header Idempotency-Key wajib untuk checkout", helpers.ErrValidation)
 	}
 	if len(in.Items) == 0 {
-		return 0, nil, fmt.Errorf("%w: keranjang kosong", helpers.ErrValidation)
+		return 0, nil, false, fmt.Errorf("%w: keranjang kosong", helpers.ErrValidation)
 	}
 	for _, it := range in.Items {
 		if it.Qty.LessThanOrEqual(decimal.Zero) {
-			return 0, nil, fmt.Errorf("%w: qty harus lebih besar dari 0", helpers.ErrValidation)
+			return 0, nil, false, fmt.Errorf("%w: qty harus lebih besar dari 0", helpers.ErrValidation)
 		}
 	}
 
 	// 0. Di luar transaksi: outlet (butuh zona & batas hari), waktu, tanggal usaha.
 	var outlet models.Outlet
 	if err := repositories.FindOutletByID(ctx, nil, in.OutletID, &outlet); err != nil {
-		return 0, nil, fmt.Errorf("%w: outlet tidak ditemukan", helpers.ErrValidation)
+		return 0, nil, false, fmt.Errorf("%w: outlet tidak ditemukan", helpers.ErrValidation)
 	}
 	now := time.Now().UTC()
 	bizDate, err := timez.BusinessDate(now, outlet.Timezone, outlet.DayStartOffset())
 	if err != nil {
-		return 0, nil, fmt.Errorf("zona waktu outlet tidak valid: %w", err)
+		return 0, nil, false, fmt.Errorf("zona waktu outlet tidak valid: %w", err)
 	}
 
 	var (
 		outStatus int
 		outBody   []byte
+		replayed  bool
 	)
 	txErr := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
 		// 1. Idempotensi.
@@ -113,7 +116,7 @@ func Checkout(ctx context.Context, in CheckoutInput) (int, []byte, error) {
 			if !m.SameRequest {
 				return fmt.Errorf("%w: Idempotency-Key sudah dipakai untuk permintaan berbeda", helpers.ErrConflict)
 			}
-			outStatus, outBody = m.ResponseStatus, m.ResponseBody
+			outStatus, outBody, replayed = m.ResponseStatus, m.ResponseBody, true
 			return nil
 		}
 
@@ -209,9 +212,9 @@ func Checkout(ctx context.Context, in CheckoutInput) (int, []byte, error) {
 		return nil
 	})
 	if txErr != nil {
-		return 0, nil, txErr
+		return 0, nil, false, txErr
 	}
-	return outStatus, outBody, nil
+	return outStatus, outBody, replayed, nil
 }
 
 // resolveShift memilih shift untuk transaksi: yang diminta (harus 'open' & milik

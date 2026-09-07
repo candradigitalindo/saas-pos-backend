@@ -210,6 +210,12 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	rep.GET("/export", middlewares.Require("report.export"), controllers.ReportExport)
 	rep.POST("/rebuild-summaries", middlewares.Require("report.view"), controllers.RebuildReportSummaries)
 
+	// Sinkronisasi offline (Fase 6, §10). Perangkat kasir mendorong penjualan
+	// yang dibuat offline dan menarik master data + stok. Dijaga sale.create.
+	sync := t.Group("/sync", middlewares.Require("sale.create"))
+	sync.POST("/push", controllers.SyncPush)
+	sync.GET("/pull", controllers.SyncPull)
+
 	// Stok: baca + penyesuaian manual (saldo awal / koreksi).
 	t.GET("/stocks", middlewares.Require("stock.view"), controllers.ListStocks)
 	t.GET("/stock-movements", middlewares.Require("stock.view"), controllers.ListStockMovements)

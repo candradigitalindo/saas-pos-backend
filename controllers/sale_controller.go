@@ -3,7 +3,6 @@ package controllers
 import (
 	"io"
 	"net/http"
-	"time"
 
 	"candra/backend-api/helpers"
 	"candra/backend-api/models"
@@ -12,7 +11,6 @@ import (
 	"candra/backend-api/structs"
 
 	"github.com/gin-gonic/gin"
-	"github.com/shopspring/decimal"
 )
 
 const checkoutMaxBodyBytes = 1 << 20 // 1 MB
@@ -32,40 +30,13 @@ func Checkout(c *gin.Context) {
 		return
 	}
 
-	in := services.CheckoutInput{
-		SaleID:         req.ID,
-		OutletID:       req.OutletID,
-		ShiftID:        req.ShiftID,
-		CustomerID:     req.CustomerID,
-		OrderType:      req.OrderType,
-		OrderDiscount:  req.OrderDiscount,
-		Note:           req.Note,
-		IdempotencyKey: c.GetHeader("Idempotency-Key"),
-		RequestHash:    helpers.SHA256Hex(raw),
-	}
-	if req.ClientCreatedAt != "" {
-		if t, e := time.Parse(time.RFC3339, req.ClientCreatedAt); e == nil {
-			in.ClientCreatedAt = &t
-		}
-	}
-	for _, it := range req.Items {
-		qty, e := decimal.NewFromString(it.Qty)
-		if e != nil {
-			badRequest(c, "items.qty", "qty bukan angka yang valid")
-			return
-		}
-		in.Items = append(in.Items, services.CheckoutItem{
-			ProductID: it.ProductID, VariantID: it.VariantID, Qty: qty,
-			DiscountAmount: it.DiscountAmount, Note: it.Note,
-		})
-	}
-	for _, p := range req.Payments {
-		in.Payments = append(in.Payments, services.CheckoutPayment{
-			Method: p.Method, Amount: p.Amount, Reference: p.Reference,
-		})
+	in, err := services.BuildCheckoutInput(req, c.GetHeader("Idempotency-Key"), helpers.SHA256Hex(raw))
+	if err != nil {
+		respondServiceError(c, err)
+		return
 	}
 
-	status, body, err := services.Checkout(c.Request.Context(), in)
+	status, body, _, err := services.Checkout(c.Request.Context(), in)
 	if err != nil {
 		respondServiceError(c, err)
 		return
