@@ -4,10 +4,48 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 )
+
+// jsonRequest membangun *http.Request JSON tanpa langsung mengirimnya — untuk
+// handler yang butuh header tambahan (mis. Idempotency-Key). Kirim dengan serve.
+func jsonRequest(t *testing.T, method, path, token string, payload any) *http.Request {
+	t.Helper()
+	var body io.Reader
+	if payload != nil {
+		b, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal payload: %v", err)
+		}
+		body = bytes.NewReader(b)
+	}
+	req := httptest.NewRequest(method, path, body)
+	if payload != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	return req
+}
+
+// serve mengirim req ke router dan mendecode responsnya.
+func serve(t *testing.T, req *http.Request) apiResp {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	raw := rec.Body.String()
+	out := apiResp{Code: rec.Code, Raw: raw}
+	if raw != "" {
+		if err := json.Unmarshal([]byte(raw), &out.Body); err != nil {
+			t.Fatalf("%s %s: response bukan JSON valid (%d): %s", req.Method, req.URL.Path, rec.Code, raw)
+		}
+	}
+	return out
+}
 
 // apiResp adalah hasil satu permintaan HTTP ke router, sudah didecode.
 type apiResp struct {

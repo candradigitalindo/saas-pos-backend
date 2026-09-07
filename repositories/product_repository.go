@@ -192,6 +192,44 @@ func UnitLookup(ctx context.Context) (map[string]string, error) {
 	return m, nil
 }
 
+// ProductsByIDs memuat produk (dengan Unit) untuk sekumpulan id — dipakai
+// checkout untuk membuat SNAPSHOT nama/harga/modal. tx wajib (di dalam transaksi
+// checkout). Mengembalikan peta id → produk.
+func ProductsByIDs(ctx context.Context, tx *gorm.DB, ids []string) (map[string]models.Product, error) {
+	out := map[string]models.Product{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var rows []models.Product
+	err := scopeTenantOn(ctx, tenantDB(ctx, tx), "products").
+		Joins("Unit").
+		Where("products.id IN ?", ids).
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range rows {
+		out[p.ID] = p
+	}
+	return out, nil
+}
+
+// ProductVariantsByIDs memuat varian untuk sekumpulan id. tx wajib.
+func ProductVariantsByIDs(ctx context.Context, tx *gorm.DB, ids []string) (map[string]models.ProductVariant, error) {
+	out := map[string]models.ProductVariant{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var rows []models.ProductVariant
+	if err := scopeTenant(ctx, tenantDB(ctx, tx)).Where("id IN ?", ids).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, v := range rows {
+		out[v.ID] = v
+	}
+	return out, nil
+}
+
 // CategoryLookup mengembalikan peta nama-kategori → id untuk seluruh kategori tenant.
 func CategoryLookup(ctx context.Context) (map[string]string, error) {
 	var cats []models.Category

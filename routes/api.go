@@ -171,6 +171,41 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	prod.PUT("/:id", middlewares.Require("product.edit"), controllers.UpdateProduct)
 	prod.DELETE("/:id", middlewares.Require("product.delete"), controllers.DeleteProduct)
 
+	// Pelanggan.
+	cust := t.Group("/customers")
+	cust.GET("", middlewares.Require("customer.view"), controllers.ListCustomers)
+	cust.GET("/:id", middlewares.Require("customer.view"), controllers.GetCustomer)
+	cust.POST("", middlewares.Require("customer.edit"), controllers.CreateCustomer)
+	cust.PUT("/:id", middlewares.Require("customer.edit"), controllers.UpdateCustomer)
+	cust.DELETE("/:id", middlewares.Require("customer.edit"), controllers.DeleteCustomer)
+
+	// Shift & kas.
+	t.POST("/shifts/open", middlewares.Require("shift.open"), controllers.OpenShift)
+	t.POST("/shifts/:id/close", middlewares.Require("shift.close"), controllers.CloseShift)
+	t.GET("/shifts", middlewares.Require("shift.open", "shift.close"), controllers.ListShifts)
+	t.GET("/shifts/:id", middlewares.Require("shift.open", "shift.close"), controllers.GetShift)
+	t.POST("/cash-movements", middlewares.Require("cash.movement"), controllers.CreateCashMovement)
+	t.GET("/cash-movements", middlewares.Require("cash.movement"), controllers.ListCashMovements)
+
+	// Transaksi kasir. (Ringkasan di path terpisah agar tidak bentrok dengan
+	// wildcard :id di pohon rute GET.)
+	t.POST("/sales", middlewares.Require("sale.create"), controllers.Checkout)
+	t.GET("/sales", middlewares.Require("sale.create"), controllers.ListSales)
+	t.GET("/sales-summary", middlewares.Require("report.view"), controllers.SalesSummary)
+	t.GET("/sales/:id", middlewares.Require("sale.create"), controllers.GetSale)
+	t.POST("/sales/:id/void", middlewares.Require("sale.void"), controllers.VoidSale)
+	t.POST("/sales/:id/refund", middlewares.Require("sale.refund"), controllers.RefundSale)
+
+	// Piutang.
+	t.GET("/receivables", middlewares.Require("receivable.manage"), controllers.ListReceivables)
+	t.GET("/receivables/:id", middlewares.Require("receivable.manage"), controllers.GetReceivable)
+	t.POST("/receivable-payments", middlewares.Require("receivable.manage"), controllers.AddReceivablePayment)
+
+	// Stok: baca + penyesuaian manual (saldo awal / koreksi).
+	t.GET("/stocks", middlewares.Require("stock.view"), controllers.ListStocks)
+	t.GET("/stock-movements", middlewares.Require("stock.view"), controllers.ListStockMovements)
+	t.POST("/stock-adjustments", middlewares.Require("stock.adjust"), controllers.AdjustStock)
+
 	// Manajemen user staf.
 	user := t.Group("/users", middlewares.Require("user.manage"))
 	user.GET("", controllers.GetAllUsers)

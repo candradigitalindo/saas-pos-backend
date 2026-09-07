@@ -30,3 +30,9 @@ func onConflictDoNothing(cols ...string) clause.OnConflict {
 	}
 	return clause.OnConflict{Columns: columns, DoNothing: true}
 }
+
+// lockForUpdate mengembalikan klausa "FOR UPDATE" untuk mengunci baris terpilih
+// sampai akhir transaksi. Dipakai penomoran struk & penguncian saldo stok.
+func lockForUpdate() clause.Locking {
+	return clause.Locking{Strength: "UPDATE"}
+}

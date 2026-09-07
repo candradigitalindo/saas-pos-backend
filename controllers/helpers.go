@@ -9,7 +9,15 @@ import (
 	"candra/backend-api/structs"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 )
+
+// bindJSONBytes meng-unmarshal raw ke obj DAN menjalankan validator binding
+// (termasuk tag kustom seperti `ulid` & `dive`). Dipakai handler yang sudah
+// membaca body sendiri, mis. checkout yang perlu meng-hash body mentah.
+func bindJSONBytes(raw []byte, obj any) error {
+	return binding.JSON.BindBody(raw, obj)
+}
 
 // timeLayout adalah format waktu seragam untuk semua response (CONVENTIONS §3).
 const timeLayout = "2006-01-02 15:04:05"

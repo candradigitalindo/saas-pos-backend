@@ -27,6 +27,9 @@ Sebuah framework backend REST API berbasis Golang dan Gin, dengan struktur modul
 - **Otorisasi granular** — 38 permission, peran per-tenant, middleware `Require(...)` per-endpoint
 - **Master data** — kategori, satuan, produk (+ pencarian trigram < 200 ms), supplier
 - **Impor produk CSV** — pratinjau (`dry_run`), impor sebagian, laporan baris gagal per baris
+- **Kasir** — checkout 1 transaksi (harga dari server, hitung & bulat per baris), idempoten via `Idempotency-Key`, penomoran struk terkunci, void & retur, kasbon → piutang
+- **Buku besar stok** — `stock_movements` sumber kebenaran, `stocks` cache; penguncian baris urut `product_id` (anti-deadlock); stok minus diizinkan (kasir tak dihentikan)
+- **Shift & kas** — buka/tutup shift, rekonsiliasi `expected_cash`, gerakan kas non-penjualan
 - **Autentikasi JWT** — access token pendek (15 mnt) + refresh token (30 hari) dengan rotasi & deteksi pemakaian ulang
 - **Manajemen Outlet / User / Role** — CRUD tenant-scoped + Pagination ala Laravel
 - **Migrasi skema berversi** (`cmd/migrate`) — `AutoMigrate` dimatikan
@@ -130,6 +133,17 @@ Semua endpoint bisnis di bawah prefiks `/api/v1`.
 | `POST /api/v1/products` · `PUT /:id` | `product.edit` | Buat / ubah produk |
 | `DELETE /api/v1/products/:id` | `product.delete` | Hapus produk |
 | `POST /api/v1/products/import?dry_run=` | `product.import` | Impor CSV (pratinjau + laporan baris gagal) |
+| `GET/POST/PUT/DELETE /api/v1/customers[/:id]` | `customer.view` / `customer.edit` | CRUD pelanggan |
+| `POST /api/v1/sales` (header `Idempotency-Key`) | `sale.create` | Checkout |
+| `GET  /api/v1/sales` · `GET /api/v1/sales/:id` | `sale.create` | Daftar / detail transaksi |
+| `POST /api/v1/sales/:id/void` · `.../refund` | `sale.void` / `sale.refund` | Batal / retur penuh |
+| `GET  /api/v1/sales-summary?from=&to=` | `report.view` | Ringkasan omzet/laba |
+| `POST /api/v1/shifts/open` · `/shifts/:id/close` | `shift.open` / `shift.close` | Buka / tutup shift |
+| `POST/GET /api/v1/cash-movements` | `cash.movement` | Kas masuk/keluar |
+| `GET  /api/v1/stocks?outlet_id=&low=` | `stock.view` | Saldo stok |
+| `GET  /api/v1/stock-movements?product_id=` | `stock.view` | Kartu stok |
+| `POST /api/v1/stock-adjustments` | `stock.adjust` | Saldo awal / koreksi stok |
+| `GET  /api/v1/receivables` · `POST /api/v1/receivable-payments` | `receivable.manage` | Piutang & pelunasan |
 | `GET/POST/PUT/DELETE /api/v1/users[/:id]` | `user.manage` | CRUD user staf |
 | `GET/POST/PUT/DELETE /api/v1/roles[/:id]` | `role.manage` | CRUD peran |
 | `PUT  /api/v1/roles/:id/permissions` | `role.manage` | Ganti pemetaan permission peran |

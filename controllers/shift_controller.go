@@ -1,0 +1,112 @@
+package controllers
+
+import (
+	"net/http"
+
+	"candra/backend-api/helpers"
+	"candra/backend-api/models"
+	"candra/backend-api/repositories"
+	"candra/backend-api/services"
+	"candra/backend-api/structs"
+
+	"github.com/gin-gonic/gin"
+)
+
+// OpenShift membuka shift kas untuk sebuah outlet.
+func OpenShift(c *gin.Context) {
+	var req structs.ShiftOpenRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		validationFailed(c, err)
+		return
+	}
+	sh, err := services.OpenShift(c.Request.Context(), req.OutletID, req.OpeningCash, req.Note)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, structs.SuccessResponse[structs.ShiftResponse]{
+		Success: true, Message: "Shift dibuka", Data: shiftToResponse(*sh),
+	})
+}
+
+// CloseShift menutup shift dan mencatat selisih kas.
+func CloseShift(c *gin.Context) {
+	var req structs.ShiftCloseRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		validationFailed(c, err)
+		return
+	}
+	sh, err := services.CloseShift(c.Request.Context(), c.Param("id"), req.CountedCash, req.Note)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[structs.ShiftResponse]{
+		Success: true, Message: "Shift ditutup", Data: shiftToResponse(*sh),
+	})
+}
+
+// ListShifts mengembalikan riwayat shift (opsional per outlet).
+func ListShifts(c *gin.Context) {
+	page, limit, offset := helpers.ParsePaginationParams(c)
+	rows, total, err := repositories.ListShifts(c.Request.Context(), c.Query("outlet_id"), limit, offset)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	items := make([]structs.ShiftResponse, len(rows))
+	for i, r := range rows {
+		items[i] = shiftToResponse(r)
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[structs.PaginatedResponse[structs.ShiftResponse]]{
+		Success: true, Message: "Berhasil mengambil data shift",
+		Data: helpers.BuildPaginationResponse(c, page, limit, total, items),
+	})
+}
+
+// GetShift mengembalikan satu shift.
+func GetShift(c *gin.Context) {
+	var sh models.Shift
+	if err := repositories.FindShiftInTenant(c.Request.Context(), nil, c.Param("id"), &sh); err != nil {
+		notFoundOr(c, err, repositories.ErrShiftNotFound, "Shift tidak ditemukan")
+		return
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[structs.ShiftResponse]{
+		Success: true, Message: "Berhasil mengambil data shift", Data: shiftToResponse(sh),
+	})
+}
+
+// CreateCashMovement mencatat kas masuk/keluar non-penjualan.
+func CreateCashMovement(c *gin.Context) {
+	var req structs.CashMovementRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		validationFailed(c, err)
+		return
+	}
+	mv, err := services.CreateCashMovement(c.Request.Context(), req.OutletID, req.ShiftID, req.Direction, req.Amount, req.Reason)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, structs.SuccessResponse[structs.CashMovementResponse]{
+		Success: true, Message: "Gerakan kas dicatat", Data: cashMovementToResponse(*mv),
+	})
+}
+
+// ListCashMovements mengembalikan gerakan kas satu shift.
+func ListCashMovements(c *gin.Context) {
+	page, limit, offset := helpers.ParsePaginationParams(c)
+	rows, total, err := repositories.ListCashMovements(c.Request.Context(), c.Query("shift_id"), limit, offset)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	items := make([]structs.CashMovementResponse, len(rows))
+	for i, r := range rows {
+		items[i] = cashMovementToResponse(r)
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[structs.PaginatedResponse[structs.CashMovementResponse]]{
+		Success: true, Message: "Berhasil mengambil gerakan kas",
+		Data: helpers.BuildPaginationResponse(c, page, limit, total, items),
+	})
+}

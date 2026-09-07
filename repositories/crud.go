@@ -2,9 +2,25 @@ package repositories
 
 import (
 	"context"
+	"reflect"
 
 	"gorm.io/gorm"
 )
+
+// stampTenantID mengisi field string bernama "TenantID" pada *row dengan tid,
+// bila ada. Membuat semua createTenant otomatis ter-scope tenant tanpa
+// bergantung pemanggil mengisinya (RLS WITH CHECK menolak baris tanpa tenant_id
+// yang cocok).
+func stampTenantID(row any, tid string) {
+	v := reflect.ValueOf(row)
+	if v.Kind() != reflect.Pointer || v.IsNil() {
+		return
+	}
+	f := v.Elem().FieldByName("TenantID")
+	if f.IsValid() && f.Kind() == reflect.String && f.CanSet() {
+		f.SetString(tid)
+	}
+}
 
 // Helper generik untuk pola CRUD tenant-scoped yang berulang di banyak resource
 // master data. Resource dengan kebutuhan khusus (mis. products yang butuh JOIN
@@ -46,9 +62,10 @@ func firstTenant[T any](ctx context.Context, tx *gorm.DB, id string, out *T) err
 	return scopeTenant(ctx, tenantDB(ctx, tx)).First(out, "id = ?", id).Error
 }
 
-// createTenant menyimpan baris baru. Pemanggil (service/controller) mengisi
-// TenantID dari konteks. tx opsional.
+// createTenant menyimpan baris baru, dengan TenantID di-stempel dari context.
+// tx opsional.
 func createTenant[T any](ctx context.Context, tx *gorm.DB, row *T) error {
+	stampTenantID(row, currentTenantID(ctx))
 	return tenantDB(ctx, tx).Create(row).Error
 }
 

@@ -1,0 +1,515 @@
+package services
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"sort"
+	"strings"
+	"time"
+
+	"candra/backend-api/config"
+	"candra/backend-api/helpers"
+	"candra/backend-api/internal/reqctx"
+	"candra/backend-api/internal/timez"
+	"candra/backend-api/models"
+	"candra/backend-api/repositories"
+
+	"github.com/shopspring/decimal"
+	"gorm.io/gorm"
+)
+
+// orDefault mengembalikan v bila tidak kosong, selain itu def.
+func orDefault(v, def string) string {
+	if v == "" {
+		return def
+	}
+	return v
+}
+
+// idempotencyScope untuk operasi checkout.
+const idempotencyScopeSale = "sale.create"
+
+// idempotencyTTL diambil dari IDEMPOTENCY_TTL_DAYS (default 7 hari, §15).
+func idempotencyTTL() time.Duration {
+	return time.Duration(config.GetIntEnv("IDEMPOTENCY_TTL_DAYS", 7)) * 24 * time.Hour
+}
+
+// CheckoutItem adalah satu baris keranjang dari controller.
+type CheckoutItem struct {
+	ProductID      string
+	VariantID      string // "" = tanpa varian
+	Qty            decimal.Decimal
+	DiscountAmount int64
+	Note           string
+}
+
+// CheckoutPayment adalah satu tender.
+type CheckoutPayment struct {
+	Method    string
+	Amount    int64
+	Reference string
+}
+
+// CheckoutInput adalah masukan lengkap Checkout, sudah diparse & dinormalkan
+// oleh controller.
+type CheckoutInput struct {
+	SaleID          string // ULID klien opsional
+	OutletID        string
+	ShiftID         string // "" = pakai shift terbuka outlet
+	CustomerID      string
+	OrderType       string
+	OrderDiscount   int64
+	Note            string
+	ClientCreatedAt *time.Time
+	Items           []CheckoutItem
+	Payments        []CheckoutPayment
+
+	IdempotencyKey string // dari header Idempotency-Key (wajib)
+	RequestHash    string // sha256 dari body mentah
+}
+
+// Checkout menjalankan transaksi kasir (§13.1): satu transaksi database menulis
+// sale + item + payment + gerakan stok + (opsional) piutang, idempoten lewat
+// Idempotency-Key.
+//
+// Mengembalikan (status HTTP, body JSON siap kirim, error). Pada pengulangan
+// permintaan yang identik, body lama dikembalikan tanpa mengerjakan ulang.
+func Checkout(ctx context.Context, in CheckoutInput) (int, []byte, error) {
+	if in.IdempotencyKey == "" {
+		return 0, nil, fmt.Errorf("%w: header Idempotency-Key wajib untuk checkout", helpers.ErrValidation)
+	}
+	if len(in.Items) == 0 {
+		return 0, nil, fmt.Errorf("%w: keranjang kosong", helpers.ErrValidation)
+	}
+	for _, it := range in.Items {
+		if it.Qty.LessThanOrEqual(decimal.Zero) {
+			return 0, nil, fmt.Errorf("%w: qty harus lebih besar dari 0", helpers.ErrValidation)
+		}
+	}
+
+	// 0. Di luar transaksi: outlet (butuh zona & batas hari), waktu, tanggal usaha.
+	var outlet models.Outlet
+	if err := repositories.FindOutletByID(ctx, nil, in.OutletID, &outlet); err != nil {
+		return 0, nil, fmt.Errorf("%w: outlet tidak ditemukan", helpers.ErrValidation)
+	}
+	now := time.Now().UTC()
+	bizDate, err := timez.BusinessDate(now, outlet.Timezone, outlet.DayStartOffset())
+	if err != nil {
+		return 0, nil, fmt.Errorf("zona waktu outlet tidak valid: %w", err)
+	}
+
+	var (
+		outStatus int
+		outBody   []byte
+	)
+	txErr := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
+		// 1. Idempotensi.
+		m, err := repositories.LookupIdempotency(ctx, tx, idempotencyScopeSale, in.IdempotencyKey, in.RequestHash)
+		if err != nil {
+			return err
+		}
+		if m.Found {
+			if !m.SameRequest {
+				return fmt.Errorf("%w: Idempotency-Key sudah dipakai untuk permintaan berbeda", helpers.ErrConflict)
+			}
+			outStatus, outBody = m.ResponseStatus, m.ResponseBody
+			return nil
+		}
+
+		// 1b. Shift.
+		shift, err := resolveShift(ctx, tx, in.OutletID, in.ShiftID)
+		if err != nil {
+			return err
+		}
+
+		// 2. Kunci baris stok, URUT product_id MENAIK.
+		productIDs := sortedUniqueProductIDs(in.Items)
+		locked, err := repositories.LockStocks(ctx, tx, in.OutletID, productIDs)
+		if err != nil {
+			return err
+		}
+
+		// 3. Muat produk & varian → SNAPSHOT. Harga dari master, bukan klien.
+		products, err := repositories.ProductsByIDs(ctx, tx, productIDs)
+		if err != nil {
+			return err
+		}
+		variants, err := repositories.ProductVariantsByIDs(ctx, tx, variantIDs(in.Items))
+		if err != nil {
+			return err
+		}
+
+		// 4. Hitung per baris lalu jumlahkan.
+		priced, totals, err := priceCheckout(in, outlet, products, variants)
+		if err != nil {
+			return err
+		}
+
+		// 5. Pembayaran & (opsional) piutang kasbon.
+		pay, err := resolvePayments(ctx, tx, in, totals.total)
+		if err != nil {
+			return err
+		}
+
+		// 6. Nomor struk (baris penghitung dikunci).
+		seq, err := repositories.NextReceiptSeq(ctx, tx, in.OutletID, bizDate)
+		if err != nil {
+			return err
+		}
+		receiptNo := formatReceiptNo(outlet, bizDate, seq)
+
+		// 7. Tulis sale + item + payment.
+		sale := buildSale(ctx, in, shift, bizDate, now, receiptNo, priced, totals, pay)
+		if err := repositories.CreateSale(ctx, tx, &sale); err != nil {
+			return err
+		}
+
+		// 8. Gerakan stok + perbarui cache untuk item ber-track_stock.
+		if err := writeStockMovements(ctx, tx, sale, priced, products, locked, bizDate, now); err != nil {
+			return err
+		}
+
+		// 9. Piutang bila ada pembayaran kasbon.
+		if pay.creditAmount > 0 {
+			rec := models.Receivable{
+				CustomerID:  in.CustomerID,
+				SourceTable: "sales",
+				SourceID:    sale.ID,
+				Amount:      pay.creditAmount,
+				Status:      "open",
+			}
+			if err := repositories.CreateReceivable(ctx, tx, &rec); err != nil {
+				return err
+			}
+		}
+
+		// 10. Bentuk response, simpan ke idempotency_keys, kembalikan.
+		body, err := marshalSaleResponse(&sale, "Transaksi berhasil")
+		if err != nil {
+			return err
+		}
+		if err := repositories.SaveIdempotency(ctx, tx, idempotencyScopeSale, in.IdempotencyKey, in.RequestHash,
+			http.StatusCreated, body, idempotencyTTL()); err != nil {
+			return err
+		}
+		outStatus, outBody = http.StatusCreated, body
+		return nil
+	})
+	if txErr != nil {
+		return 0, nil, txErr
+	}
+	return outStatus, outBody, nil
+}
+
+// resolveShift memilih shift untuk transaksi: yang diminta (harus 'open' & milik
+// outlet), atau shift 'open' outlet bila tidak diminta.
+func resolveShift(ctx context.Context, tx *gorm.DB, outletID, shiftID string) (models.Shift, error) {
+	var sh models.Shift
+	if shiftID != "" {
+		if err := repositories.FindShiftInTenant(ctx, tx, shiftID, &sh); err != nil {
+			return sh, fmt.Errorf("%w: shift tidak ditemukan", helpers.ErrValidation)
+		}
+		if sh.OutletID != outletID || sh.Status != "open" {
+			return sh, fmt.Errorf("%w: shift tidak terbuka untuk outlet ini", helpers.ErrValidation)
+		}
+		return sh, nil
+	}
+	if err := repositories.FindOpenShift(ctx, tx, outletID, &sh); err != nil {
+		return sh, fmt.Errorf("%w: belum ada shift terbuka — buka shift dulu", helpers.ErrValidation)
+	}
+	return sh, nil
+}
+
+// pricedItem adalah satu baris yang sudah di-snapshot & dihitung.
+type pricedItem struct {
+	in          CheckoutItem
+	productName string
+	unitName    string
+	unitPrice   int64
+	unitCost    int64
+	lineGross   int64 // round(qty * unit_price), sebelum diskon/pajak
+	lineTax     int64
+	lineTotal   int64 // qty*price - diskon (+ pajak bila eksklusif)
+	lineCost    int64 // round(qty * unit_cost)
+	trackStock  bool
+}
+
+type saleTotals struct {
+	subtotal, discountAmount, taxAmount, serviceAmount, roundingAmount, total, costTotal int64
+	sumLineDiscount                                                                      int64
+}
+
+// priceCheckout membuat SNAPSHOT tiap baris dan menghitung total. Harga jual &
+// modal diambil dari master produk (+ price_delta varian), TIDAK dari klien.
+func priceCheckout(in CheckoutInput, outlet models.Outlet, products map[string]models.Product, variants map[string]models.ProductVariant) ([]pricedItem, saleTotals, error) {
+	taxRate := outlet.TaxRate
+	taxOn := outlet.TaxEnabled && taxRate.GreaterThan(decimal.Zero)
+
+	out := make([]pricedItem, 0, len(in.Items))
+	var t saleTotals
+
+	for _, it := range in.Items {
+		p, ok := products[it.ProductID]
+		if !ok {
+			return nil, t, fmt.Errorf("%w: produk %s tidak ditemukan", helpers.ErrValidation, it.ProductID)
+		}
+		unitName := ""
+		if p.Unit != nil {
+			unitName = p.Unit.Name
+		}
+
+		unitPrice := p.SellPrice
+		if it.VariantID != "" {
+			v, ok := variants[it.VariantID]
+			if !ok || v.ProductID != it.ProductID {
+				return nil, t, fmt.Errorf("%w: varian %s tidak cocok dengan produk", helpers.ErrValidation, it.VariantID)
+			}
+			unitPrice += v.PriceDelta
+		}
+
+		lineGross := helpers.LineAmount(it.Qty, unitPrice)
+		lineCost := helpers.LineAmount(it.Qty, p.CostPrice)
+		if it.DiscountAmount > lineGross {
+			return nil, t, fmt.Errorf("%w: diskon baris melebihi nilai baris", helpers.ErrValidation)
+		}
+		baseAfterDisc := lineGross - it.DiscountAmount
+
+		var lineTax, lineTotal int64
+		switch {
+		case !taxOn:
+			lineTotal = baseAfterDisc
+		case outlet.TaxInclusive:
+			lineTax = helpers.InclusiveTax(baseAfterDisc, taxRate)
+			lineTotal = baseAfterDisc
+		default: // eksklusif
+			lineTax = helpers.ApplyRate(baseAfterDisc, taxRate)
+			lineTotal = baseAfterDisc + lineTax
+		}
+
+		out = append(out, pricedItem{
+			in: it, productName: p.Name, unitName: unitName,
+			unitPrice: unitPrice, unitCost: p.CostPrice,
+			lineGross: lineGross, lineTax: lineTax, lineTotal: lineTotal, lineCost: lineCost,
+			trackStock: p.TrackStock,
+		})
+
+		t.subtotal += lineGross
+		t.sumLineDiscount += it.DiscountAmount
+		t.taxAmount += lineTax
+		t.costTotal += lineCost
+		t.total += lineTotal
+	}
+
+	t.discountAmount = t.sumLineDiscount + in.OrderDiscount
+	baseForService := t.subtotal - t.discountAmount
+	if outlet.ServiceChargeRate.GreaterThan(decimal.Zero) && baseForService > 0 {
+		t.serviceAmount = helpers.ApplyRate(baseForService, outlet.ServiceChargeRate)
+	}
+	// total = Σ line_total - diskon order + service + rounding
+	t.total = t.total - in.OrderDiscount + t.serviceAmount + t.roundingAmount
+	return out, t, nil
+}
+
+// paymentResolution memilah pembayaran non-kredit vs kredit (kasbon).
+type paymentResolution struct {
+	rows         []models.SalePayment
+	paidAmount   int64
+	changeAmount int64
+	creditAmount int64
+}
+
+// resolvePayments memvalidasi pembayaran terhadap total: non-kredit boleh
+// melebihi (kembalian); bila ada kredit, harus pas dan butuh customer_id +
+// tidak melampaui batas kredit.
+func resolvePayments(ctx context.Context, tx *gorm.DB, in CheckoutInput, total int64) (paymentResolution, error) {
+	var r paymentResolution
+	now := time.Now().UTC()
+
+	var nonCredit int64
+	for _, p := range in.Payments {
+		if p.Amount <= 0 {
+			return r, fmt.Errorf("%w: nominal pembayaran harus > 0", helpers.ErrValidation)
+		}
+		if p.Method == "credit" {
+			r.creditAmount += p.Amount
+		} else {
+			nonCredit += p.Amount
+		}
+		r.rows = append(r.rows, models.SalePayment{
+			Method: p.Method, Amount: p.Amount, Reference: p.Reference, PaidAt: now,
+		})
+	}
+	r.paidAmount = nonCredit + r.creditAmount
+
+	if r.creditAmount > 0 {
+		if in.CustomerID == "" {
+			return r, fmt.Errorf("%w: pembayaran kasbon membutuhkan pelanggan", helpers.ErrValidation)
+		}
+		if nonCredit+r.creditAmount != total {
+			return r, fmt.Errorf("%w: total pembayaran (termasuk kasbon) harus sama persis dengan total transaksi", helpers.ErrValidation)
+		}
+		var cust models.Customer
+		if err := repositories.FindCustomerInTenant(ctx, tx, in.CustomerID, &cust); err != nil {
+			return r, fmt.Errorf("%w: pelanggan tidak ditemukan", helpers.ErrValidation)
+		}
+		if cust.CreditLimit > 0 {
+			outstanding, err := repositories.OutstandingReceivableTotal(ctx, tx, in.CustomerID)
+			if err != nil {
+				return r, err
+			}
+			if outstanding+r.creditAmount > cust.CreditLimit {
+				return r, fmt.Errorf("%w: melebihi batas kredit pelanggan", helpers.ErrValidation)
+			}
+		}
+		r.changeAmount = 0
+		return r, nil
+	}
+
+	if r.paidAmount < total {
+		return r, fmt.Errorf("%w: pembayaran kurang dari total", helpers.ErrValidation)
+	}
+	r.changeAmount = r.paidAmount - total
+	return r, nil
+}
+
+// buildSale merangkai model Sale + item + payment (belum disimpan).
+func buildSale(ctx context.Context, in CheckoutInput, shift models.Shift, bizDate, now time.Time, receiptNo string, priced []pricedItem, t saleTotals, pay paymentResolution) models.Sale {
+	shiftID := shift.ID
+	sale := models.Sale{
+		ID:             in.SaleID,
+		OutletID:       in.OutletID,
+		ShiftID:        &shiftID,
+		ReceiptNo:      receiptNo,
+		IdempotencyKey: in.IdempotencyKey,
+		OrderType:      orDefault(in.OrderType, "dine_in"),
+		Status:         "completed",
+		Subtotal:       t.subtotal,
+		DiscountAmount: t.discountAmount,
+		TaxAmount:      t.taxAmount,
+		ServiceAmount:  t.serviceAmount,
+		RoundingAmount: t.roundingAmount,
+		Total:          t.total,
+		PaidAmount:     pay.paidAmount,
+		ChangeAmount:   pay.changeAmount,
+		CostTotal:      t.costTotal,
+		Note:           in.Note,
+		OccurredAt:     now,
+		BusinessDate:   bizDate,
+		CreatedBy:      reqctx.UserID(ctx),
+	}
+	if in.CustomerID != "" {
+		sale.CustomerID = &in.CustomerID
+	}
+	if in.ClientCreatedAt != nil {
+		sale.ClientCreatedAt = in.ClientCreatedAt
+	}
+
+	for _, p := range priced {
+		item := models.SaleItem{
+			ProductID:      p.in.ProductID,
+			ProductName:    p.productName,
+			UnitName:       p.unitName,
+			Qty:            p.in.Qty,
+			UnitPrice:      p.unitPrice,
+			UnitCost:       p.unitCost,
+			DiscountAmount: p.in.DiscountAmount,
+			TaxAmount:      p.lineTax,
+			LineTotal:      p.lineTotal,
+			Note:           p.in.Note,
+		}
+		if p.in.VariantID != "" {
+			vid := p.in.VariantID
+			item.VariantID = &vid
+		}
+		sale.Items = append(sale.Items, item)
+	}
+	sale.Payments = pay.rows
+	return sale
+}
+
+// writeStockMovements menulis gerakan kind='sale' & memperbarui cache stok untuk
+// tiap item ber-track_stock. Stok minus DIIZINKAN (§13.1) — hanya dicatat di log.
+func writeStockMovements(ctx context.Context, tx *gorm.DB, sale models.Sale, priced []pricedItem, products map[string]models.Product, locked map[repositories.StockKey]models.Stock, bizDate, now time.Time) error {
+	uid := reqctx.UserID(ctx)
+	log := helpers.LoggerFromContext(ctx)
+	moves := make([]models.StockMovement, 0, len(priced))
+
+	for i := range sale.Items {
+		it := sale.Items[i]
+		p := priced[i]
+		if !p.trackStock {
+			continue
+		}
+		variantID := ""
+		if it.VariantID != nil {
+			variantID = *it.VariantID
+		}
+		before := decimal.Zero
+		if s, ok := locked[repositories.StockKey{OutletID: sale.OutletID, ProductID: it.ProductID, VariantID: variantID}]; ok {
+			before = s.Qty
+		}
+		after := before.Sub(it.Qty)
+		if after.IsNegative() {
+			log.Warn("checkout menyebabkan stok minus",
+				slog.String("sale_id", sale.ID), slog.String("product_id", it.ProductID),
+				slog.String("balance_after", after.String()))
+		}
+
+		refID := sale.ID
+		mv := models.StockMovement{
+			OutletID: sale.OutletID, ProductID: it.ProductID,
+			Kind: "sale", QtyDelta: it.Qty.Neg(), BalanceAfter: after,
+			UnitCost: it.UnitCost, RefTable: "sales", RefID: &refID,
+			OccurredAt: now, BusinessDate: bizDate,
+		}
+		if variantID != "" {
+			mv.VariantID = &variantID
+		}
+		if uid != "" {
+			mv.CreatedBy = &uid
+		}
+		moves = append(moves, mv)
+
+		if err := repositories.UpsertStockQty(ctx, tx, sale.OutletID, it.ProductID, variantID, after); err != nil {
+			return err
+		}
+	}
+	return repositories.RecordMovements(ctx, tx, moves)
+}
+
+// formatReceiptNo: <KODE>-<YYMMDD>-<URUT4>, YYMMDD dari business_date (§13.7).
+func formatReceiptNo(outlet models.Outlet, bizDate time.Time, seq int64) string {
+	code := ""
+	if outlet.Code != nil {
+		code = strings.TrimSpace(*outlet.Code)
+	}
+	if code == "" {
+		code = strings.ToUpper(outlet.ID[:4])
+	}
+	return fmt.Sprintf("%s-%s-%04d", code, bizDate.Format("060102"), seq)
+}
+
+func sortedUniqueProductIDs(items []CheckoutItem) []string {
+	set := map[string]struct{}{}
+	for _, it := range items {
+		set[it.ProductID] = struct{}{}
+	}
+	ids := make([]string, 0, len(set))
+	for id := range set {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+func variantIDs(items []CheckoutItem) []string {
+	var ids []string
+	for _, it := range items {
+		if it.VariantID != "" {
+			ids = append(ids, it.VariantID)
+		}
+	}
+	return ids
+}

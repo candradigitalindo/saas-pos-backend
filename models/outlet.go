@@ -20,12 +20,13 @@ var OutletTypes = []string{"store", "kitchen", "warehouse", "vehicle"}
 // Makassar (WITA) dan Jayapura (WIT), dan laporan harian tiap cabang harus benar
 // menurut zonanya sendiri (§3.2, §5.2).
 type Outlet struct {
-	ID       string `json:"id" gorm:"primaryKey;type:char(26)"`
-	TenantID string `json:"tenant_id" gorm:"type:char(26);not null;index"`
-	Name     string `json:"name" gorm:"not null"`
-	Type     string `json:"type" gorm:"not null;default:store"` // salah satu OutletTypes
-	Address  string `json:"address"`
-	Phone    string `json:"phone"`
+	ID       string  `json:"id" gorm:"primaryKey;type:char(26)"`
+	TenantID string  `json:"tenant_id" gorm:"type:char(26);not null;index"`
+	Name     string  `json:"name" gorm:"not null"`
+	Code     *string `json:"code"`                               // kode singkat, prefiks nomor struk; unik per tenant di antara baris hidup
+	Type     string  `json:"type" gorm:"not null;default:store"` // salah satu OutletTypes
+	Address  string  `json:"address"`
+	Phone    string  `json:"phone"`
 
 	// Timezone: nama IANA (Asia/Jakarta | Asia/Makassar | Asia/Jayapura).
 	// Divalidasi di service dengan timez.IsSupportedTimezone.
