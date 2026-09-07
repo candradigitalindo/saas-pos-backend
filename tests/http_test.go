@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -38,6 +39,28 @@ func call(t *testing.T, method, path, token string, payload any) apiResp {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	raw := rec.Body.String()
+	out := apiResp{Code: rec.Code, Raw: raw}
+	if raw != "" {
+		if err := json.Unmarshal([]byte(raw), &out.Body); err != nil {
+			t.Fatalf("%s %s: response bukan JSON valid (%d): %s", method, path, rec.Code, raw)
+		}
+	}
+	return out
+}
+
+// callRaw mengirim permintaan dengan body mentah dan Content-Type tertentu
+// (dipakai uji impor CSV: text/csv).
+func callRaw(t *testing.T, method, path, token, contentType, body string) apiResp {
+	t.Helper()
+	req := httptest.NewRequest(method, path, strings.NewReader(body))
+	req.Header.Set("Content-Type", contentType)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 

@@ -144,6 +144,33 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	outlet.PUT("/:id", controllers.UpdateOutlet)
 	outlet.DELETE("/:id", controllers.DeleteOutlet)
 
+	// Master data: kategori, satuan, supplier — baca butuh product.view, tulis
+	// butuh product.edit.
+	for _, res := range []struct {
+		path                           string
+		list, get, create, update, del gin.HandlerFunc
+	}{
+		{"/categories", controllers.ListCategories, controllers.GetCategory, controllers.CreateCategory, controllers.UpdateCategory, controllers.DeleteCategory},
+		{"/units", controllers.ListUnits, controllers.GetUnit, controllers.CreateUnit, controllers.UpdateUnit, controllers.DeleteUnit},
+		{"/suppliers", controllers.ListSuppliers, controllers.GetSupplier, controllers.CreateSupplier, controllers.UpdateSupplier, controllers.DeleteSupplier},
+	} {
+		g := t.Group(res.path)
+		g.GET("", middlewares.Require("product.view"), res.list)
+		g.GET("/:id", middlewares.Require("product.view"), res.get)
+		g.POST("", middlewares.Require("product.edit"), res.create)
+		g.PUT("/:id", middlewares.Require("product.edit"), res.update)
+		g.DELETE("/:id", middlewares.Require("product.edit"), res.del)
+	}
+
+	// Produk — perizinan lebih rinci.
+	prod := t.Group("/products")
+	prod.GET("", middlewares.Require("product.view"), controllers.ListProducts)
+	prod.GET("/:id", middlewares.Require("product.view"), controllers.GetProduct)
+	prod.POST("", middlewares.Require("product.edit"), controllers.CreateProduct)
+	prod.POST("/import", middlewares.Require("product.import"), controllers.ImportProducts)
+	prod.PUT("/:id", middlewares.Require("product.edit"), controllers.UpdateProduct)
+	prod.DELETE("/:id", middlewares.Require("product.delete"), controllers.DeleteProduct)
+
 	// Manajemen user staf.
 	user := t.Group("/users", middlewares.Require("user.manage"))
 	user.GET("", controllers.GetAllUsers)

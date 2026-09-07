@@ -25,6 +25,8 @@ Sebuah framework backend REST API berbasis Golang dan Gin, dengan struktur modul
 - **Multi-tenancy** — isolasi data per usaha di tiga lapisan: `scopeTenant` (repo), Row Level Security PostgreSQL, dan visibilitas kepemilikan (menyusul)
 - **Pendaftaran usaha 1 transaksi** — `POST /api/v1/auth/register` membuat tenant + outlet + peran bawaan + user pemilik sekaligus
 - **Otorisasi granular** — 38 permission, peran per-tenant, middleware `Require(...)` per-endpoint
+- **Master data** — kategori, satuan, produk (+ pencarian trigram < 200 ms), supplier
+- **Impor produk CSV** — pratinjau (`dry_run`), impor sebagian, laporan baris gagal per baris
 - **Autentikasi JWT** — access token pendek (15 mnt) + refresh token (30 hari) dengan rotasi & deteksi pemakaian ulang
 - **Manajemen Outlet / User / Role** — CRUD tenant-scoped + Pagination ala Laravel
 - **Migrasi skema berversi** (`cmd/migrate`) — `AutoMigrate` dimatikan
@@ -121,6 +123,13 @@ Semua endpoint bisnis di bawah prefiks `/api/v1`.
 | `POST /api/v1/auth/logout` | token | Cabut refresh token |
 | `GET  /api/v1/me` | token | Profil: user, tenant, permission, outlet |
 | `GET/POST/PUT/DELETE /api/v1/outlets[/:id]` | `outlet.manage` | CRUD outlet |
+| `GET/POST/PUT/DELETE /api/v1/categories[/:id]` | `product.view` / `product.edit` | CRUD kategori (maks 2 tingkat) |
+| `GET/POST/PUT/DELETE /api/v1/units[/:id]` | `product.view` / `product.edit` | CRUD satuan |
+| `GET/POST/PUT/DELETE /api/v1/suppliers[/:id]` | `product.view` / `product.edit` | CRUD supplier |
+| `GET  /api/v1/products?q=&category_id=&is_active=` | `product.view` | Cari produk (index trigram) |
+| `POST /api/v1/products` · `PUT /:id` | `product.edit` | Buat / ubah produk |
+| `DELETE /api/v1/products/:id` | `product.delete` | Hapus produk |
+| `POST /api/v1/products/import?dry_run=` | `product.import` | Impor CSV (pratinjau + laporan baris gagal) |
 | `GET/POST/PUT/DELETE /api/v1/users[/:id]` | `user.manage` | CRUD user staf |
 | `GET/POST/PUT/DELETE /api/v1/roles[/:id]` | `role.manage` | CRUD peran |
 | `PUT  /api/v1/roles/:id/permissions` | `role.manage` | Ganti pemetaan permission peran |

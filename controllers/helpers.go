@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"errors"
 	"log/slog"
 
 	"candra/backend-api/helpers"
@@ -29,6 +30,25 @@ func notFound(c *gin.Context, msg string) {
 		Message: msg,
 		Errors:  map[string]string{"resource": msg},
 	})
+}
+
+// conflict membalas 409 dengan satu pesan per field.
+func conflict(c *gin.Context, field, msg string) {
+	c.JSON(409, structs.ErrorResponse{
+		Success: false,
+		Message: msg,
+		Errors:  map[string]string{field: msg},
+	})
+}
+
+// notFoundOr membalas 404 bila err adalah sentinel "tidak ditemukan" resource
+// ini, atau menyerahkan ke respondServiceError untuk error lain.
+func notFoundOr(c *gin.Context, err, notFoundSentinel error, msg string) {
+	if errors.Is(err, notFoundSentinel) {
+		notFound(c, msg)
+		return
+	}
+	respondServiceError(c, err)
 }
 
 // validationFailed membalas 422 dengan detail per field dari binding/validator.
@@ -61,6 +81,88 @@ func respondServiceError(c *gin.Context, err error) {
 		Message: msg,
 		Errors:  map[string]string{"request": msg},
 	})
+}
+
+// deref mengembalikan isi *string, atau "" bila nil.
+func deref(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+
+// nilIfEmpty mengembalikan nil untuk string kosong — dipakai mengisi kolom FK /
+// unik yang nullable agar tersimpan NULL, bukan "".
+func nilIfEmpty(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+// categoryToResponse memetakan model Category ke DTO.
+func categoryToResponse(c models.Category) structs.CategoryResponse {
+	return structs.CategoryResponse{
+		ID:        c.ID,
+		ParentID:  deref(c.ParentID),
+		Name:      c.Name,
+		SortOrder: c.SortOrder,
+		CreatedAt: c.CreatedAt.Format(timeLayout),
+		UpdatedAt: c.UpdatedAt.Format(timeLayout),
+	}
+}
+
+// unitToResponse memetakan model Unit ke DTO.
+func unitToResponse(u models.Unit) structs.UnitResponse {
+	return structs.UnitResponse{
+		ID:           u.ID,
+		Name:         u.Name,
+		BaseUnitID:   deref(u.BaseUnitID),
+		Conversion:   u.Conversion.String(),
+		AllowDecimal: u.AllowDecimal,
+		CreatedAt:    u.CreatedAt.Format(timeLayout),
+		UpdatedAt:    u.UpdatedAt.Format(timeLayout),
+	}
+}
+
+// supplierToResponse memetakan model Supplier ke DTO.
+func supplierToResponse(s models.Supplier) structs.SupplierResponse {
+	return structs.SupplierResponse{
+		ID:        s.ID,
+		Name:      s.Name,
+		Phone:     s.Phone,
+		Address:   s.Address,
+		Note:      s.Note,
+		CreatedAt: s.CreatedAt.Format(timeLayout),
+		UpdatedAt: s.UpdatedAt.Format(timeLayout),
+	}
+}
+
+// productToResponse memetakan model Product (dengan Unit/Category opsional) ke DTO.
+func productToResponse(p models.Product) structs.ProductResponse {
+	r := structs.ProductResponse{
+		ID:         p.ID,
+		Name:       p.Name,
+		CategoryID: deref(p.CategoryID),
+		UnitID:     p.UnitID,
+		SKU:        deref(p.SKU),
+		Barcode:    deref(p.Barcode),
+		SellPrice:  p.SellPrice,
+		CostPrice:  p.CostPrice,
+		TrackStock: p.TrackStock,
+		MinStock:   p.MinStock.String(),
+		IsActive:   p.IsActive,
+		ImageURL:   p.ImageURL,
+		CreatedAt:  p.CreatedAt.Format(timeLayout),
+		UpdatedAt:  p.UpdatedAt.Format(timeLayout),
+	}
+	if p.Unit != nil {
+		r.UnitName = p.Unit.Name
+	}
+	if p.Category != nil {
+		r.CategoryName = p.Category.Name
+	}
+	return r
 }
 
 // tenantToResponse memetakan model Tenant ke DTO.
