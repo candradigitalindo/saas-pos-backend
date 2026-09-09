@@ -78,7 +78,12 @@ Sebuah framework backend REST API berbasis Golang dan Gin, dengan struktur modul
 /services            # Logika bisnis lintas tabel + transaksi (mis. pendaftaran tenant)
 /structs             # Struct request/response
 /tests               # Uji integrasi (butuh PostgreSQL; skip otomatis bila tak ada)
+/deploy              # postgres-init.sql (role non-superuser untuk RLS)
+/.github/workflows   # CI: build + vet + gofmt + test -race + docker build
 main.go              # Bootstrap aplikasi
+Dockerfile           # Build multi-tahap → distroless (server + semua cmd/)
+docker-compose.yml   # Dev lokal: PostgreSQL + migrate + server
+Makefile             # make help | build | test | lint | migrate-up | docker-build
 .env                 # Konfigurasi environment
 ```
 
@@ -133,6 +138,65 @@ TEST_DB_NAME=saas_pos_test TEST_DB_USER=<role> go test ./tests/ -v
 
 > Peringatan: `TestMain` menjalankan `DROP SCHEMA public CASCADE` pada database target.
 > Jangan arahkan ke database berisi data.
+
+Atau lewat `make`: `make test` (butuh PostgreSQL) · `make test-unit` (tanpa DB) ·
+`make lint` (vet + cek format). CI (`.github/workflows/ci.yml`) menjalankan
+`make ci` di setiap push/PR dengan PostgreSQL 16 + role non-superuser.
+
+---
+
+## Deployment
+
+Aplikasi **tidak** menjalankan migrasi saat start (aturan #10) dan **tidak**
+punya fallback konfigurasi — ia sengaja gagal-cepat bila setelan tidak aman.
+
+### 1. Prasyarat wajib di production
+
+| Hal | Kenapa |
+|---|---|
+| **Role database NON-SUPERUSER** | RLS (termasuk `FORCE ROW LEVEL SECURITY`) **tidak berlaku untuk superuser** — konek sebagai `postgres` mematikan seluruh isolasi antar-tenant tanpa error. Jalankan [deploy/postgres-init.sql](deploy/postgres-init.sql) sekali (atau setara di PostgreSQL terkelola). |
+| `JWT_SECRET` ≥ 32 karakter | `openssl rand -hex 32`. App fatal bila lebih pendek. |
+| `APP_URL` diisi | Tanpa ini, tautan paginasi mengambil `Host` dari klien (bisa dipalsukan). |
+| `APP_ENV=production` | Gin release mode + log level lebih tenang. |
+| `ALLOWED_ORIGINS` & `TRUSTED_PROXIES` | CORS ketat + `X-Forwarded-For` hanya dipercaya dari proxy yang benar. |
+| `DB_SSLMODE=require` (atau lebih ketat) | |
+| Ganti `DB_PASS` dari nilai contoh | Nilai di `.env` repo lama pernah bocor — wajib dirotasi di PostgreSQL. |
+
+### 2. Urutan rilis (zero-downtime)
+
+```sh
+docker build --build-arg VERSION=$(git describe --tags --always) -t saas-pos:$TAG .
+
+# Migrasi = langkah TERPISAH, dijalankan SEKALI sebelum menaikkan instance baru.
+docker run --rm --env-file .env --entrypoint /usr/local/bin/migrate saas-pos:$TAG up
+
+# Baru rilis server. main.go sudah punya graceful shutdown (SIGTERM → drain → tutup pool).
+docker run -d --env-file .env -p 8080:8080 saas-pos:$TAG
+```
+
+Migrasi dirancang aditif (kolom baru nullable / tabel baru), jadi versi lama dan
+baru bisa berjalan berdampingan selama rollout. `GET /health/ready` mengecek
+koneksi DB; `GET /health` untuk liveness.
+
+### 3. Pekerjaan terjadwal (cron host / scheduler)
+
+| Jadwal | Perintah |
+|---|---|
+| harian, awal bulan | `/usr/local/bin/recognize-revenue` |
+| tiap ~10 detik (atau daemon `-loop`) | `/usr/local/bin/process-channel-events` |
+| bulanan, tanggal 1 | `/usr/local/bin/partner-commissions -approve -payout` |
+
+`docker compose up --build` menyiapkan semuanya untuk **pengembangan lokal**
+(PostgreSQL + role non-superuser + migrate + server); `--profile jobs` menambah
+kontainer pekerjaan terjadwal.
+
+### 4. Batasan yang diketahui
+
+- **Rate limiter in-memory & per-instance.** `middlewares/rate_limit_middleware.go`
+  menyimpan token-bucket di memori proses. Dengan N replika, batas efektif jadi
+  N× nilai yang dikonfigurasi, dan restart mereset bucket. Untuk penegakan
+  lintas-instance yang ketat (mis. brute-force login), pindahkan ke store
+  terpusat (Redis) — antarmukanya sudah terisolasi di satu berkas.
 
 ---
 

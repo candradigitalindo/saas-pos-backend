@@ -1,0 +1,91 @@
+# Compose untuk PENGEMBANGAN LOKAL — bukan cetak biru production.
+#
+# Menyediakan PostgreSQL 16 dengan role non-superuser `pos_app` (RLS wajib —
+# lihat deploy/postgres-init.sql), lalu menjalankan migrasi sekali, lalu server.
+#
+#   docker compose up --build       # migrate → server
+#   docker compose run --rm migrate status
+#   docker compose run --rm recognize-revenue
+#
+# Salin .env.example ke .env lebih dulu; nilai DB_* di bawah menimpanya agar
+# menunjuk ke service `db`.
+
+x-app-env: &app-env
+  DB_HOST: db
+  DB_PORT: "5432"
+  DB_USER: pos_app
+  DB_PASS: pos_app_dev
+  DB_NAME: saas_pos
+  DB_SSLMODE: disable
+  DB_TZ: UTC
+  APP_ENV: development
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres        # superuser hanya untuk admin/init
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./deploy/postgres-init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # Migrasi = langkah deploy TERPISAH (docs/TECHNICAL-BACKEND.md aturan #10).
+  migrate:
+    build: .
+    entrypoint: ["/usr/local/bin/migrate"]
+    command: ["up"]
+    env_file: [.env]
+    environment: *app-env
+    depends_on:
+      db:
+        condition: service_healthy
+
+  server:
+    build: .
+    env_file: [.env]
+    environment:
+      <<: *app-env
+      APP_PORT: "8080"
+    ports:
+      - "8080:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  # Pekerjaan terjadwal — jalankan manual atau lewat cron host / scheduler.
+  recognize-revenue:
+    build: .
+    entrypoint: ["/usr/local/bin/recognize-revenue"]
+    env_file: [.env]
+    environment: *app-env
+    profiles: ["jobs"]
+    depends_on: { db: { condition: service_healthy } }
+
+  process-channel-events:
+    build: .
+    entrypoint: ["/usr/local/bin/process-channel-events"]
+    command: ["-loop", "-interval", "10s"]
+    env_file: [.env]
+    environment: *app-env
+    profiles: ["jobs"]
+    depends_on: { db: { condition: service_healthy } }
+
+  partner-commissions:
+    build: .
+    entrypoint: ["/usr/local/bin/partner-commissions"]
+    env_file: [.env]
+    environment: *app-env
+    profiles: ["jobs"]
+    depends_on: { db: { condition: service_healthy } }
+
+volumes:
+  pgdata:

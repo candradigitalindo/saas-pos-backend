@@ -1,0 +1,33 @@
+# Rahasia & konfigurasi lokal — JANGAN pernah masuk image.
+.env
+.env.local
+*.env
+
+# Riwayat & metadata git
+.git
+.gitignore
+.github
+
+# Artefak build & sementara
+tmp/
+/main
+/pos-server
+*.exe
+*.log
+*.test
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Dokumen — tidak dibutuhkan untuk build binari
+docs/
+README.md
+CONVENTIONS.md
+
+# Tooling dev
+.air.toml
+docker-compose.yml
+Dockerfile
+Makefile
