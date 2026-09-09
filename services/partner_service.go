@@ -247,6 +247,12 @@ func ListPartnerPayouts(ctx context.Context) ([]structs.PartnerPayoutResponse, e
 
 // CreatePartnerTier membuat tingkat mitra baru.
 func CreatePartnerTier(ctx context.Context, in structs.PartnerTierRequest) (structs.PartnerTierResponse, error) {
+	if strings.TrimSpace(in.Name) == "" {
+		return structs.PartnerTierResponse{}, fmt.Errorf("%w: name wajib diisi", helpers.ErrValidation)
+	}
+	if !contains(models.PartnerKinds, in.Kind) {
+		return structs.PartnerTierResponse{}, fmt.Errorf("%w: kind harus salah satu dari %v", helpers.ErrValidation, models.PartnerKinds)
+	}
 	rate, err := decimal.NewFromString(strings.TrimSpace(in.RecurringRate))
 	if err != nil || rate.IsNegative() {
 		return structs.PartnerTierResponse{}, fmt.Errorf("%w: recurring_rate tidak valid", helpers.ErrValidation)
@@ -287,6 +293,23 @@ func ListPartnerTiers(ctx context.Context) ([]structs.PartnerTierResponse, error
 // dibuatkan bila kosong; keduanya dikembalikan SEKALI.
 func CreatePartner(ctx context.Context, in structs.PartnerCreateRequest) (structs.PartnerCreateResponse, error) {
 	var out structs.PartnerCreateResponse
+
+	// Divalidasi di SINI, bukan hanya lewat tag binding: service ini juga
+	// dipanggil langsung oleh cmd/partner-admin dan test, yang tidak melewati
+	// validator HTTP. `phone` NOT NULL di §5.12 dan dipakai mencocokkan prospek
+	// saat merchant mendaftar — mitra tanpa nomor telepon tidak berguna.
+	for _, f := range []struct{ name, val string }{
+		{"name", in.Name}, {"phone", in.Phone},
+		{"user_name", in.UserName}, {"user_email", in.UserEmail},
+	} {
+		if strings.TrimSpace(f.val) == "" {
+			return out, fmt.Errorf("%w: %s wajib diisi", helpers.ErrValidation, f.name)
+		}
+	}
+	if !strings.Contains(in.UserEmail, "@") {
+		return out, fmt.Errorf("%w: user_email tidak valid", helpers.ErrValidation)
+	}
+
 	tier, err := repositories.FindPartnerTierByName(ctx, strings.TrimSpace(in.TierName))
 	if err != nil {
 		return out, fmt.Errorf("%w: tingkat %q tidak dikenal", helpers.ErrValidation, in.TierName)

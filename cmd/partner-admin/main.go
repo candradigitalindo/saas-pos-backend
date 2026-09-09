@@ -77,7 +77,12 @@ func main() {
 		var in structs.PartnerCreateRequest
 		fs.StringVar(&in.TierName, "tier", "", "nama tingkat (list-tiers)")
 		fs.StringVar(&in.Name, "name", "", "nama mitra")
+		fs.StringVar(&in.Phone, "phone", "", "telepon mitra (wajib)")
+		fs.StringVar(&in.Email, "email", "", "email mitra")
 		fs.StringVar(&in.Region, "region", "", "wilayah")
+		fs.StringVar(&in.IDNumber, "id-number", "", "nomor KTP")
+		fs.StringVar(&in.BankName, "bank-name", "", "nama bank")
+		fs.StringVar(&in.BankAccountName, "bank-account-name", "", "nama pemilik rekening")
 		fs.StringVar(&in.ReferralCode, "code", "", "kode referral (kosong → dibuatkan)")
 		fs.StringVar(&in.BankAccountNo, "bank", "", "nomor rekening")
 		fs.StringVar(&in.NPWP, "npwp", "", "NPWP")
