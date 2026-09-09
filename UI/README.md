@@ -22,6 +22,7 @@ Ini yang menentukan hampir semua keputusan di bawah.
 | **Staf gudang** | HP sambil berdiri di rak | Satu tangan memegang barang. Butuh input cepat, kamera untuk barcode |
 | **Sales lapangan** | HP di jalan, **sinyal putus-putus** | Aplikasi wajib tetap jalan tanpa internet |
 | **Mitra penjual (agen)** | HP/laptop | Pertanyaannya cuma satu: "komisi saya kapan cair dan berapa" |
+| **Staf internal (kita)** | Laptop | Panel internal: verifikasi mitra, jalankan komisi, cairkan, pantau antrean notifikasi. Realm terpisah, aplikasi terpisah |
 
 **Asumsi yang dipegang sepanjang dokumen: pengguna belum tentu melek teknologi.**
 Kalau sebuah alur butuh dijelaskan lewat telepon, alur itu gagal.

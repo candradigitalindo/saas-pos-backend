@@ -101,6 +101,21 @@ Dikerjakan sesuai permintaan pasar, tidak harus berurutan.
 
 ---
 
+## UX — Panel internal (jalur terpisah)
+
+Bukan bagian dari urutan U0–U6: penggunanya staf kita sendiri, bukan pelanggan.
+Dibangun saat perekrutan mitra benar-benar dimulai, karena sebelum itu
+`cmd/platform-admin` sudah cukup.
+
+- Desktop saja — tidak perlu offline, tidak perlu PWA
+- Menu dibentuk dari `capabilities` di `GET /platform/me`; jangan hardcode peran
+- Prioritas layar: verifikasi mitra → jalankan & setujui komisi → pencairan →
+  antrean notifikasi mati
+- Boleh memakai token desain yang sama, tapi **tanpa nada motivasional**:
+  ini alat kerja, bukan aplikasi yang harus menyemangati penggunanya
+
+---
+
 ## Cara menguji bahwa UI-nya benar-benar mudah
 
 Tes teknis tidak bisa mengukur "gaptek-friendly". Yang ini harus dilakukan

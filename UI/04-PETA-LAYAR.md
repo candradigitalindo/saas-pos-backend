@@ -91,8 +91,8 @@ Semakin sedikit pintu, semakin kecil peluang tersesat.
 | Tambah / ubah barang | `POST /products` · `PUT /products/:id` | `product.edit` |
 | Hapus barang | `DELETE /products/:id` | `product.delete` |
 | Impor dari Excel/CSV | `POST /products/import` (dukung `dry_run`) | `product.import` |
-| Resep (F&B) | `GET|PUT /products/:id/recipe` | `product.view` / `product.edit` |
-| Kategori, satuan, pemasok | `GET|POST|PUT|DELETE /categories[/:id]` · `/units[/:id]` · `/suppliers[/:id]` | `product.view` / `product.edit` |
+| Resep (F&B) | `GET\|PUT /products/:id/recipe` | `product.view` / `product.edit` |
+| Kategori, satuan, pemasok | `GET\|POST\|PUT\|DELETE /categories[/:id]` · `/units[/:id]` · `/suppliers[/:id]` | `product.view` / `product.edit` |
 | Saldo stok | `GET /stocks?outlet_id=` | `stock.view` |
 | Kartu stok (riwayat keluar-masuk) | `GET /stock-movements?product_id=` | `stock.view` |
 | Koreksi stok | `POST /stock-adjustments` | `stock.adjust` |
@@ -108,7 +108,7 @@ Semakin sedikit pintu, semakin kecil peluang tersesat.
 | Layar | Endpoint | Izin |
 |---|---|---|
 | Daftar & detail pelanggan | `GET /customers` · `GET /customers/:id` | `customer.view` |
-| Tambah / ubah / hapus | `POST|PUT|DELETE /customers[/:id]` | `customer.edit` |
+| Tambah / ubah / hapus | `POST\|PUT\|DELETE /customers[/:id]` | `customer.edit` |
 | Daftar kasbon | `GET /receivables` · `GET /receivables/:id` | `receivable.manage` |
 | Terima setoran kasbon | `POST /receivable-payments` | `receivable.manage` |
 
@@ -134,15 +134,15 @@ Semakin sedikit pintu, semakin kecil peluang tersesat.
 
 | Layar | Endpoint | Izin |
 |---|---|---|
-| Daftar & pengaturan kanal | `GET|POST|PUT|DELETE /channels[/:id]` | `channel.manage` |
-| Pemetaan SKU kanal ↔ produk | `GET|POST /channels/:id/products` · `DELETE /channels/:id/products/:pid` | `channel.manage` |
+| Daftar & pengaturan kanal | `GET\|POST\|PUT\|DELETE /channels[/:id]` | `channel.manage` |
+| Pemetaan SKU kanal ↔ produk | `GET\|POST /channels/:id/products` · `DELETE /channels/:id/products/:pid` | `channel.manage` |
 | Pesanan kanal | `GET /channel-orders` · `GET /channel-orders/:id` | `channel.order.accept` |
 | Catat pesanan manual (WA/IG) | `POST /channel-orders` | `channel.order.accept` |
 | Ubah status / batalkan | `POST /channel-orders/:id/status` · `POST /channel-orders/:id/cancel` | `channel.order.accept` |
 | Impor laporan harian (CSV) | `POST /channels/:id/orders/import` | `channel.order.accept` |
 | Antrean peristiwa & sinkron stok | `GET /channels/:id/events` · `GET /channels/:id/stock-syncs` | `channel.manage` |
 | Proses antrean manual | `POST /channel-events/process` | `channel.manage` |
-| Rekonsiliasi pencairan | `GET|POST /channels/:id/settlements` · `POST /channels/:id/settlements/receipt` | `channel.settlement.view` |
+| Rekonsiliasi pencairan | `GET\|POST /channels/:id/settlements` · `POST /channels/:id/settlements/receipt` | `channel.settlement.view` |
 
 ---
 
@@ -150,19 +150,19 @@ Semakin sedikit pintu, semakin kecil peluang tersesat.
 
 | Layar | Endpoint | Izin |
 |---|---|---|
-| Pipeline & tahapan | `GET|POST /pipelines` · `GET|POST /lead-sources` | `crm.lead.view.*` / `crm.deal.edit` |
-| Prospek (deal) | `GET|POST /deals` · `GET|PUT /deals/:id` · `POST /deals/:id/win` · `POST /deals/:id/lose` | `crm.deal.edit` |
-| Aktivitas follow-up | `GET|POST /activities` · `POST /activities/:id/complete` · `POST /activities/:id/cancel` | `crm.deal.edit` |
-| Penawaran | `GET|POST /quotations` · `GET /quotations/:id` · `POST /quotations/:id/send` · `POST /quotations/:id/reject` | `crm.deal.edit` |
+| Pipeline & tahapan | `GET\|POST /pipelines` · `GET\|POST /lead-sources` | `crm.lead.view.*` / `crm.deal.edit` |
+| Prospek (deal) | `GET\|POST /deals` · `GET\|PUT /deals/:id` · `POST /deals/:id/win` · `POST /deals/:id/lose` | `crm.deal.edit` |
+| Aktivitas follow-up | `GET\|POST /activities` · `POST /activities/:id/complete` · `POST /activities/:id/cancel` | `crm.deal.edit` |
+| Penawaran | `GET\|POST /quotations` · `GET /quotations/:id` · `POST /quotations/:id/send` · `POST /quotations/:id/reject` | `crm.deal.edit` |
 | Setujui penawaran → proyek | `POST /quotations/:id/accept` | `quotation.approve` |
-| Proyek, tugas, biaya | `GET|POST /projects` · `GET|PUT /projects/:id` · `POST /projects/:id/tasks` · `POST /projects/:id/expenses` | `crm.deal.edit` |
-| Invoice | `GET|POST /invoices` · `GET /invoices/:id` · `POST /invoices/:id/send` | `invoice.issue` |
+| Proyek, tugas, biaya | `GET\|POST /projects` · `GET\|PUT /projects/:id` · `POST /projects/:id/tasks` · `POST /projects/:id/expenses` | `crm.deal.edit` |
+| Invoice | `GET\|POST /invoices` · `GET /invoices/:id` · `POST /invoices/:id/send` | `invoice.issue` |
 | Batalkan invoice | `POST /invoices/:id/void` | `invoice.void` |
 | Bayar invoice | `POST /invoice-payments` + `Idempotency-Key` | `invoice.issue` |
-| Rencana kunjungan | `GET|POST /visit-plans` · `GET /visit-plans/:id` | `crm.visit.checkin` |
-| Kunjungan (check-in/out + GPS/foto) | `GET|POST /visits` · `GET /visits/:id` · `POST /visits/:id/checkout` | `crm.visit.checkin` |
-| Target & pencapaian sales | `GET|POST /sales-targets` | `crm.commission.view` |
-| Komisi sales | `GET|POST /commissions` · `POST /commissions/:id/approve` · `POST /commissions/:id/pay` | `crm.commission.view` |
+| Rencana kunjungan | `GET\|POST /visit-plans` · `GET /visit-plans/:id` | `crm.visit.checkin` |
+| Kunjungan (check-in/out + GPS/foto) | `GET\|POST /visits` · `GET /visits/:id` · `POST /visits/:id/checkout` | `crm.visit.checkin` |
+| Target & pencapaian sales | `GET\|POST /sales-targets` | `crm.commission.view` |
+| Komisi sales | `GET\|POST /commissions` · `POST /commissions/:id/approve` · `POST /commissions/:id/pay` | `crm.commission.view` |
 
 > **Visibilitas kepemilikan:** sales hanya melihat prospek miliknya sendiri
 > (`crm.lead.view.own`); atasan dengan `crm.lead.view.all` melihat semuanya.
@@ -178,17 +178,17 @@ Semakin sedikit pintu, semakin kecil peluang tersesat.
 | Daftar & detail karyawan | `GET /employees` · `GET /employees/:id` | `hr.employee.view` |
 | Tambah / ubah karyawan | `POST /employees` · `PUT /employees/:id` | `hr.employee.edit` |
 | Jadwal kerja mingguan | `POST /employees/:id/schedule` | `hr.employee.edit` |
-| Hari libur | `GET|POST /holidays` | `hr.attendance.view` / `hr.employee.edit` |
-| Absensi | `GET|POST /attendances` | `hr.attendance.view` |
+| Hari libur | `GET\|POST /holidays` | `hr.attendance.view` / `hr.employee.edit` |
+| Absensi | `GET\|POST /attendances` | `hr.attendance.view` |
 | Ajukan & setujui koreksi absen | `POST /attendance-corrections` · `POST /attendance-corrections/:id/approve` | `hr.attendance.view` / `hr.attendance.correct` |
 | Cuti & izin | `POST /leave-requests` · `POST /leave-requests/:id/approve` · `POST /leave-requests/:id/reject` | `hr.leave.request` / `hr.leave.approve` |
-| Komponen gaji | `GET|POST /payroll-rules` | `hr.payroll.run` |
-| Periode gaji | `GET|POST /payroll-periods` | `hr.payroll.run` |
+| Komponen gaji | `GET\|POST /payroll-rules` | `hr.payroll.run` |
+| Periode gaji | `GET\|POST /payroll-periods` | `hr.payroll.run` |
 | Hitung gaji | `POST /payroll-periods/:id/calculate` | `hr.payroll.run` |
 | Kunci periode | `POST /payroll-periods/:id/lock` | `hr.payroll.lock` |
 | Bayar gaji | `POST /payroll-periods/:id/pay` | `hr.payroll.pay` |
 | Slip gaji | `GET /payroll-periods/:id/payslips` · `GET /payslips/:id` | `hr.salary.view` |
-| Kasbon karyawan | `GET|POST /employee-advances` · `POST /employee-advances/:id/disburse` | `hr.advance.approve` / `hr.salary.view` |
+| Kasbon karyawan | `GET\|POST /employee-advances` · `POST /employee-advances/:id/disburse` | `hr.advance.approve` / `hr.salary.view` |
 
 > `hr.salary.view` adalah izin **paling sensitif** di aplikasi. Layar slip gaji
 > tidak boleh bisa dicapai dari mana pun tanpa izin ini — termasuk dari tautan
@@ -203,7 +203,7 @@ Semakin sedikit pintu, semakin kecil peluang tersesat.
 | Katalog paket | `GET /plans` | wajib masuk |
 | Status langganan saya | `GET /subscription` | `billing.manage` |
 | Mulai berlangganan | `POST /subscription` | `billing.manage` |
-| Tagihan | `GET|POST /subscription/invoices` | `billing.manage` |
+| Tagihan | `GET\|POST /subscription/invoices` | `billing.manage` |
 | Bayar | `POST /subscription-payments` + `Idempotency-Key` | `billing.manage` |
 | Ganti paket / berhenti | `POST /subscription/change-plan` · `POST /subscription/cancel` | `billing.manage` |
 
@@ -213,9 +213,9 @@ Semakin sedikit pintu, semakin kecil peluang tersesat.
 
 | Layar | Endpoint | Izin |
 |---|---|---|
-| Toko / cabang | `GET|POST|PUT|DELETE /outlets[/:id]` | `outlet.manage` |
-| Pengguna | `GET|POST|PUT|DELETE /users[/:id]` | `user.manage` |
-| Peran & hak akses | `GET|POST /roles` · `GET|PUT|DELETE /roles/:id` · `PUT /roles/:id/permissions` | `role.manage` |
+| Toko / cabang | `GET\|POST\|PUT\|DELETE /outlets[/:id]` | `outlet.manage` |
+| Pengguna | `GET\|POST\|PUT\|DELETE /users[/:id]` | `user.manage` |
+| Peran & hak akses | `GET\|POST /roles` · `GET\|PUT\|DELETE /roles/:id` · `PUT /roles/:id/permissions` | `role.manage` |
 | Katalog izin (untuk layar peran) | `GET /permissions` | `role.manage` |
 
 ### Layar peran — perhatian khusus
@@ -250,7 +250,7 @@ mengira sedang melihat data operasional toko.
 | Masuk mitra | `POST /partner/auth/login` | memakai **email** |
 | Profil mitra | `GET /partner/me` | |
 | Dashboard | `GET /partner/dashboard` | prospek, merchant aktif, komisi, pencairan terakhir |
-| Prospek | `GET|POST /partner/leads` | |
+| Prospek | `GET\|POST /partner/leads` | |
 | Merchant binaan | `GET /partner/merchants` | **hanya** nama usaha, status langganan, jatuh tempo, aktif |
 | Rincian komisi | `GET /partner/commissions` | |
 | Riwayat pencairan | `GET /partner/payouts` | |
@@ -264,13 +264,50 @@ mengira sedang melihat data operasional toko.
 
 ---
 
+## Panel internal penyedia SaaS — aplikasi terpisah
+
+Realm **ketiga**; token panel ditolak di rute tenant maupun portal mitra.
+Menunya dibangun dari `capabilities` yang dikembalikan `GET /platform/me`, jadi
+staf hanya melihat yang boleh ia kerjakan.
+
+| Layar | Endpoint | Peran |
+|---|---|---|
+| Masuk panel | `POST /platform/auth/login` | — (email + password) |
+| Profil & kemampuan | `GET /platform/me` | semua |
+| Akun staf internal | `GET\|POST /platform/admins` · `PUT /platform/admins/:id/active` | superadmin |
+| Daftar mitra | `GET /platform/partners` | semua (baca) |
+| Buat mitra | `POST /platform/partners` | superadmin, operator |
+| Verifikasi & aktifkan | `POST /platform/partners/:id/approve` · `POST /platform/partners/:id/suspend` | superadmin, operator |
+| Tingkat komisi | `GET /platform/partner-tiers` · `POST /platform/partner-tiers` | baca: semua · tulis: operator |
+| Jalankan komisi | `POST /platform/partner-commissions/run` | superadmin, finance |
+| Setujui komisi | `POST /platform/partner-commissions/:id/approve` | superadmin, finance |
+| Pencairan | `POST /platform/partner-payouts` · `POST /platform/partner-payouts/:id/paid` | superadmin, finance |
+| Target mitra | `GET /platform/partners/:id/targets` · `POST /platform/partner-targets` | baca: semua · tulis: operator |
+| Materi jualan | `GET\|POST /platform/partner-materials` | baca: semua · tulis: operator |
+| Pelatihan | `GET\|POST /platform/partner-trainings` | baca: semua · tulis: operator |
+| Sengketa atribusi | `GET /platform/partner-disputes` · `POST /platform/partner-disputes/:id/resolve` | baca: semua · putus: operator |
+| Antrean notifikasi | `GET /platform/outbox` · `POST /platform/outbox/:id/retry` | baca: semua · ulang: superadmin |
+| Template pesan | `POST /platform/notification-templates` | superadmin |
+
+**Dua hal yang wajib terlihat di UI panel:**
+
+1. **Pemisahan wewenang bukan sekadar teknis.** Tampilkan peran pengguna di
+   kepala halaman. Orang yang memverifikasi mitra memang tidak boleh
+   mencairkan uangnya — kalau tombolnya sekadar hilang tanpa penjelasan, staf
+   akan mengira aplikasinya rusak.
+2. **Antrean mati harus mencolok.** Notifikasi yang gagal 10 kali hanya
+   terlihat di sini. Beri lencana berisi jumlahnya di menu, lengkap dengan
+   alasan gagal dan tombol "Coba kirim lagi".
+
+---
+
 ## Yang belum ada di backend
 
 Jangan dirancang di UI sampai backendnya tersedia:
 
 | Fitur | Status backend |
 |---|---|
-| Panel admin platform (kelola mitra, jalankan komisi) | Belum ada realm-nya — sekarang lewat CLI `cmd/partner-admin` & `cmd/partner-commissions` |
-| Adaptor API kanal per-provider (GoFood, Shopee, dll.) | Menunggu kemitraan; sekarang lewat entri manual / CSV / webhook generik |
-| Materi jualan, pelatihan, target mitra | Tabelnya sudah ada, endpoint-nya belum |
-| Notifikasi keluar (WA/email) | Tabel `outbox_events` & `notification_templates` sudah ada, pengirimnya belum |
+| Adaptor API kanal per-provider (GoFood, Shopee, dll.) | **Terkunci pihak luar.** Menunggu kemitraan; blueprint F.9 melarang menjanjikannya sebelum disetujui. Sekarang lewat entri manual / CSV / webhook generik |
+| Pengiriman WhatsApp/email sungguhan | Alur outbox sudah utuh & teruji; pengirim bawaan baru mencatat ke log. Tinggal menukar satu implementasi `Notifier` saat penyedia dipilih |
+| Deteksi kejanggalan mitra (merchant fiktif, pendaftaran beruntun) | Blueprint G.5 P1 — belum dibangun |
+| Laporan biaya akuisisi per mitra & wilayah | Blueprint G.5 P1 — belum dibangun |
