@@ -29,7 +29,7 @@ test: ## Seluruh test + race detector (butuh PostgreSQL untuk ./tests)
 	$(GO) test ./... -race -count=1
 
 test-unit: ## Hanya test yang tidak butuh database
-	$(GO) test ./config/... ./helpers/... ./internal/... -race -count=1
+	$(GO) test ./config/... ./helpers/... ./internal/... ./middlewares/... -race -count=1
 
 vet: ## go vet
 	$(GO) vet ./...

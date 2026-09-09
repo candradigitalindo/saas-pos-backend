@@ -190,13 +190,18 @@ koneksi DB; `GET /health` untuk liveness.
 (PostgreSQL + role non-superuser + migrate + server); `--profile jobs` menambah
 kontainer pekerjaan terjadwal.
 
-### 4. Batasan yang diketahui
+### 4. Rate limiter — memori vs Redis
 
-- **Rate limiter in-memory & per-instance.** `middlewares/rate_limit_middleware.go`
-  menyimpan token-bucket di memori proses. Dengan N replika, batas efektif jadi
-  N× nilai yang dikonfigurasi, dan restart mereset bucket. Untuk penegakan
-  lintas-instance yang ketat (mis. brute-force login), pindahkan ke store
-  terpusat (Redis) — antarmukanya sudah terisolasi di satu berkas.
+`middlewares/rate_limit_middleware.go` punya dua backend, dipilih sekali saat
+start:
+
+| `RATELIMIT_REDIS_URL` | Backend | Catatan |
+|---|---|---|
+| kosong (default) | memori proses | Cukup untuk 1 instance. Dengan N replika batas efektif jadi N×; restart mereset bucket. |
+| `redis://host:6379/0` | Redis (token-bucket Lua atomik) | Penegakan lintas-instance. Tak terjangkau **saat start** → app fatal. Blip **saat runtime** → fail-open (izinkan + warning), agar satu gangguan Redis tidak mengunci semua orang. |
+
+Deploy multi-replika (mis. di belakang load balancer) sebaiknya memakai Redis
+untuk endpoint sensitif brute-force (`/auth/*`, `/partner/auth/login`).
 
 ---
 

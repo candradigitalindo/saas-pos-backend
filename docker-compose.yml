@@ -49,12 +49,27 @@ services:
       db:
         condition: service_healthy
 
+  # Opsional: `docker compose --profile redis up` untuk menguji pembatas laju
+  # lintas-instance. Tanpa profil ini, server memakai pembatas laju in-memory.
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    profiles: ["redis"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
   server:
     build: .
     env_file: [.env]
     environment:
       <<: *app-env
       APP_PORT: "8080"
+      # Diabaikan bila service `redis` tidak dijalankan (URL menunjuk host yang
+      # tak ada → fatal saat start); set hanya bersama `--profile redis`.
+      # RATELIMIT_REDIS_URL: redis://redis:6379/0
     ports:
       - "8080:8080"
     depends_on:

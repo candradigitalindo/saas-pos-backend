@@ -88,7 +88,7 @@ func SetupRouter() *gin.Engine {
 	// dibatasi agar banjir permintaan tidak membanjiri inbox. Longgar (kanal
 	// wajar membebankan puluhan pesanan/detik saat jam sibuk) & dapat diatur
 	// (CHANNEL_WEBHOOK_RATELIMIT_RPS / _BURST).
-	webhookLimiter := middlewares.RateLimit(
+	webhookLimiter := middlewares.RateLimit("channel-webhook",
 		config.GetFloatEnv("CHANNEL_WEBHOOK_RATELIMIT_RPS", 20),
 		float64(config.GetIntEnv("CHANNEL_WEBHOOK_RATELIMIT_BURST", 40)),
 	)
@@ -108,7 +108,7 @@ func SetupRouter() *gin.Engine {
 // di seluruh rute tenant. Mitra TIDAK PERNAH bisa menyentuh data operasional
 // tenant — yang boleh dilihat hanya status langganan merchant binaannya.
 func registerPartnerRoutes(v1 *gin.RouterGroup) {
-	loginLimiter := middlewares.RateLimit(
+	loginLimiter := middlewares.RateLimit("partner-login",
 		config.GetFloatEnv("AUTH_RATELIMIT_RPS", 0.2),
 		float64(config.GetIntEnv("AUTH_RATELIMIT_BURST", 5)),
 	)
@@ -153,7 +153,7 @@ func registerValidators() {
 // massal. Laju & burst dapat dikonfigurasi (AUTH_RATELIMIT_RPS / _BURST);
 // default ~0.2 req/detik, burst 5. /register kini = pendaftaran USAHA baru.
 func registerAuthRoutes(v1 *gin.RouterGroup) {
-	authLimiter := middlewares.RateLimit(
+	authLimiter := middlewares.RateLimit("auth",
 		config.GetFloatEnv("AUTH_RATELIMIT_RPS", 0.2),
 		float64(config.GetIntEnv("AUTH_RATELIMIT_BURST", 5)),
 	)
