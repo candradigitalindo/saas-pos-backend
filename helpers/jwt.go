@@ -23,9 +23,14 @@ const tokenTypeAccess = "access"
 //     otomatis realm ini, jadi token lama tetap sah.
 //   - RealmPartner — akun mitra penjual (Fase 12, blueprint G.8). Mitra bukan
 //     user tenant mana pun dan tak boleh menyentuh data operasional tenant.
+//   - RealmPlatform — staf internal penyedia SaaS (panel internal, blueprint
+//     G.5). Mengelola mitra & komisi, bukan data operasional tenant.
+//
+// Token satu realm SELALU ditolak di realm lain.
 const (
-	RealmTenant  = ""
-	RealmPartner = "partner"
+	RealmTenant   = ""
+	RealmPartner  = "partner"
+	RealmPlatform = "platform"
 )
 
 // ErrWrongTokenType dikembalikan ParseAccessToken bila token sah secara tanda
@@ -83,6 +88,13 @@ func PartnerAccessTokenTTL() time.Duration {
 	return time.Duration(config.GetIntEnv("PARTNER_JWT_ACCESS_MINUTES", 120)) * time.Minute
 }
 
+// PlatformAccessTokenTTL mengembalikan umur access token panel internal dari
+// PLATFORM_JWT_ACCESS_MINUTES (default 60 menit). Sengaja lebih PENDEK dari
+// token mitra: akun ini bisa mencairkan uang dan mengubah tingkat komisi.
+func PlatformAccessTokenTTL() time.Duration {
+	return time.Duration(config.GetIntEnv("PLATFORM_JWT_ACCESS_MINUTES", 60)) * time.Minute
+}
+
 // GenerateAccessToken membuat access token berumur pendek untuk userID (realm
 // tenant). Mengembalikan token yang sudah ditandatangani beserta waktu
 // kedaluwarsanya (dipakai controller untuk mengisi field expires_in di response).
@@ -94,6 +106,12 @@ func GenerateAccessToken(userID string) (token string, expiresAt time.Time, err 
 // partner). Rute tenant menolak token ber-realm ini, dan sebaliknya.
 func GeneratePartnerAccessToken(partnerUserID string) (token string, expiresAt time.Time, err error) {
 	return generateAccessToken(partnerUserID, RealmPartner, PartnerAccessTokenTTL())
+}
+
+// GeneratePlatformAccessToken membuat access token untuk staf internal (realm
+// platform). Ditolak di rute tenant maupun portal mitra.
+func GeneratePlatformAccessToken(adminID string) (token string, expiresAt time.Time, err error) {
+	return generateAccessToken(adminID, RealmPlatform, PlatformAccessTokenTTL())
 }
 
 func generateAccessToken(subject, realm string, ttl time.Duration) (string, time.Time, error) {

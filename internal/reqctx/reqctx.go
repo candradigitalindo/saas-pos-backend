@@ -23,6 +23,8 @@ const (
 	permissionsKey
 	partnerIDKey
 	partnerUserIDKey
+	platformAdminIDKey
+	platformRoleKey
 )
 
 // WithTenantID menautkan tenant_id efektif ke context.
@@ -116,5 +118,27 @@ func WithPartnerUserID(ctx context.Context, partnerUserID string) context.Contex
 // PartnerUserID mengembalikan id akun-login mitra permintaan ini, atau "".
 func PartnerUserID(ctx context.Context) string {
 	s, _ := ctx.Value(partnerUserIDKey).(string)
+	return s
+}
+
+// ── Realm platform (panel internal, blueprint G.5) ───────────────────────
+//
+// Di-set oleh middleware PlatformAuth. Populasi akun KETIGA, terpisah dari
+// tenant maupun mitra — sebuah permintaan tidak pernah punya lebih dari satu.
+
+// WithPlatformAdmin menautkan id & peran admin platform ke context.
+func WithPlatformAdmin(ctx context.Context, adminID, role string) context.Context {
+	return context.WithValue(context.WithValue(ctx, platformAdminIDKey, adminID), platformRoleKey, role)
+}
+
+// PlatformAdminID mengembalikan id admin platform permintaan ini, atau "".
+func PlatformAdminID(ctx context.Context) string {
+	s, _ := ctx.Value(platformAdminIDKey).(string)
+	return s
+}
+
+// PlatformRole mengembalikan peran admin platform permintaan ini, atau "".
+func PlatformRole(ctx context.Context) string {
+	s, _ := ctx.Value(platformRoleKey).(string)
 	return s
 }

@@ -9,6 +9,7 @@ import (
 	"candra/backend-api/controllers"
 	"candra/backend-api/internal/ulid"
 	"candra/backend-api/middlewares"
+	"candra/backend-api/models"
 	"candra/backend-api/structs"
 
 	"github.com/gin-contrib/cors"
@@ -97,6 +98,7 @@ func SetupRouter() *gin.Engine {
 	v1 := r.Group("/api/v1")
 	registerAuthRoutes(v1)
 	registerPartnerRoutes(v1)
+	registerPlatformRoutes(v1)
 	registerTenantRoutes(v1)
 
 	return r
@@ -122,6 +124,51 @@ func registerPartnerRoutes(v1 *gin.RouterGroup) {
 	p.GET("/merchants", controllers.PartnerListMerchants)
 	p.GET("/commissions", controllers.PartnerListCommissions)
 	p.GET("/payouts", controllers.PartnerListPayouts)
+}
+
+// registerPlatformRoutes memasang panel internal penyedia SaaS di bawah
+// /api/v1/platform/* (blueprint G.5, migrasi 000035). Realm KETIGA: hanya token
+// ber-realm "platform" yang diterima, dan token itu ditolak di rute tenant
+// maupun portal mitra.
+//
+// Wewenang dipisah per peran supaya orang yang memverifikasi mitra bukan orang
+// yang sama dengan yang mencairkan uangnya:
+//
+//	operator → verifikasi mitra & tingkat      finance → komisi & pencairan
+//	support  → hanya membaca                   superadmin → semuanya
+func registerPlatformRoutes(v1 *gin.RouterGroup) {
+	loginLimiter := middlewares.RateLimit("platform-login",
+		config.GetFloatEnv("AUTH_RATELIMIT_RPS", 0.2),
+		float64(config.GetIntEnv("AUTH_RATELIMIT_BURST", 5)),
+	)
+	v1.POST("/platform/auth/login", loginLimiter, controllers.PlatformLogin)
+
+	pf := v1.Group("/platform", middlewares.PlatformAuth())
+	pf.GET("/me", controllers.PlatformMe)
+
+	baca := middlewares.RequirePlatform(models.CapPlatformRead)
+	verif := middlewares.RequirePlatform(models.CapPartnerVerify)
+	uang := middlewares.RequirePlatform(models.CapPartnerFinance)
+	kelola := middlewares.RequirePlatform(models.CapPlatformAdmin)
+
+	// Akun staf internal — hanya superadmin.
+	pf.GET("/admins", kelola, controllers.PlatformListAdmins)
+	pf.POST("/admins", kelola, controllers.PlatformCreateAdmin)
+	pf.PUT("/admins/:id/active", kelola, controllers.PlatformSetAdminActive)
+
+	// Mitra: verifikasi & tingkat.
+	pf.GET("/partners", baca, controllers.PlatformListPartners)
+	pf.POST("/partners", verif, controllers.PlatformCreatePartner)
+	pf.POST("/partners/:id/approve", verif, controllers.PlatformApprovePartner)
+	pf.POST("/partners/:id/suspend", verif, controllers.PlatformSuspendPartner)
+	pf.GET("/partner-tiers", baca, controllers.PlatformListTiers)
+	pf.POST("/partner-tiers", verif, controllers.PlatformCreateTier)
+
+	// Komisi & pencairan — hanya finance/superadmin.
+	pf.POST("/partner-commissions/run", uang, controllers.PlatformRunCommissions)
+	pf.POST("/partner-commissions/:id/approve", uang, controllers.PlatformApproveCommission)
+	pf.POST("/partner-payouts", uang, controllers.PlatformCreatePayout)
+	pf.POST("/partner-payouts/:id/paid", uang, controllers.PlatformMarkPayoutPaid)
 }
 
 // registerValidators memasang validator kustom dan membuat pesan error memakai
