@@ -23,27 +23,27 @@ import (
 func bg() context.Context { return context.Background() }
 
 // makePartnerTier membuat tingkat mitra dengan ambang yang mudah diuji.
-func makePartnerTier(t *testing.T, code, rate string, minTxn, minDays, clawbackDays int) {
+// Nama tingkat adalah kunci alaminya (§5.12), jadi harus unik per test.
+func makePartnerTier(t *testing.T, name, rate string, minTxn, minDays, clawbackDays int) {
 	t.Helper()
-	recurring := true
 	_, err := services.CreatePartnerTier(bg(), structs.PartnerTierRequest{
-		Code: code, Name: "Tier " + code, Kind: "agen", CommissionRate: rate,
-		Recurring: &recurring, ActivationMinTxn: minTxn, ActivationMinDays: minDays,
+		Name: name, Kind: "agent", RecurringRate: rate,
+		ActivationMinTxn: minTxn, ActivationMinDays: minDays,
 		AttributionDays: 3650, ClawbackDays: clawbackDays,
 	})
 	if err != nil {
-		t.Fatalf("buat tier %s: %v", code, err)
+		t.Fatalf("buat tier %s: %v", name, err)
 	}
 }
 
 // makeActivePartner membuat mitra + akun login, lalu menyetujuinya (→ active).
-// Mengembalikan (partnerID, referralCode, username, password).
-func makeActivePartner(t *testing.T, tierCode, slug string) (string, string, string, string) {
+// Mengembalikan (partnerID, referralCode, email, password).
+func makeActivePartner(t *testing.T, tierName, slug string) (string, string, string, string) {
 	t.Helper()
+	email := "mitra_" + slug + "@example.com"
 	res, err := services.CreatePartner(bg(), structs.PartnerCreateRequest{
-		TierCode: tierCode, Name: "Mitra " + slug,
-		UserName: "Mitra " + slug, UserEmail: "mitra_" + slug + "@example.com",
-		UserUsername: "mitra_" + slug, UserPassword: "rahasiamitra123",
+		TierName: tierName, Name: "Mitra " + slug, Phone: "0811-" + slug,
+		UserName: "Mitra " + slug, UserEmail: email, UserPassword: "rahasiamitra123",
 	})
 	if err != nil {
 		t.Fatalf("buat mitra %s: %v", slug, err)
@@ -51,15 +51,16 @@ func makeActivePartner(t *testing.T, tierCode, slug string) (string, string, str
 	if err := services.ApprovePartner(bg(), res.Partner.ID); err != nil {
 		t.Fatalf("setujui mitra %s: %v", slug, err)
 	}
-	return res.Partner.ID, res.Partner.ReferralCode, res.UserUsername, "rahasiamitra123"
+	return res.Partner.ID, res.Partner.ReferralCode, res.UserEmail, "rahasiamitra123"
 }
 
-// partnerToken login ke portal mitra dan mengembalikan access token realm partner.
-func partnerToken(t *testing.T, username, password string) string {
+// partnerToken login ke portal mitra (EMAIL) dan mengembalikan access token
+// realm partner.
+func partnerToken(t *testing.T, email, password string) string {
 	t.Helper()
 	d := call(t, "POST", "/api/v1/partner/auth/login", "", map[string]any{
-		"username": username, "password": password,
-	}).mustOK(t, "login mitra "+username).data(t)
+		"email": email, "password": password,
+	}).mustOK(t, "login mitra "+email).data(t)
 	return get[string](t, d, "access_token")
 }
 
@@ -125,8 +126,8 @@ func widePeriod() (string, string) {
 // satu pun hitungan manual, dan hitung ulang tetap idempoten.
 func TestPartnerCommissionCycle(t *testing.T) {
 	requireDB(t)
-	makePartnerTier(t, "tcyc", "0.20", 1, 1, 3650) // komisi 20%, aktif pada 1 transaksi
-	pid, code, user, pass := makeActivePartner(t, "tcyc", "cyc")
+	makePartnerTier(t, "Uji Siklus", "0.20", 1, 1, 3650) // komisi 20%, aktif pada 1 transaksi
+	pid, code, user, pass := makeActivePartner(t, "Uji Siklus", "cyc")
 
 	f := referredPOS(t, "pcyc", code, "0899-pcyc")
 	sellOnce(t, f, "pcyc-1") // penuhi ambang aktivasi
@@ -191,8 +192,8 @@ func TestPartnerCommissionCycle(t *testing.T) {
 // benar-benar dipakai (blueprint G.2 #3).
 func TestPartnerActivationThreshold(t *testing.T) {
 	requireDB(t)
-	makePartnerTier(t, "tact", "0.10", 5, 3650, 3650) // butuh 5 transaksi
-	pid, code, user, pass := makeActivePartner(t, "tact", "act")
+	makePartnerTier(t, "Uji Aktivasi", "0.10", 5, 3650, 3650) // butuh 5 transaksi
+	pid, code, user, pass := makeActivePartner(t, "Uji Aktivasi", "act")
 
 	f := referredPOS(t, "pact", code, "0899-pact")
 	inv := startBasic12(t, f.tenantFixture)
@@ -231,8 +232,8 @@ func TestPartnerActivationThreshold(t *testing.T) {
 // merchant (bukan omzet/produk/pelanggan), dan aksesnya tercatat di jejak audit.
 func TestPartnerCannotTouchTenantData(t *testing.T) {
 	requireDB(t)
-	makePartnerTier(t, "tiso", "0.10", 1, 1, 3650)
-	pid, code, user, pass := makeActivePartner(t, "tiso", "iso")
+	makePartnerTier(t, "Uji Isolasi", "0.10", 1, 1, 3650)
+	_, code, user, pass := makeActivePartner(t, "Uji Isolasi", "iso")
 	f := referredPOS(t, "piso", code, "0899-piso")
 	tok := partnerToken(t, user, pass)
 
@@ -266,8 +267,9 @@ func TestPartnerCannotTouchTenantData(t *testing.T) {
 
 	// Akses tercatat di jejak audit.
 	var n int64
-	database.DB.Table("partner_merchant_access_log").
-		Where("partner_id = ? AND tenant_id = ?", pid, f.tenantID).Count(&n)
+	database.DB.Table("audit_logs").
+		Where("actor_type = 'partner_user' AND action = 'partner.merchant.view' AND tenant_id = ?", f.tenantID).
+		Count(&n)
 	if n < 1 {
 		t.Fatalf("akses merchant tidak tercatat di jejak audit (n=%d)", n)
 	}
@@ -277,13 +279,13 @@ func TestPartnerCannotTouchTenantData(t *testing.T) {
 // yang cocok jadi 'daftar'; kode tak dikenal tidak menggagalkan pendaftaran.
 func TestPartnerReferralWiring(t *testing.T) {
 	requireDB(t)
-	makePartnerTier(t, "twire", "0.10", 1, 1, 3650)
-	_, code, user, pass := makeActivePartner(t, "twire", "wire")
+	makePartnerTier(t, "Uji Atribusi", "0.10", 1, 1, 3650)
+	_, code, user, pass := makeActivePartner(t, "Uji Atribusi", "wire")
 	tok := partnerToken(t, user, pass)
 
 	phone := "0899-wire-lead"
 	call(t, "POST", "/api/v1/partner/leads", tok, map[string]any{
-		"business_name": "Calon Toko", "contact_phone": phone,
+		"business_name": "Calon Toko", "phone": phone,
 	}).mustCode(t, "catat prospek", 201)
 
 	registerReferredTenant(t, "pwire", code, phone)
@@ -293,10 +295,10 @@ func TestPartnerReferralWiring(t *testing.T) {
 	if len(merchants) != 1 {
 		t.Fatalf("merchant binaan = %d, mau 1", len(merchants))
 	}
-	daftar := call(t, "GET", "/api/v1/partner/leads?status=daftar", tok, nil).
+	daftar := call(t, "GET", "/api/v1/partner/leads?status=registered", tok, nil).
 		mustOK(t, "prospek daftar").Body["data"].([]any)
 	if len(daftar) != 1 {
-		t.Fatalf("prospek 'daftar' = %d, mau 1", len(daftar))
+		t.Fatalf("prospek 'registered' = %d, mau 1", len(daftar))
 	}
 
 	// Kode tak dikenal → pendaftaran tetap sukses, tak ada merchant baru.
@@ -311,8 +313,8 @@ func TestPartnerReferralWiring(t *testing.T) {
 // TestPartnerClawback — langganan berhenti dalam masa clawback → komisi ditarik.
 func TestPartnerClawback(t *testing.T) {
 	requireDB(t)
-	makePartnerTier(t, "tclaw", "0.20", 1, 1, 3650) // masa clawback sangat lebar
-	pid, code, user, pass := makeActivePartner(t, "tclaw", "claw")
+	makePartnerTier(t, "Uji Clawback", "0.20", 1, 1, 3650) // masa clawback sangat lebar
+	pid, code, user, pass := makeActivePartner(t, "Uji Clawback", "claw")
 
 	f := referredPOS(t, "pclaw", code, "0899-pclaw")
 	sellOnce(t, f, "pclaw-1")

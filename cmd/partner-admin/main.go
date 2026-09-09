@@ -47,7 +47,11 @@ func main() {
 		tiers, err := services.ListPartnerTiers(ctx)
 		fatal(err)
 		for _, t := range tiers {
-			fmt.Printf("%-12s  %-20s  %-8s  rate=%s  recurring=%v\n", t.Code, t.Name, t.Kind, t.CommissionRate, t.Recurring)
+			months := "selama aktif"
+			if t.RecurringMonths != nil {
+				months = fmt.Sprintf("%d bulan", *t.RecurringMonths)
+			}
+			fmt.Printf("%-14s  %-10s  rate=%-8s  komisi=%s\n", t.Name, t.Kind, t.RecurringRate, months)
 		}
 
 	case "list-partners":
@@ -58,7 +62,7 @@ func main() {
 		partners, _, err := services.ListPartners(ctx, status, 500, 0)
 		fatal(err)
 		for _, p := range partners {
-			fmt.Printf("%s  %-10s  %-12s  %-24s  code=%s\n", p.ID, p.Status, p.TierCode, p.Name, p.ReferralCode)
+			fmt.Printf("%s  %-10s  %-12s  %-24s  code=%s\n", p.ID, p.Status, p.TierName, p.Name, p.ReferralCode)
 		}
 
 	case "approve-partner":
@@ -71,23 +75,23 @@ func main() {
 	case "create-partner":
 		fs := flag.NewFlagSet("create-partner", flag.ExitOnError)
 		var in structs.PartnerCreateRequest
-		fs.StringVar(&in.TierCode, "tier", "", "kode tingkat (list-tiers)")
+		fs.StringVar(&in.TierName, "tier", "", "nama tingkat (list-tiers)")
 		fs.StringVar(&in.Name, "name", "", "nama mitra")
 		fs.StringVar(&in.Region, "region", "", "wilayah")
 		fs.StringVar(&in.ReferralCode, "code", "", "kode referral (kosong → dibuatkan)")
-		fs.StringVar(&in.BankAccount, "bank", "", "nomor rekening")
-		fs.StringVar(&in.TaxID, "npwp", "", "NPWP")
+		fs.StringVar(&in.BankAccountNo, "bank", "", "nomor rekening")
+		fs.StringVar(&in.NPWP, "npwp", "", "NPWP")
 		fs.StringVar(&in.TaxWithholdingRate, "tax-rate", "", "tarif potong pajak, mis. 0.025")
 		fs.StringVar(&in.UserName, "user-name", "", "nama akun login")
 		fs.StringVar(&in.UserEmail, "user-email", "", "email akun login")
-		fs.StringVar(&in.UserUsername, "user-username", "", "username akun login")
+		fs.StringVar(&in.UserPhone, "user-phone", "", "telepon akun login")
 		fs.StringVar(&in.UserPassword, "user-password", "", "password (kosong → dibuatkan)")
 		_ = fs.Parse(args)
 
 		res, err := services.CreatePartner(ctx, in)
 		fatal(err)
 		fmt.Printf("Mitra dibuat: id=%s status=%s referral_code=%s\n", res.Partner.ID, res.Partner.Status, res.Partner.ReferralCode)
-		fmt.Printf("Akun login: %s\n", res.UserUsername)
+		fmt.Printf("Akun login: %s\n", res.UserEmail)
 		if res.GeneratedPassword != "" {
 			fmt.Printf("Password (SEKALI ini): %s\n", res.GeneratedPassword)
 		}

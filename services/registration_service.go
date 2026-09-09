@@ -226,10 +226,12 @@ func RegisterTenant(ctx context.Context, in RegisterTenantInput) (*RegisterTenan
 					return err
 				}
 				tenant.ReferredByPartnerID = &partner.ID
+				// status 'pending' — komisi baru berjalan setelah ambang
+				// aktivasi merchant terpenuhi (blueprint G.2 #3).
 				ref := models.PartnerReferral{
 					PartnerID: partner.ID, TenantID: tenant.ID,
 					ReferralCode: in.ReferralCode, AttributedAt: time.Now().UTC(),
-					AttributionStatus: "active",
+					Status: "pending",
 				}
 				if lead, leadOK, lerr := repositories.MatchOpenLeadForPartner(ctx, tx, partner.ID, in.Phone); lerr != nil {
 					return lerr

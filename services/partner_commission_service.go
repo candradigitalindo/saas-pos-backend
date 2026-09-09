@@ -15,30 +15,30 @@ import (
 	"gorm.io/gorm"
 )
 
-// Mesin komisi & pencairan Program Mitra (Fase 12, blueprint G.2/G.6).
+// Mesin komisi & pencairan Program Mitra (Fase 12, §5.12, blueprint G.2/G.6).
 //
 // Enam aturan yang saling mengunci (blueprint G.2):
-//  1. Komisi BERULANG selama merchant berlangganan (tier.recurring); tier
-//     sekali-bayar dibatasi `one_time_months` sejak atribusi.
+//  1. Komisi BERULANG selama merchant berlangganan (`tier.recurring_months` nil);
+//     tier berjangka berhenti setelah N bulan sejak aktivasi.
 //  2. Dihitung dari `subscription_invoices.paid_amount` — uang yang BENAR-BENAR
 //     diterima, bukan tagihan yang diterbitkan.
 //  3. Ambang aktivasi: merchant harus dipakai nyata (≥ tier.activation_min_txn
 //     transaksi selesai, ATAU ≥ tier.activation_min_days sejak daftar) sebelum
 //     komisi pertama.
 //  4. Clawback: langganan berhenti dalam `tier.clawback_days` sejak aktivasi →
-//     komisi 'held'/'approved' merchant itu ditarik ('clawed_back'); yang sudah
-//     'paid' dikurangkan di pencairan berikutnya.
+//     komisi 'held'/'approved' referral itu ditarik; yang sudah 'paid'
+//     dikurangkan di pencairan berikutnya.
 //  5. Masa atribusi diputuskan saat pendaftaran (baris partner_referrals ada =
-//     konversi tepat waktu). Sengketa diputus admin manual.
+//     konversi tepat waktu). Sengketa diputus admin lewat partner_disputes.
 //  6. Pajak: potongan `partner.tax_withholding_rate` dipisah di pencairan.
 //
 // Deterministik: hanya baris komisi 'held' yang dihitung ulang (UPSERT dengan
-// WHERE status='held'); 'approved'/'paid'/'clawed_back' tak tersentuh — sepadan
-// dengan mesin gaji Fase 13. GLOBAL (lintas tenant).
+// WHERE status='held'); 'approved'/'paid'/'clawed_back'/'canceled' tak tersentuh
+// — sepadan dengan mesin gaji Fase 13. GLOBAL (lintas tenant).
 
 // ComputePartnerCommissions menjalankan satu putaran perhitungan komisi untuk
 // pembayaran langganan yang diterima pada rentang [from, to] (YYYY-MM-DD).
-// partnerID kosong = semua mitra (jalur cron bulanan); diisi = satu mitra saja.
+// partnerID kosong = semua mitra (cron bulanan); diisi = satu mitra saja.
 func ComputePartnerCommissions(ctx context.Context, partnerID, from, to string) (structs.PartnerCommissionRunResult, error) {
 	res := structs.PartnerCommissionRunResult{From: from, To: to}
 	if _, err := time.Parse("2006-01-02", from); err != nil {
@@ -48,16 +48,33 @@ func ComputePartnerCommissions(ctx context.Context, partnerID, from, to string) 
 		return res, fmt.Errorf("%w: to harus YYYY-MM-DD", helpers.ErrValidation)
 	}
 
-	refs, err := repositories.ListActiveReferrals(ctx, partnerID)
+	refs, err := repositories.ListLiveReferrals(ctx, partnerID)
 	if err != nil {
 		return res, err
 	}
 	res.ReferralsSeen = len(refs)
-	now := time.Now().UTC()
+	if len(refs) == 0 {
+		return res, nil
+	}
 
+	// Muat semua mitra + tingkatnya SEKALI (hindari N+1 pada ribuan referral).
+	pids := make([]string, 0, len(refs))
+	seen := map[string]bool{}
+	for _, r := range refs {
+		if !seen[r.PartnerID] {
+			seen[r.PartnerID] = true
+			pids = append(pids, r.PartnerID)
+		}
+	}
+	partners, err := repositories.PartnersByIDs(ctx, pids)
+	if err != nil {
+		return res, err
+	}
+
+	now := time.Now().UTC()
 	for _, ref := range refs {
-		partner, err := repositories.FindPartnerByID(ctx, ref.PartnerID)
-		if err != nil || partner.Status != "active" || partner.Tier == nil {
+		partner, ok := partners[ref.PartnerID]
+		if !ok || partner.Status != "active" || partner.Tier == nil {
 			continue
 		}
 		tier := *partner.Tier
@@ -65,40 +82,46 @@ func ComputePartnerCommissions(ctx context.Context, partnerID, from, to string) 
 		// (3) Aktivasi.
 		activatedAt := ref.ActivatedAt
 		if activatedAt == nil {
-			ok, err := merchantActivated(ctx, ref.TenantID, tier, now)
+			ready, err := merchantActivated(ctx, ref.TenantID, tier, now)
 			if err != nil {
 				return res, err
 			}
-			if !ok {
+			if !ready {
 				res.SkippedNoActivation++
 				continue
 			}
-			if err := repositories.SetReferralActivated(ctx, ref.ID, now); err != nil {
+			endsAt := commissionEndsAt(now, tier)
+			if err := repositories.ActivateReferral(ctx, ref.ID, now, endsAt); err != nil {
 				return res, err
+			}
+			if ref.LeadID != nil {
+				_ = repositories.MarkLeadActivated(ctx, *ref.LeadID)
 			}
 			t := now
 			activatedAt = &t
+			ref.CommissionEndsAt = endsAt
 			res.Activated++
 		}
 
 		// (4) Clawback: langganan berhenti dalam masa clawback sejak aktivasi.
-		if clawed, err := maybeClawback(ctx, ref, tier, *activatedAt); err != nil {
+		clawed, err := maybeClawback(ctx, ref, tier, *activatedAt)
+		if err != nil {
 			return res, err
-		} else if clawed {
+		}
+		if clawed {
 			res.ClawedBack++
 			continue
 		}
 
-		// (1) Jendela efektif: tidak sebelum aktivasi; tier sekali-bayar dibatasi.
+		// (1) Jendela efektif: tidak sebelum aktivasi; tier berjangka dibatasi.
 		effFrom := from
 		if a := activatedAt.Format("2006-01-02"); a > effFrom {
 			effFrom = a
 		}
 		effTo := to
-		if !tier.Recurring {
-			windowEnd := ref.AttributedAt.AddDate(0, tier.OneTimeMonths, 0).Format("2006-01-02")
-			if windowEnd < effTo {
-				effTo = windowEnd
+		if ref.CommissionEndsAt != nil {
+			if e := ref.CommissionEndsAt.Format("2006-01-02"); e < effTo {
+				effTo = e
 			}
 		}
 		if effFrom > effTo {
@@ -120,13 +143,12 @@ func ComputePartnerCommissions(ctx context.Context, partnerID, from, to string) 
 			}
 			c := models.PartnerCommission{
 				PartnerID:             partner.ID,
-				TenantID:              ref.TenantID,
+				ReferralID:            ref.ID,
 				SubscriptionInvoiceID: inv.ID,
-				PeriodStart:           firstOfMonth(paidAt),
-				PeriodEnd:             lastOfMonth(paidAt),
+				PeriodMonth:           firstOfMonth(paidAt),
 				BaseAmount:            inv.PaidAmount,
-				Rate:                  tier.CommissionRate,
-				Amount:                helpers.ApplyRate(inv.PaidAmount, tier.CommissionRate),
+				Rate:                  tier.RecurringRate,
+				Amount:                helpers.ApplyRate(inv.PaidAmount, tier.RecurringRate),
 				Status:                "held",
 			}
 			if err := repositories.UpsertHeldCommission(ctx, &c); err != nil {
@@ -138,8 +160,18 @@ func ComputePartnerCommissions(ctx context.Context, partnerID, from, to string) 
 	return res, nil
 }
 
+// commissionEndsAt menghitung akhir masa komisi untuk tier berjangka.
+// nil = selama merchant masih berlangganan (tier.recurring_months NULL).
+func commissionEndsAt(activatedAt time.Time, tier models.PartnerTier) *time.Time {
+	if tier.RecurringMonths == nil || *tier.RecurringMonths <= 0 {
+		return nil
+	}
+	end := activatedAt.AddDate(0, *tier.RecurringMonths, 0)
+	return &end
+}
+
 // merchantActivated melapor apakah merchant sudah memenuhi ambang aktivasi
-// (blueprint G.2 #3).
+// (blueprint G.2 #3): cukup salah satu — transaksi nyata ATAU umur berlangganan.
 func merchantActivated(ctx context.Context, tenantID string, tier models.PartnerTier, now time.Time) (bool, error) {
 	txns, err := repositories.CountCompletedSalesForTenant(ctx, tenantID)
 	if err != nil {
@@ -167,12 +199,13 @@ func maybeClawback(ctx context.Context, ref models.PartnerReferral, tier models.
 		return false, nil
 	}
 	if sub.CanceledAt.After(activatedAt.AddDate(0, 0, tier.ClawbackDays)) {
-		return false, nil // berhenti di luar masa clawback — komisi tetap
+		// Berhenti di luar masa clawback — komisi tetap, atribusi ditutup.
+		return false, repositories.SetReferralStatus(ctx, ref.ID, "ended")
 	}
-	if _, err := repositories.ClawbackTenantCommissions(ctx, ref.TenantID); err != nil {
+	if _, err := repositories.ClawbackReferralCommissions(ctx, ref.ID); err != nil {
 		return false, err
 	}
-	if err := repositories.SetReferralAttributionStatus(ctx, ref.ID, "revoked"); err != nil {
+	if err := repositories.SetReferralStatus(ctx, ref.ID, "revoked"); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -236,12 +269,12 @@ func CreatePartnerPayout(ctx context.Context, partnerID, from, to string) (struc
 		ids = append(ids, c.ID)
 	}
 
-	// Clawback komisi yang sudah dibayar untuk merchant yang atribusinya dicabut.
-	revokedTenants, err := repositories.RevokedTenantIDsForPartner(ctx, partnerID)
+	// Clawback komisi yang sudah dibayar pada referral yang atribusinya dicabut.
+	revokedRefs, err := repositories.RevokedReferralIDsForPartner(ctx, partnerID)
 	if err != nil {
 		return out, err
 	}
-	clawback, err := repositories.PaidCommissionsToClawback(ctx, partnerID, revokedTenants)
+	clawback, err := repositories.PaidCommissionsToClawback(ctx, revokedRefs)
 	if err != nil {
 		return out, err
 	}
@@ -268,10 +301,8 @@ func CreatePartnerPayout(ctx context.Context, partnerID, from, to string) (struc
 		if e := repositories.AssignCommissionsToPayout(ctx, tx, payout.ID, ids); e != nil {
 			return e
 		}
-		if len(revokedTenants) > 0 {
-			return repositories.MarkPaidCommissionsClawbackApplied(ctx, tx, partnerID, revokedTenants)
-		}
-		return nil
+		// Tutup komisi 'paid' yang barusan dikurangkan agar tidak dihitung dua kali.
+		return repositories.MarkPaidCommissionsClawedBack(ctx, tx, revokedRefs)
 	})
 	if err != nil {
 		return out, err
@@ -279,10 +310,11 @@ func CreatePartnerPayout(ctx context.Context, partnerID, from, to string) (struc
 	return payoutToResponse(payout), nil
 }
 
-// MarkPartnerPayoutPaid menandai pencairan 'draft' → 'paid' dengan bukti
-// transfer (blueprint G.4).
-func MarkPartnerPayoutPaid(ctx context.Context, id, proof string) error {
-	return repositories.MarkPartnerPayoutPaid(ctx, id, strings.TrimSpace(proof))
+// MarkPartnerPayoutPaid menandai pencairan → 'paid' dengan bukti transfer dan
+// bukti potong pajak (blueprint G.4).
+func MarkPartnerPayoutPaid(ctx context.Context, id, proofURL, taxSlipURL string) error {
+	return repositories.MarkPartnerPayoutPaid(ctx, id,
+		strings.TrimSpace(proofURL), strings.TrimSpace(taxSlipURL))
 }
 
 // PartnerCycleResult merangkum satu putaran cmd/partner-commissions.
@@ -333,12 +365,4 @@ func RunPartnerCommissionCycle(ctx context.Context, from, to string, approve, pa
 		}
 	}
 	return out, nil
-}
-
-// ── util tanggal ────────────────────────────────────────────────────────
-// firstOfMonth ada di subscription_service.go (paket sama).
-
-// lastOfMonth mengembalikan hari terakhir bulan t (UTC).
-func lastOfMonth(t time.Time) time.Time {
-	return firstOfMonth(t).AddDate(0, 1, -1)
 }

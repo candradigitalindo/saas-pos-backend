@@ -97,15 +97,15 @@ func seedPartnerTiers() error {
 			return err
 		}
 		rows = append(rows, models.PartnerTier{
-			Code: t.Code, Name: t.Name, Kind: t.Kind, CommissionRate: rate,
-			Recurring: t.Recurring, OneTimeMonths: t.OneTimeMonths,
+			Name: t.Name, Kind: t.Kind, RecurringRate: rate,
+			RecurringMonths: t.RecurringMonths,
+			ActivationBonus: t.ActivationBonus, MinActiveMerchants: t.MinActiveMerchants,
 			ActivationMinTxn: t.ActMinTxn, ActivationMinDays: t.ActMinDays,
 			AttributionDays: t.AttributionDays, ClawbackDays: t.ClawbackDays,
-			IsActive: true,
 		})
 	}
 	return DB.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "code"}},
+		Columns:   []clause.Column{{Name: "name"}},
 		DoNothing: true,
 	}).Create(&rows).Error
 }

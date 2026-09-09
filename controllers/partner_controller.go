@@ -19,7 +19,7 @@ func PartnerLogin(c *gin.Context) {
 		validationFailed(c, err)
 		return
 	}
-	res, err := services.PartnerLogin(c.Request.Context(), req.Username, req.Password)
+	res, err := services.PartnerLogin(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
 		respondServiceError(c, err)
 		return

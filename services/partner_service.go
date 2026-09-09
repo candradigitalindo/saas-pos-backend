@@ -17,7 +17,7 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// Layanan Program Mitra Penjual (Fase 12, blueprint Bagian G).
+// Layanan Program Mitra Penjual (Fase 12, §5.12, blueprint Bagian G).
 //
 // Modul PLATFORM: mitra bukan tenant, masuk lewat realm auth terpisah, dan tidak
 // pernah bisa melihat data operasional tenant mana pun (blueprint G.8). Panel
@@ -29,16 +29,16 @@ const partnerTimeLayout = "2006-01-02 15:04:05"
 
 // ── Auth mitra ───────────────────────────────────────────────────────────
 
-// PartnerLogin memverifikasi kredensial akun mitra dan menerbitkan access token
-// ber-realm "partner" (ditolak di semua rute tenant).
-func PartnerLogin(ctx context.Context, username, password string) (structs.PartnerAuthResponse, error) {
+// PartnerLogin memverifikasi kredensial akun mitra (EMAIL + password) dan
+// menerbitkan access token ber-realm "partner" (ditolak di rute tenant).
+func PartnerLogin(ctx context.Context, email, password string) (structs.PartnerAuthResponse, error) {
 	var out structs.PartnerAuthResponse
-	pu, err := repositories.FindPartnerUserByUsername(ctx, strings.TrimSpace(username))
+	pu, err := repositories.FindPartnerUserByEmail(ctx, strings.ToLower(strings.TrimSpace(email)))
 	if err != nil {
-		return out, fmt.Errorf("%w: username atau password salah", helpers.ErrUnauthorized)
+		return out, fmt.Errorf("%w: email atau password salah", helpers.ErrUnauthorized)
 	}
 	if !pu.IsActive || helpers.CheckPassword(password, pu.PasswordHash) != nil {
-		return out, fmt.Errorf("%w: username atau password salah", helpers.ErrUnauthorized)
+		return out, fmt.Errorf("%w: email atau password salah", helpers.ErrUnauthorized)
 	}
 	partner, err := repositories.FindPartnerByID(ctx, pu.PartnerID)
 	if err != nil {
@@ -59,7 +59,7 @@ func PartnerLogin(ctx context.Context, username, password string) (structs.Partn
 		ExpiresAt:   expiresAt.Format(partnerTimeLayout),
 		Partner:     partnerToResponse(partner),
 		User: structs.PartnerUserResponse{
-			ID: pu.ID, Name: pu.Name, Email: pu.Email, Username: pu.Username,
+			ID: pu.ID, Name: pu.Name, Email: pu.Email, Phone: pu.Phone,
 		},
 	}
 	return out, nil
@@ -137,10 +137,10 @@ func CreatePartnerLead(ctx context.Context, in structs.PartnerLeadRequest) (stru
 		PartnerID:            pid,
 		BusinessName:         strings.TrimSpace(in.BusinessName),
 		ContactName:          strings.TrimSpace(in.ContactName),
-		ContactPhone:         strings.TrimSpace(in.ContactPhone),
+		Phone:                strings.TrimSpace(in.Phone),
 		City:                 strings.TrimSpace(in.City),
 		BusinessType:         strings.TrimSpace(in.BusinessType),
-		Status:               "baru",
+		Status:               "new",
 		AttributionExpiresAt: time.Now().UTC().AddDate(0, 0, days),
 		Note:                 strings.TrimSpace(in.Note),
 	}
@@ -165,13 +165,20 @@ func ListPartnerLeads(ctx context.Context, status string) ([]structs.PartnerLead
 
 // ListPartnerMerchants mengembalikan merchant binaan mitra dengan TAMPILAN
 // TERBATAS (blueprint G.8): nama usaha, status langganan, jatuh tempo, aktif.
-// Setiap panggilan dicatat di jejak audit.
+//
+// Setiap pembukaan dicatat di `audit_logs` — SATU insert batch untuk seluruh
+// daftar, bukan satu per merchant. Kegagalan menulis audit membuat permintaan
+// GAGAL: akses data merchant yang tidak tercatat melanggar G.8.
 func ListPartnerMerchants(ctx context.Context) ([]structs.PartnerMerchantResponse, error) {
 	pid := reqctx.PartnerID(ctx)
 	refs, err := repositories.ListReferralsByPartner(ctx, pid)
 	if err != nil {
 		return nil, err
 	}
+	if len(refs) == 0 {
+		return []structs.PartnerMerchantResponse{}, nil
+	}
+
 	ids := make([]string, 0, len(refs))
 	for _, r := range refs {
 		ids = append(ids, r.TenantID)
@@ -182,10 +189,15 @@ func ListPartnerMerchants(ctx context.Context) ([]structs.PartnerMerchantRespons
 	}
 
 	puid := reqctx.PartnerUserID(ctx)
+	entries := make([]repositories.AuditEntry, 0, len(refs))
 	out := make([]structs.PartnerMerchantResponse, 0, len(refs))
 	for _, r := range refs {
 		st := status[r.TenantID]
-		_ = repositories.LogPartnerMerchantAccess(ctx, pid, puid, r.TenantID, "view_merchant_status")
+		tenantID, targetTable := r.TenantID, "tenants"
+		entries = append(entries, repositories.AuditEntry{
+			TenantID: &tenantID, ActorType: "partner_user", ActorID: &puid,
+			Action: "partner.merchant.view", TargetTable: &targetTable, TargetID: &tenantID,
+		})
 		m := structs.PartnerMerchantResponse{
 			TenantID:           r.TenantID,
 			BusinessName:       st.BusinessName,
@@ -198,6 +210,9 @@ func ListPartnerMerchants(ctx context.Context) ([]structs.PartnerMerchantRespons
 			m.CurrentPeriodEnd = st.PeriodEnd.Format("2006-01-02")
 		}
 		out = append(out, m)
+	}
+	if err := repositories.WriteAuditLogs(ctx, entries); err != nil {
+		return nil, fmt.Errorf("gagal mencatat jejak audit akses merchant: %w", err)
 	}
 	return out, nil
 }
@@ -232,27 +247,23 @@ func ListPartnerPayouts(ctx context.Context) ([]structs.PartnerPayoutResponse, e
 
 // CreatePartnerTier membuat tingkat mitra baru.
 func CreatePartnerTier(ctx context.Context, in structs.PartnerTierRequest) (structs.PartnerTierResponse, error) {
-	rate, err := decimal.NewFromString(strings.TrimSpace(in.CommissionRate))
+	rate, err := decimal.NewFromString(strings.TrimSpace(in.RecurringRate))
 	if err != nil || rate.IsNegative() {
-		return structs.PartnerTierResponse{}, fmt.Errorf("%w: commission_rate tidak valid", helpers.ErrValidation)
+		return structs.PartnerTierResponse{}, fmt.Errorf("%w: recurring_rate tidak valid", helpers.ErrValidation)
 	}
-	recurring := true
-	if in.Recurring != nil {
-		recurring = *in.Recurring
-	}
-	if !recurring && in.OneTimeMonths <= 0 {
-		return structs.PartnerTierResponse{}, fmt.Errorf("%w: one_time_months wajib > 0 bila tidak berulang", helpers.ErrValidation)
+	if in.RecurringMonths != nil && *in.RecurringMonths <= 0 {
+		return structs.PartnerTierResponse{}, fmt.Errorf("%w: recurring_months harus > 0 atau kosong", helpers.ErrValidation)
 	}
 	t := models.PartnerTier{
-		Code: strings.TrimSpace(in.Code), Name: strings.TrimSpace(in.Name), Kind: in.Kind,
-		CommissionRate: rate, Recurring: recurring, OneTimeMonths: in.OneTimeMonths,
+		Name: strings.TrimSpace(in.Name), Kind: in.Kind,
+		RecurringRate: rate, RecurringMonths: in.RecurringMonths,
+		ActivationBonus: in.ActivationBonus, MinActiveMerchants: in.MinActiveMerchants,
 		ActivationMinTxn: orInt(in.ActivationMinTxn, 30), ActivationMinDays: orInt(in.ActivationMinDays, 30),
 		AttributionDays: orInt(in.AttributionDays, 60), ClawbackDays: orInt(in.ClawbackDays, 90),
-		IsActive: true,
 	}
 	if err := repositories.CreatePartnerTier(ctx, &t); err != nil {
 		if helpers.IsDuplicateEntryError(err) {
-			return structs.PartnerTierResponse{}, fmt.Errorf("%w: kode tingkat sudah ada", helpers.ErrConflict)
+			return structs.PartnerTierResponse{}, fmt.Errorf("%w: nama tingkat sudah ada", helpers.ErrConflict)
 		}
 		return structs.PartnerTierResponse{}, err
 	}
@@ -276,9 +287,9 @@ func ListPartnerTiers(ctx context.Context) ([]structs.PartnerTierResponse, error
 // dibuatkan bila kosong; keduanya dikembalikan SEKALI.
 func CreatePartner(ctx context.Context, in structs.PartnerCreateRequest) (structs.PartnerCreateResponse, error) {
 	var out structs.PartnerCreateResponse
-	tier, err := repositories.FindPartnerTierByCode(ctx, strings.TrimSpace(in.TierCode))
+	tier, err := repositories.FindPartnerTierByName(ctx, strings.TrimSpace(in.TierName))
 	if err != nil {
-		return out, fmt.Errorf("%w: tingkat %q tidak dikenal", helpers.ErrValidation, in.TierCode)
+		return out, fmt.Errorf("%w: tingkat %q tidak dikenal", helpers.ErrValidation, in.TierName)
 	}
 	twr := decimal.Zero
 	if s := strings.TrimSpace(in.TaxWithholdingRate); s != "" {
@@ -293,9 +304,11 @@ func CreatePartner(ctx context.Context, in structs.PartnerCreateRequest) (struct
 	}
 	partner := models.Partner{
 		TierID: tier.ID, Kind: tier.Kind, Name: strings.TrimSpace(in.Name),
+		Phone: strings.TrimSpace(in.Phone), Email: strings.ToLower(strings.TrimSpace(in.Email)),
 		Region: strings.TrimSpace(in.Region), ReferralCode: code, Status: "pending",
-		BankAccount: strings.TrimSpace(in.BankAccount), TaxID: strings.TrimSpace(in.TaxID),
-		TaxWithholdingRate: twr,
+		IDNumber: strings.TrimSpace(in.IDNumber), NPWP: strings.TrimSpace(in.NPWP),
+		BankName: strings.TrimSpace(in.BankName), BankAccountNo: strings.TrimSpace(in.BankAccountNo),
+		BankAccountName: strings.TrimSpace(in.BankAccountName), TaxWithholdingRate: twr,
 	}
 	if err := repositories.CreatePartner(ctx, &partner); err != nil {
 		if helpers.IsDuplicateEntryError(err) {
@@ -303,6 +316,7 @@ func CreatePartner(ctx context.Context, in structs.PartnerCreateRequest) (struct
 		}
 		return out, err
 	}
+	partner.Tier = &tier
 
 	password := strings.TrimSpace(in.UserPassword)
 	generated := ""
@@ -315,25 +329,28 @@ func CreatePartner(ctx context.Context, in structs.PartnerCreateRequest) (struct
 		return out, err
 	}
 	pu := models.PartnerUser{
-		PartnerID: partner.ID, Name: strings.TrimSpace(in.UserName),
-		Email:    strings.ToLower(strings.TrimSpace(in.UserEmail)),
-		Username: strings.TrimSpace(in.UserUsername), PasswordHash: hash, IsActive: true,
+		PartnerID:    partner.ID,
+		Name:         strings.TrimSpace(in.UserName),
+		Email:        strings.ToLower(strings.TrimSpace(in.UserEmail)),
+		Phone:        strings.TrimSpace(in.UserPhone),
+		PasswordHash: hash,
+		IsActive:     true,
 	}
 	if err := repositories.CreatePartnerUser(ctx, &pu); err != nil {
 		if helpers.IsDuplicateEntryError(err) {
-			return out, fmt.Errorf("%w: username akun mitra sudah dipakai", helpers.ErrConflict)
+			return out, fmt.Errorf("%w: email akun mitra sudah dipakai", helpers.ErrConflict)
 		}
 		return out, err
 	}
 
 	out = structs.PartnerCreateResponse{
-		Partner: partnerToResponse(partner), UserUsername: pu.Username, GeneratedPassword: generated,
+		Partner: partnerToResponse(partner), UserEmail: pu.Email, GeneratedPassword: generated,
 	}
 	return out, nil
 }
 
-// ApprovePartner memverifikasi mitra: pending → active, joined_at = hari ini
-// (blueprint G.6 langkah 2 & 4).
+// ApprovePartner memverifikasi mitra: pending/verified → active, verified_at &
+// joined_at diisi (blueprint G.6 langkah 2 & 4).
 func ApprovePartner(ctx context.Context, id string) error {
 	partner, err := repositories.FindPartnerByID(ctx, id)
 	if err != nil {
@@ -342,13 +359,10 @@ func ApprovePartner(ctx context.Context, id string) error {
 	if partner.Status == "active" {
 		return nil
 	}
-	if partner.Status != "pending" {
+	if partner.Status != "pending" && partner.Status != "verified" {
 		return fmt.Errorf("%w: mitra berstatus %s tidak bisa disetujui", helpers.ErrConflict, partner.Status)
 	}
-	if err := repositories.SetPartnerStatus(ctx, id, "active"); err != nil {
-		return err
-	}
-	return repositories.SetPartnerJoinedAt(ctx, id, time.Now().UTC())
+	return repositories.ActivatePartner(ctx, id, time.Now().UTC())
 }
 
 // SuspendPartner menonaktifkan mitra (active → suspended).
@@ -373,46 +387,49 @@ func ListPartners(ctx context.Context, status string, limit, offset int) ([]stru
 
 func partnerToResponse(p models.Partner) structs.PartnerResponse {
 	r := structs.PartnerResponse{
-		ID: p.ID, Kind: p.Kind, Name: p.Name, Region: p.Region,
-		ReferralCode: p.ReferralCode, Status: p.Status,
+		ID: p.ID, Kind: p.Kind, Name: p.Name, Phone: p.Phone, Email: p.Email,
+		Region: p.Region, ReferralCode: p.ReferralCode, Status: p.Status,
 	}
 	if p.Tier != nil {
-		r.TierCode = p.Tier.Code
+		r.TierName = p.Tier.Name
+	}
+	if p.VerifiedAt != nil {
+		r.VerifiedAt = p.VerifiedAt.Format(partnerTimeLayout)
 	}
 	if p.JoinedAt != nil {
-		r.JoinedAt = p.JoinedAt.Format("2006-01-02")
+		r.JoinedAt = p.JoinedAt.Format(partnerTimeLayout)
 	}
 	return r
 }
 
 func tierToResponse(t models.PartnerTier) structs.PartnerTierResponse {
 	return structs.PartnerTierResponse{
-		ID: t.ID, Code: t.Code, Name: t.Name, Kind: t.Kind,
-		CommissionRate: t.CommissionRate.String(), Recurring: t.Recurring,
-		OneTimeMonths: t.OneTimeMonths, ActivationMinTxn: t.ActivationMinTxn,
-		ActivationMinDays: t.ActivationMinDays, AttributionDays: t.AttributionDays,
-		ClawbackDays: t.ClawbackDays, IsActive: t.IsActive,
+		ID: t.ID, Name: t.Name, Kind: t.Kind,
+		RecurringRate: t.RecurringRate.String(), RecurringMonths: t.RecurringMonths,
+		ActivationBonus: t.ActivationBonus, MinActiveMerchants: t.MinActiveMerchants,
+		ActivationMinTxn: t.ActivationMinTxn, ActivationMinDays: t.ActivationMinDays,
+		AttributionDays: t.AttributionDays, ClawbackDays: t.ClawbackDays,
 	}
 }
 
 func leadToResponse(l models.PartnerLead) structs.PartnerLeadResponse {
 	r := structs.PartnerLeadResponse{
 		ID: l.ID, BusinessName: l.BusinessName, ContactName: l.ContactName,
-		ContactPhone: l.ContactPhone, City: l.City, Status: l.Status,
+		Phone: l.Phone, City: l.City, Status: l.Status,
 		AttributionExpiresAt: l.AttributionExpiresAt.Format("2006-01-02"),
 		CreatedAt:            l.CreatedAt.Format(partnerTimeLayout),
 	}
-	if l.RegisteredTenantID != nil {
-		r.RegisteredTenantID = *l.RegisteredTenantID
+	if l.ConvertedTenantID != nil {
+		r.ConvertedTenantID = *l.ConvertedTenantID
 	}
 	return r
 }
 
 func partnerCommissionToResponse(c models.PartnerCommission) structs.PartnerCommissionResponse {
 	r := structs.PartnerCommissionResponse{
-		ID: c.ID, TenantID: c.TenantID, SubscriptionInvoiceID: c.SubscriptionInvoiceID,
-		PeriodStart: c.PeriodStart.Format("2006-01-02"), PeriodEnd: c.PeriodEnd.Format("2006-01-02"),
-		BaseAmount: c.BaseAmount, Rate: c.Rate.String(), Amount: c.Amount, Status: c.Status,
+		ID: c.ID, ReferralID: c.ReferralID, SubscriptionInvoiceID: c.SubscriptionInvoiceID,
+		PeriodMonth: c.PeriodMonth.Format("2006-01-02"),
+		BaseAmount:  c.BaseAmount, Rate: c.Rate.String(), Amount: c.Amount, Status: c.Status,
 	}
 	if c.PayoutID != nil {
 		r.PayoutID = *c.PayoutID
@@ -424,7 +441,8 @@ func payoutToResponse(p models.PartnerPayout) structs.PartnerPayoutResponse {
 	r := structs.PartnerPayoutResponse{
 		ID: p.ID, PeriodStart: p.PeriodStart.Format("2006-01-02"), PeriodEnd: p.PeriodEnd.Format("2006-01-02"),
 		GrossAmount: p.GrossAmount, ClawbackAmount: p.ClawbackAmount, TaxAmount: p.TaxAmount,
-		NetAmount: p.NetAmount, Status: p.Status, TransferProof: p.TransferProof,
+		NetAmount: p.NetAmount, Status: p.Status,
+		TransferProofURL: p.TransferProofURL, TaxSlipURL: p.TaxSlipURL,
 	}
 	if p.PaidAt != nil {
 		r.PaidAt = p.PaidAt.Format(partnerTimeLayout)
@@ -439,7 +457,7 @@ func orInt(v, def int) int {
 	return v
 }
 
-// generateReferralCode membuat kode acak 8 karakter alfanumerik huruf besar.
+// generateReferralCode membuat kode acak alfanumerik huruf besar.
 func generateReferralCode() string { return "MTR-" + randCode(6) }
 
 func generatePassword() string { return randCode(12) }
