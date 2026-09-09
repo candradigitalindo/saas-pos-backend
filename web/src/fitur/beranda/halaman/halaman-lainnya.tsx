@@ -1,14 +1,13 @@
-import { Link, useNavigate } from 'react-router-dom'
-import { ChevronRight, LogOut } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { ChevronRight } from 'lucide-react'
 import { MENU_LAINNYA, saringMenu } from '@/app/navigasi'
 import { Kartu } from '@/bersama/ui/kartu'
-import { Tombol } from '@/bersama/ui/tombol'
+import { TombolKeluar } from '@/bersama/komponen/tombol-keluar'
 import { useSesi } from '@/bersama/hooks/use-sesi'
 
 /** Menu "Lainnya" di HP: isinya persis yang boleh dikerjakan pengguna ini. */
 export function HalamanLainnya() {
-  const { boleh, profil, keluar } = useSesi()
-  const navigate = useNavigate()
+  const { boleh, profil } = useSesi()
   const menu = saringMenu(MENU_LAINNYA, boleh)
 
   return (
@@ -38,17 +37,9 @@ export function HalamanLainnya() {
         </Kartu>
       )}
 
-      <Tombol
-        jenis="kedua"
-        lebarPenuh
-        onClick={async () => {
-          await keluar()
-          navigate('/masuk', { replace: true })
-        }}
-      >
-        <LogOut className="h-5 w-5" aria-hidden />
-        Keluar
-      </Tombol>
+      <Kartu className="p-1">
+        <TombolKeluar />
+      </Kartu>
     </div>
   )
 }

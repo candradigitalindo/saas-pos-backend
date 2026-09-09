@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { PenyediaSesi } from '@/bersama/hooks/use-sesi'
 import { PenyediaToast } from '@/bersama/komponen/toast'
+import { PenyediaSinkron } from '@/lib/offline/mesin'
 import { GalatAPI } from '@/lib/api-client'
 
 /**
@@ -34,7 +35,9 @@ export function Penyedia({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <PenyediaToast>
-        <PenyediaSesi>{children}</PenyediaSesi>
+        <PenyediaSesi>
+          <PenyediaSinkron>{children}</PenyediaSinkron>
+        </PenyediaSesi>
       </PenyediaToast>
     </QueryClientProvider>
   )

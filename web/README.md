@@ -48,7 +48,13 @@ berbagi, naikkan ke `bersama/`.
    diklik membuat pengguna menelepon dukungan. Kalau tidak berhak, tombolnya
    tidak ada. Lihat `useIzin()` di `bersama/hooks/use-sesi.tsx`.
 
-3. **`Idempotency-Key` wajib** pada `POST /sales`, `/purchases`,
+3. **Kasir membaca katalog dari Dexie, bukan dari server.** Bukan sekadar
+   optimasi: kasir wajib tetap bisa menjual saat internet mati, dan sasaran
+   "cari barang < 100 ms" tidak mungkin lewat jaringan. Layar kasir karena itu
+   tidak pernah "beralih mode" saat sinyal hilang — sumbernya memang selalu
+   lokal, dan mesin sinkronisasi yang menyegarkan di belakang.
+
+4. **`Idempotency-Key` wajib** pada `POST /sales`, `/purchases`,
    `/invoice-payments`, dan `/subscription-payments`. Kuncinya dibuat SEKALI
    saat pengguna menekan Bayar, dan kunci yang sama dipakai untuk semua
    percobaan ulang — inilah yang membuat tombol tertekan dua kali tidak
@@ -61,7 +67,7 @@ berbagi, naikkan ke `bersama/`.
 | U0 | Fondasi: token desain, api-client, autentikasi, izin, layout, komponen dasar | ✅ Selesai |
 | U1 | Kasir: buka/tutup shift, grid barang, keranjang, bayar, struk, riwayat, batalkan, kas laci | ✅ Selesai |
 | U2 | Barang & stok: CRUD barang, impor CSV, kategori/satuan/pemasok, saldo & kartu stok, koreksi, barang masuk | ✅ Selesai |
-| U3 | Offline (PWA + Dexie + sinkronisasi) | ⏳ Berikutnya |
-| U4 | Laporan | — |
+| U3 | Offline: PWA, Dexie, antrean kirim, halaman "belum terkirim", pecah kode per rute | ✅ Selesai |
+| U4 | Laporan | ⏳ Berikutnya |
 | U5 | Operasional lanjutan | — |
 | U6 | Modul berbayar | — |

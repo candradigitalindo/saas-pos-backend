@@ -5,6 +5,7 @@ import { Tombol } from '@/bersama/ui/tombol'
 import { KeadaanKosong } from '@/bersama/komponen/keadaan-kosong'
 import { Kerangka } from '@/bersama/komponen/kerangka'
 import { StatusKoneksi } from '@/bersama/komponen/status-koneksi'
+import { useSinkron } from '@/lib/offline/mesin'
 import { useSesi } from '@/bersama/hooks/use-sesi'
 import { useToast } from '@/bersama/komponen/toast'
 import { GalatAPI } from '@/lib/api-client'
@@ -30,15 +31,16 @@ import { HalamanBukaShift } from './halaman-buka-shift'
 export function HalamanKasir() {
   const { tokoAktif } = useSesi()
   const toast = useToast()
+  const sinkron = useSinkron()
   const { shift, memuat: memuatShift } = useShiftAktif()
 
   const [cari, setCari] = useState('')
-  const { produk, petaStok, memuat } = useKatalogKasir(cari)
+  const { produk, petaStok, kosong, memuat } = useKatalogKasir(cari)
   const keranjang = useKeranjang()
 
   const [bukaBayar, setBukaBayar] = useState(false)
   const [bukaKeranjangHP, setBukaKeranjangHP] = useState(false)
-  const [struk, setStruk] = useState<Transaksi | null>(null)
+  const [struk, setStruk] = useState<{ transaksi: Transaksi; diantre: boolean } | null>(null)
   const [galatBayar, setGalatBayar] = useState<string | null>(null)
 
   const checkout = useCheckout()
@@ -82,6 +84,7 @@ export function HalamanKasir() {
       keranjang.kosongkan()
       kunci.current = null
       setStruk(hasil)
+      sinkron.segarkan()
     } catch (e) {
       if (e instanceof GalatAPI) {
         setGalatBayar(e.pesan)
@@ -123,11 +126,19 @@ export function HalamanKasir() {
             ) : produk.length === 0 ? (
               <KeadaanKosong
                 ikon={PackageX}
-                judul={cari ? 'Barang tidak ditemukan' : 'Belum ada barang'}
+                judul={
+                  cari
+                    ? 'Barang tidak ditemukan'
+                    : kosong
+                      ? 'Daftar barang belum tersalin ke perangkat ini'
+                      : 'Belum ada barang'
+                }
                 penjelasan={
                   cari
                     ? `Tidak ada barang bernama "${cari}". Coba kata lain, atau tambahkan barangnya dulu.`
-                    : 'Tambahkan barang dulu supaya bisa mulai berjualan.'
+                    : kosong
+                      ? 'Sambungkan ke internet sebentar supaya daftar barang bisa disalin. Setelah itu kasir bisa dipakai walau sinyal hilang.'
+                      : 'Tambahkan barang dulu supaya bisa mulai berjualan.'
                 }
                 aksi={
                   cari
@@ -154,7 +165,7 @@ export function HalamanKasir() {
           </div>
 
           <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-garis bg-permukaan px-4 py-2">
-            <StatusKoneksi />
+            <StatusKoneksi menunggu={sinkron.menunggu} />
             <p className="text-keterangan text-teks-redup">
               Modal awal {formatRupiah(shift.opening_cash)} · Shift dibuka{' '}
               {formatJam(shift.opened_at)}
@@ -216,7 +227,8 @@ export function HalamanKasir() {
 
       {struk && (
         <Struk
-          transaksi={struk}
+          transaksi={struk.transaksi}
+          menungguDikirim={struk.diantre}
           terbuka
           onTutup={() => setStruk(null)}
           onTransaksiBaru={() => setStruk(null)}

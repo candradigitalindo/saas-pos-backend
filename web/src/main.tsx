@@ -1,7 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Penyedia } from './app/providers'
-import { Rute } from './app/router'
+import { pramuatKasir, Rute } from './app/router'
 import './styles/tokens.css'
 
 const akar = document.getElementById('root')
@@ -14,3 +14,7 @@ createRoot(akar).render(
     </Penyedia>
   </StrictMode>,
 )
+
+// Siapkan berkas kasir selagi menganggur, supaya sudah ada di perangkat
+// sebelum sinyal hilang.
+pramuatKasir()

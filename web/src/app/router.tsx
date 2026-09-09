@@ -1,27 +1,77 @@
+import { lazy, Suspense, type ComponentType, type ReactNode } from 'react'
 import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom'
 import { LayoutKosong } from './layouts/layout-kosong'
 import { LayoutToko } from './layouts/layout-toko'
 import { ButuhIzin, ButuhMasuk, TamuSaja } from './penjaga'
 import { HalamanMasuk } from '@/fitur/auth/halaman/halaman-masuk'
 import { HalamanDaftar } from '@/fitur/auth/halaman/halaman-daftar'
-import { HalamanSelamatDatang } from '@/fitur/onboarding/halaman/halaman-selamat-datang'
 import { HalamanBeranda } from '@/fitur/beranda/halaman/halaman-beranda'
-import { HalamanLainnya } from '@/fitur/beranda/halaman/halaman-lainnya'
-import { HalamanKasir } from '@/fitur/kasir/halaman/halaman-kasir'
-import { HalamanTutupShift } from '@/fitur/kasir/halaman/halaman-tutup-shift'
-import { HalamanRiwayat } from '@/fitur/kasir/halaman/halaman-riwayat'
-import { HalamanKas } from '@/fitur/kasir/halaman/halaman-kas'
-import { HalamanDaftarBarang } from '@/fitur/produk/halaman/halaman-daftar-barang'
-import { HalamanFormBarang } from '@/fitur/produk/halaman/halaman-form-barang'
-import { HalamanImpor } from '@/fitur/produk/halaman/halaman-impor'
-import { HalamanMaster } from '@/fitur/produk/halaman/halaman-master'
-import { HalamanStok } from '@/fitur/stok/halaman/halaman-stok'
-import { HalamanKartuStok } from '@/fitur/stok/halaman/halaman-kartu-stok'
-import { HalamanKoreksiStok } from '@/fitur/stok/halaman/halaman-koreksi-stok'
-import { HalamanBarangMasuk } from '@/fitur/stok/halaman/halaman-barang-masuk'
 import { KeadaanKosong } from '@/bersama/komponen/keadaan-kosong'
+import { KerangkaBaris } from '@/bersama/komponen/kerangka'
 import { Compass } from 'lucide-react'
 import { IZIN } from '@/lib/izin'
+
+/**
+ * Rute dipecah per berkas supaya muat pertama di 3G tetap di bawah tiga detik:
+ * pemilik warung yang membuka Beranda tidak perlu ikut mengunduh modul gaji.
+ *
+ * Masuk, Daftar, dan Beranda sengaja TIDAK dipecah — ketiganya pasti dibutuhkan
+ * di detik-detik pertama, dan memecahnya justru menambah satu perjalanan bolak-balik.
+ */
+const HalamanKasir = muat(() => import('@/fitur/kasir/halaman/halaman-kasir'), 'HalamanKasir')
+const HalamanTutupShift = muat(() => import('@/fitur/kasir/halaman/halaman-tutup-shift'), 'HalamanTutupShift')
+const HalamanRiwayat = muat(() => import('@/fitur/kasir/halaman/halaman-riwayat'), 'HalamanRiwayat')
+const HalamanKas = muat(() => import('@/fitur/kasir/halaman/halaman-kas'), 'HalamanKas')
+const HalamanPerluDiperiksa = muat(() => import('@/fitur/kasir/halaman/halaman-perlu-diperiksa'), 'HalamanPerluDiperiksa')
+const HalamanLainnya = muat(() => import('@/fitur/beranda/halaman/halaman-lainnya'), 'HalamanLainnya')
+const HalamanSelamatDatang = muat(() => import('@/fitur/onboarding/halaman/halaman-selamat-datang'), 'HalamanSelamatDatang')
+const HalamanDaftarBarang = muat(() => import('@/fitur/produk/halaman/halaman-daftar-barang'), 'HalamanDaftarBarang')
+const HalamanFormBarang = muat(() => import('@/fitur/produk/halaman/halaman-form-barang'), 'HalamanFormBarang')
+const HalamanImpor = muat(() => import('@/fitur/produk/halaman/halaman-impor'), 'HalamanImpor')
+const HalamanMaster = muat(() => import('@/fitur/produk/halaman/halaman-master'), 'HalamanMaster')
+const HalamanStok = muat(() => import('@/fitur/stok/halaman/halaman-stok'), 'HalamanStok')
+const HalamanKartuStok = muat(() => import('@/fitur/stok/halaman/halaman-kartu-stok'), 'HalamanKartuStok')
+const HalamanKoreksiStok = muat(() => import('@/fitur/stok/halaman/halaman-koreksi-stok'), 'HalamanKoreksiStok')
+const HalamanBarangMasuk = muat(() => import('@/fitur/stok/halaman/halaman-barang-masuk'), 'HalamanBarangMasuk')
+
+/** React.lazy untuk modul yang mengekspor komponen bernama, bukan default. */
+function muat<N extends string>(
+  impor: () => Promise<Record<N, ComponentType>>,
+  nama: N,
+) {
+  return lazy(async () => ({ default: (await impor())[nama] as ComponentType }))
+}
+
+/**
+ * Rute kasir DIPRAMUAT begitu aplikasi menganggur.
+ *
+ * Kasir harus terbuka seketika, dan yang lebih penting: berkasnya harus sudah
+ * ada di perangkat SEBELUM sinyal hilang. Kasir yang menunggu unduhan di tengah
+ * antrean adalah kegagalan, bukan kelambatan.
+ */
+export function pramuatKasir(): void {
+  const jalan = () => {
+    void import('@/fitur/kasir/halaman/halaman-kasir')
+    void import('@/fitur/kasir/halaman/halaman-tutup-shift')
+  }
+  if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(jalan)
+  else window.setTimeout(jalan, 2000)
+}
+
+/** Menunggu berkas rute selesai diunduh — kerangka, bukan layar kosong. */
+function Tunggu({ children }: { children: ReactNode }) {
+  return (
+    <Suspense
+      fallback={
+        <div className="p-4">
+          <KerangkaBaris jumlah={4} />
+        </div>
+      }
+    >
+      {children}
+    </Suspense>
+  )
+}
 
 /**
  * Rute aplikasi toko.
@@ -46,7 +96,9 @@ const router = createBrowserRouter([
     path: '/selamat-datang',
     element: (
       <ButuhMasuk>
-        <HalamanSelamatDatang />
+        <Tunggu>
+              <HalamanSelamatDatang />
+            </Tunggu>
       </ButuhMasuk>
     ),
   },
@@ -58,7 +110,9 @@ const router = createBrowserRouter([
     element: (
       <ButuhMasuk>
         <ButuhIzin izin={[IZIN.saleCreate]}>
-          <HalamanKasir />
+          <Tunggu>
+              <HalamanKasir />
+            </Tunggu>
         </ButuhIzin>
       </ButuhMasuk>
     ),
@@ -71,12 +125,16 @@ const router = createBrowserRouter([
     ),
     children: [
       { index: true, element: <HalamanBeranda /> },
-      { path: '/lainnya', element: <HalamanLainnya /> },
+      { path: '/lainnya', element: <Tunggu>
+              <HalamanLainnya />
+            </Tunggu> },
       {
         path: '/kasir/tutup-shift',
         element: (
           <ButuhIzin izin={[IZIN.shiftClose]}>
-            <HalamanTutupShift />
+            <Tunggu>
+              <HalamanTutupShift />
+            </Tunggu>
           </ButuhIzin>
         ),
       },
@@ -84,7 +142,9 @@ const router = createBrowserRouter([
         path: '/kasir/riwayat',
         element: (
           <ButuhIzin izin={[IZIN.saleCreate]}>
-            <HalamanRiwayat />
+            <Tunggu>
+              <HalamanRiwayat />
+            </Tunggu>
           </ButuhIzin>
         ),
       },
@@ -92,7 +152,19 @@ const router = createBrowserRouter([
         path: '/kasir/kas',
         element: (
           <ButuhIzin izin={[IZIN.cashMovement]}>
-            <HalamanKas />
+            <Tunggu>
+              <HalamanKas />
+            </Tunggu>
+          </ButuhIzin>
+        ),
+      },
+      {
+        path: '/kasir/belum-terkirim',
+        element: (
+          <ButuhIzin izin={[IZIN.saleCreate]}>
+            <Tunggu>
+              <HalamanPerluDiperiksa />
+            </Tunggu>
           </ButuhIzin>
         ),
       },
@@ -100,7 +172,9 @@ const router = createBrowserRouter([
         path: '/barang',
         element: (
           <ButuhIzin izin={[IZIN.productView]}>
-            <HalamanDaftarBarang />
+            <Tunggu>
+              <HalamanDaftarBarang />
+            </Tunggu>
           </ButuhIzin>
         ),
       },
@@ -108,7 +182,9 @@ const router = createBrowserRouter([
         path: '/barang/baru',
         element: (
           <ButuhIzin izin={[IZIN.productEdit]}>
-            <HalamanFormBarang />
+            <Tunggu>
+              <HalamanFormBarang />
+            </Tunggu>
           </ButuhIzin>
         ),
       },
@@ -116,7 +192,9 @@ const router = createBrowserRouter([
         path: '/barang/impor',
         element: (
           <ButuhIzin izin={[IZIN.productImport]}>
-            <HalamanImpor />
+            <Tunggu>
+              <HalamanImpor />
+            </Tunggu>
           </ButuhIzin>
         ),
       },
@@ -124,7 +202,9 @@ const router = createBrowserRouter([
         path: '/barang/master',
         element: (
           <ButuhIzin izin={[IZIN.productEdit]}>
-            <HalamanMaster />
+            <Tunggu>
+              <HalamanMaster />
+            </Tunggu>
           </ButuhIzin>
         ),
       },
@@ -134,7 +214,9 @@ const router = createBrowserRouter([
         path: '/barang/:id',
         element: (
           <ButuhIzin izin={[IZIN.productEdit]}>
-            <HalamanFormBarang />
+            <Tunggu>
+              <HalamanFormBarang />
+            </Tunggu>
           </ButuhIzin>
         ),
       },
@@ -142,7 +224,9 @@ const router = createBrowserRouter([
         path: '/stok',
         element: (
           <ButuhIzin izin={[IZIN.stockView]}>
-            <HalamanStok />
+            <Tunggu>
+              <HalamanStok />
+            </Tunggu>
           </ButuhIzin>
         ),
       },
@@ -150,7 +234,9 @@ const router = createBrowserRouter([
         path: '/stok/kartu/:productId',
         element: (
           <ButuhIzin izin={[IZIN.stockView]}>
-            <HalamanKartuStok />
+            <Tunggu>
+              <HalamanKartuStok />
+            </Tunggu>
           </ButuhIzin>
         ),
       },
@@ -158,7 +244,9 @@ const router = createBrowserRouter([
         path: '/stok/koreksi',
         element: (
           <ButuhIzin izin={[IZIN.stockAdjust]}>
-            <HalamanKoreksiStok />
+            <Tunggu>
+              <HalamanKoreksiStok />
+            </Tunggu>
           </ButuhIzin>
         ),
       },
@@ -166,7 +254,9 @@ const router = createBrowserRouter([
         path: '/stok/masuk',
         element: (
           <ButuhIzin izin={[IZIN.stockAdjust]}>
-            <HalamanBarangMasuk />
+            <Tunggu>
+              <HalamanBarangMasuk />
+            </Tunggu>
           </ButuhIzin>
         ),
       },

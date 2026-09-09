@@ -1,5 +1,4 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { LogOut } from 'lucide-react'
+import { NavLink, Outlet } from 'react-router-dom'
 import {
   IKON_LAINNYA,
   MENU_LAINNYA,
@@ -9,6 +8,8 @@ import {
 } from '@/app/navigasi'
 import { useSesi } from '@/bersama/hooks/use-sesi'
 import { StatusKoneksi } from '@/bersama/komponen/status-koneksi'
+import { TombolKeluar } from '@/bersama/komponen/tombol-keluar'
+import { useSinkron } from '@/lib/offline/mesin'
 import { cn } from '@/bersama/util/cn'
 
 /**
@@ -91,8 +92,8 @@ function TautanBawah({ item }: { item: ItemMenu }) {
 }
 
 function SampingBesar({ utama, lainnya }: { utama: ItemMenu[]; lainnya: ItemMenu[] }) {
-  const { profil, keluar } = useSesi()
-  const navigate = useNavigate()
+  const { profil } = useSesi()
+  const sinkron = useSinkron()
 
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-garis bg-permukaan lg:flex">
@@ -130,18 +131,18 @@ function SampingBesar({ utama, lainnya }: { utama: ItemMenu[]; lainnya: ItemMenu
       </nav>
 
       <div className="border-t border-garis p-3">
-        <StatusKoneksi className="mb-2 px-1" />
-        <button
-          type="button"
-          onClick={async () => {
-            await keluar()
-            navigate('/masuk', { replace: true })
-          }}
-          className="flex h-12 w-full items-center gap-3 rounded-kontrol px-3 text-label font-medium text-teks-sekunder hover:bg-permukaan-2"
-        >
-          <LogOut className="h-5 w-5" aria-hidden />
-          Keluar
-        </button>
+        <StatusKoneksi menunggu={sinkron.menunggu} className="mb-2 px-1" />
+        {/* Antrean yang macet hanya terlihat di sini — beri jumlahnya, jangan
+            biarkan penjualan menggantung tanpa ada yang tahu. */}
+        {sinkron.perluDiperiksa > 0 && (
+          <NavLink
+            to="/kasir/belum-terkirim"
+            className="mb-2 flex items-center gap-2 rounded-kontrol bg-jingga-100 px-3 py-2 text-keterangan font-medium text-jingga-700"
+          >
+            {sinkron.perluDiperiksa} transaksi perlu diperiksa
+          </NavLink>
+        )}
+        <TombolKeluar />
       </div>
     </aside>
   )

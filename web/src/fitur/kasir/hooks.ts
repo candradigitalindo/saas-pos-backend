@@ -1,8 +1,11 @@
-import { useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ulid } from 'ulid'
 import { useSesi } from '@/bersama/hooks/use-sesi'
-import type { Shift } from '@/bersama/tipe/pos'
+import { GalatAPI } from '@/lib/api-client'
+import { antrekan } from '@/lib/offline/antrean'
+import { kurangiStokLokal, produkLokal, useKatalogLokal } from '@/lib/offline/katalog-lokal'
+import { pratinjauBaris } from '@/bersama/util/uang'
+import type { ItemTransaksi, Shift, Transaksi } from '@/bersama/tipe/pos'
 import { kasirApi, type InputCheckout } from './api'
 
 /**
@@ -37,59 +40,145 @@ export function useShiftAktif() {
   }
 }
 
-/** Katalog untuk grid kasir, digabung dengan saldo stok toko aktif. */
-export function useKatalogKasir(cari: string, kategoriId?: string) {
+/**
+ * Katalog untuk grid kasir — dibaca dari penyimpanan lokal, bukan dari server.
+ *
+ * Kasir TIDAK PERNAH diblokir status koneksi, dan pencarian harus di bawah
+ * 100 ms; keduanya hanya mungkin bila sumbernya lokal. Mesin sinkronisasi yang
+ * menyegarkan Dexie di belakang layar.
+ */
+export function useKatalogKasir(cari: string) {
   const { tokoAktif } = useSesi()
+  const { produk, petaStok, kosong, memuat } = useKatalogLokal(cari, tokoAktif)
 
-  const produk = useQuery({
-    queryKey: ['produk-kasir', cari, kategoriId],
-    queryFn: () => kasirApi.produk(cari || undefined, kategoriId),
-    staleTime: 60_000,
-  })
-
-  const stok = useQuery({
-    queryKey: ['stok-kasir', tokoAktif],
-    queryFn: () => kasirApi.stok(tokoAktif!),
-    enabled: !!tokoAktif,
-    staleTime: 30_000,
-  })
-
-  // Peta stok per produk supaya pencarian di grid tidak O(n²).
-  const petaStok = useMemo(() => {
-    const m = new Map<string, string>()
-    for (const s of stok.data?.data ?? []) m.set(s.product_id, s.qty)
-    return m
-  }, [stok.data])
-
-  return {
-    produk: produk.data?.data ?? [],
-    petaStok,
-    memuat: produk.isLoading,
-    galat: produk.error,
-  }
+  return { produk, petaStok, kosong, memuat }
 }
 
 /**
  * Checkout.
  *
- * Kunci idempotensi dibuat SEKALI di sini dan dipegang selama percobaan
- * berlangsung. Kalau pengiriman gagal lalu dicoba lagi, kunci yang sama dipakai
- * — server mengenali dan mengembalikan transaksi yang sama, bukan membuat yang
- * kedua.
+ * Kunci idempotensi dibuat SEKALI di layar bayar dan dipegang selama percobaan
+ * berlangsung — server mengenali kunci yang sama dan mengembalikan transaksi
+ * yang itu juga, bukan membuat yang kedua.
+ *
+ * Bila jaringan mati, transaksi TIDAK gagal: ia masuk antrean lokal dan struknya
+ * tetap tampil dengan keterangan "menunggu dikirim". Kasir tidak pernah
+ * diblokir oleh status koneksi.
  */
 export function useCheckout() {
   const qc = useQueryClient()
 
-  return useMutation({
-    mutationFn: ({ input, kunci }: { input: InputCheckout; kunci: string }) =>
-      kasirApi.bayar(input, kunci),
+  return useMutation<HasilCheckout, Error, { input: InputCheckout; kunci: string }>({
+    mutationFn: async ({ input, kunci }) => {
+      try {
+        const transaksi = await kasirApi.bayar(input, kunci)
+        return { transaksi, diantre: false }
+      } catch (e) {
+        // Hanya kegagalan yang MEMANG bisa diantre yang boleh jadi transaksi
+        // offline. Penolakan seperti 422 (stok tidak ada, pelanggan wajib untuk
+        // kasbon) harus tetap muncul ke kasir sekarang juga — mengantrekannya
+        // hanya menunda kabar buruk yang sama.
+        if (!(e instanceof GalatAPI) || !e.bisaDiantre) throw e
+
+        const transaksi = await simpanKeAntrean(input, kunci)
+        return { transaksi, diantre: true }
+      }
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['shift-aktif'] })
-      qc.invalidateQueries({ queryKey: ['stok-kasir'] })
       qc.invalidateQueries({ queryKey: ['riwayat-transaksi'] })
       qc.invalidateQueries({ queryKey: ['dashboard'] })
     },
   })
+}
+
+export interface HasilCheckout {
+  transaksi: Transaksi
+  /** true bila transaksi baru masuk antrean, belum sampai ke server. */
+  diantre: boolean
+}
+
+/**
+ * Menyusun struk sementara dari data lokal dan memasukkan operasinya ke antrean.
+ *
+ * Angka di struk ini PERKIRAAN — dihitung dari harga di katalog lokal. Struk
+ * yang sah tetap yang dari server, dan akan menggantikannya begitu terkirim.
+ * Karena itu layarnya diberi lencana "menunggu dikirim", bukan "tersimpan".
+ */
+async function simpanKeAntrean(input: InputCheckout, kunci: string): Promise<Transaksi> {
+  const idTransaksi = input.id ?? kunci
+
+  const items: ItemTransaksi[] = []
+  let subtotal = 0
+  for (const [i, it] of input.items.entries()) {
+    const p = await produkLokal(it.product_id)
+    const hargaSatuan = p?.sell_price ?? 0
+    const lineTotal = pratinjauBaris(hargaSatuan, it.qty, it.discount_amount ?? 0)
+    subtotal += lineTotal
+    items.push({
+      id: `${idTransaksi}-${i}`,
+      product_id: it.product_id,
+      product_name: p?.name ?? 'Barang',
+      unit_name: p?.unit_name ?? '',
+      qty: it.qty,
+      unit_price: hargaSatuan,
+      unit_cost: p?.cost_price ?? 0,
+      discount_amount: it.discount_amount ?? 0,
+      tax_amount: 0,
+      line_total: lineTotal,
+    })
+  }
+
+  const dibayar = input.payments.reduce((j, p) => j + p.amount, 0)
+  const sekarang = new Date().toISOString()
+
+  await antrekan({
+    id: idTransaksi,
+    op: 'sale.create',
+    payload: { ...input, id: idTransaksi, client_created_at: sekarang },
+    ringkasan: items.map((i) => `${i.qty} ${i.product_name}`).join(', ') || 'Transaksi',
+    nominal: subtotal,
+  })
+
+  // Stok lokal ikut turun supaya kasir tidak melihat angka yang jelas basi
+  // setelah ia sendiri baru saja menjualnya.
+  await kurangiStokLokal(input.outlet_id, input.items.map((i) => ({
+    productId: i.product_id,
+    qty: i.qty,
+  })))
+
+  return {
+    id: idTransaksi,
+    outlet_id: input.outlet_id,
+    shift_id: input.shift_id,
+    customer_id: input.customer_id,
+    // Nomor struk sungguhan dibuat server. Sampai terkirim, kasir melihat
+    // penanda sementara yang jelas-jelas bukan nomor resmi.
+    receipt_no: 'Belum bernomor',
+    order_type: input.order_type ?? 'takeaway',
+    status: 'completed',
+    subtotal,
+    discount_amount: input.order_discount ?? 0,
+    tax_amount: 0,
+    service_amount: 0,
+    rounding_amount: 0,
+    total: subtotal,
+    paid_amount: dibayar,
+    change_amount: Math.max(0, dibayar - subtotal),
+    cost_total: 0,
+    gross_profit: 0,
+    occurred_at: sekarang,
+    business_date: '',
+    items,
+    payments: input.payments.map((p, i) => ({
+      id: `${idTransaksi}-b${i}`,
+      method: p.method,
+      amount: p.amount,
+      fee_amount: 0,
+      paid_at: sekarang,
+    })),
+    created_at: sekarang,
+  }
 }
 
 /** Kunci idempotensi baru. Dipanggil sekali saat layar bayar dibuka. */

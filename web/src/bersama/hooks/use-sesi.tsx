@@ -19,6 +19,7 @@ import { authApi } from '@/fitur/auth/api'
 import type { ProfilSaya } from '@/fitur/auth/tipe'
 import { GalatAPI } from '@/lib/api-client'
 import { adaSesi, ambilSesi, hapusSesi, langganSesi, simpanSesi } from '@/lib/penyimpanan-sesi'
+import { db, kosongkanDB } from '@/lib/offline/db'
 import type { KodeIzin } from '@/lib/izin'
 
 interface NilaiSesi {
@@ -31,13 +32,31 @@ interface NilaiSesi {
   tokoAktif: string | undefined
   gantiToko: (id: string) => void
   masuk: (username: string, password: string) => Promise<void>
-  keluar: () => Promise<void>
+  /**
+   * Keluar dari akun. Menolak (GalatAdaAntrean) bila masih ada transaksi yang
+   * belum terkirim — keluar akan membuang data lokal, dan penjualan yang belum
+   * sampai ke server akan hilang bersamanya.
+   */
+  keluar: (paksa?: boolean) => Promise<void>
   /** Dipakai setelah pendaftaran: sesi sudah diberikan server, tinggal disimpan. */
   pakaiSesiBaru: (auth: {
     access_token: string
     refresh_token: string
     expires_in: number
   }) => void
+}
+
+/**
+ * Dilempar saat keluar sementara masih ada transaksi yang belum terkirim.
+ * Layar yang memanggil keluar wajib menangkapnya dan bertanya lebih dulu.
+ */
+export class GalatAdaAntrean extends Error {
+  readonly jumlah: number
+  constructor(jumlah: number) {
+    super(`${jumlah} transaksi belum terkirim`)
+    this.name = 'GalatAdaAntrean'
+    this.jumlah = jumlah
+  }
 }
 
 const KonteksSesi = createContext<NilaiSesi | null>(null)
@@ -99,7 +118,15 @@ export function PenyediaSesi({ children }: { children: ReactNode }) {
     [pakaiSesiBaru, qc],
   )
 
-  const keluar = useCallback(async () => {
+  const keluar = useCallback(async (paksa = false) => {
+    if (!paksa) {
+      const belumTerkirim = await db.antrean
+        .where('status')
+        .anyOf('menunggu', 'mengirim', 'perlu-diperiksa')
+        .count()
+      if (belumTerkirim > 0) throw new GalatAdaAntrean(belumTerkirim)
+    }
+
     const sesi = ambilSesi('tenant')
     try {
       if (sesi?.refresh_token) await authApi.keluar(sesi.refresh_token)
@@ -109,6 +136,10 @@ export function PenyediaSesi({ children }: { children: ReactNode }) {
     }
     hapusSesi('tenant')
     localStorage.removeItem(KUNCI_TOKO)
+    // Data lokal WAJIB dibuang: satu tablet kasir dipakai bergantian, dan
+    // katalog — apalagi antrean transaksi — milik usaha yang sedang masuk,
+    // bukan milik perangkatnya.
+    await kosongkanDB()
     setPunyaSesi(false)
     qc.clear()
   }, [qc])
