@@ -26,31 +26,7 @@ import (
 func VoidSale(ctx context.Context, saleID, reason string) (*structs.SaleResponse, error) {
 	var result models.Sale
 	err := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
-		var sale models.Sale
-		if err := repositories.FindSaleInTenant(ctx, tx, saleID, &sale); err != nil {
-			return err
-		}
-		if sale.Status != "completed" {
-			return fmt.Errorf("%w: hanya transaksi berstatus selesai yang bisa dibatalkan", helpers.ErrConflict)
-		}
-
-		if err := writeOffKasbonIfAny(ctx, tx, saleID); err != nil {
-			return err
-		}
-
-		bizDate, err := saleBusinessDate(ctx, tx, sale.OutletID)
-		if err != nil {
-			return err
-		}
-		if err := reverseSaleStock(ctx, tx, saleID, saleID, "void", bizDate); err != nil {
-			return err
-		}
-		if err := repositories.MarkSaleCanceled(ctx, tx, saleID, reason); err != nil {
-			return err
-		}
-		// Hitung ulang agregat laporan hari transaksi asal — setelah statusnya
-		// 'canceled', rekalkulasi otomatis membuang kontribusinya (§13.2).
-		if err := repositories.RefreshDailySummary(ctx, tx, sale.OutletID, sale.BusinessDate); err != nil {
+		if err := voidSaleInTx(ctx, tx, saleID, reason); err != nil {
 			return err
 		}
 		return repositories.FindSaleInTenant(ctx, tx, saleID, &result)
@@ -60,6 +36,36 @@ func VoidSale(ctx context.Context, saleID, reason string) (*structs.SaleResponse
 	}
 	r := SaleToResponse(&result)
 	return &r, nil
+}
+
+// voidSaleInTx menjalankan pembatalan penjualan (§13.2) DI DALAM transaksi yang
+// sudah ada: status → 'canceled', gerakan stok dibalik dengan baris kind='void',
+// kasbon belum-terbayar dihapusbukukan, agregat laporan dihitung ulang. Dipakai
+// VoidSale (endpoint kasir) dan pembatalan pesanan kanal (Fase 11a).
+func voidSaleInTx(ctx context.Context, tx *gorm.DB, saleID, reason string) error {
+	var sale models.Sale
+	if err := repositories.FindSaleInTenant(ctx, tx, saleID, &sale); err != nil {
+		return err
+	}
+	if sale.Status != "completed" {
+		return fmt.Errorf("%w: hanya transaksi berstatus selesai yang bisa dibatalkan", helpers.ErrConflict)
+	}
+	if err := writeOffKasbonIfAny(ctx, tx, saleID); err != nil {
+		return err
+	}
+	bizDate, err := saleBusinessDate(ctx, tx, sale.OutletID)
+	if err != nil {
+		return err
+	}
+	if err := reverseSaleStock(ctx, tx, saleID, saleID, "void", bizDate); err != nil {
+		return err
+	}
+	if err := repositories.MarkSaleCanceled(ctx, tx, saleID, reason); err != nil {
+		return err
+	}
+	// Setelah statusnya 'canceled', rekalkulasi hari transaksi asal otomatis
+	// membuang kontribusinya (§13.2).
+	return repositories.RefreshDailySummary(ctx, tx, sale.OutletID, sale.BusinessDate)
 }
 
 // RefundSale membuat transaksi RETUR PENUH: sale baru berstatus 'returned'

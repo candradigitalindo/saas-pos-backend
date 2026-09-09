@@ -38,6 +38,7 @@ Sebuah framework backend REST API berbasis Golang dan Gin, dengan struktur modul
 - **Langganan platform** — paket + tangga diskon prabayar (1/3/6/9/12 bulan), trial, tagihan & pembayaran idempoten, pendapatan diterima di muka diakui bulanan (`deferred_revenue_entries` + `cmd/recognize-revenue`), pembatalan di tengah masa dihitung ulang pada harga bulanan normal, prorata ganti paket
 - **CRM tenant** — pipeline & tahap yang bisa diatur, deal + alasan menang/kalah, aktivitas follow-up; penawaran → proyek otomatis → invoice bertermin → pembayaran parsial; **pelunasan invoice tercatat sebagai satu penjualan di tabel `sales` yang sama dengan POS** (omzet & laba satu pintu). Visibilitas kepemilikan (lapis 3, `scopeVisibility`): sales hanya melihat datanya sendiri
 - **CRM sales lapangan** — rencana kunjungan (call plan), check-in/out dengan GPS + foto (direkam **hanya** saat check-in/out), kunjungan tanpa pesanan + alasan; kunjungan offline disinkron idempoten lewat `/sync/push` (`op: visit.upsert`); target sales + pencapaian; **komisi berbasis nilai TERTAGIH** (pembayaran non-kredit + setoran piutang lapangan), bukan terkirim
+- **Kanal pesanan online (fondasi, tanpa API)** — definisi kanal per outlet + tarif komisi, pemetaan SKU kanal ↔ produk, entri pesanan manual (WhatsApp/Instagram) + impor CSV laporan harian kanal; setiap pesanan = **satu `sales` bertanda `channel_id`** (potong stok + resep, komisi masuk `sale_payments.fee_amount`) → **laba bersih per kanal setelah komisi** lewat `/reports/profit`; idempoten per `external_order_id`; batal pesanan mengembalikan stok
 - **Autentikasi JWT** — access token pendek (15 mnt) + refresh token (30 hari) dengan rotasi & deteksi pemakaian ulang
 - **Manajemen Outlet / User / Role** — CRUD tenant-scoped + Pagination ala Laravel
 - **Migrasi skema berversi** (`cmd/migrate`) — `AutoMigrate` dimatikan
@@ -172,6 +173,10 @@ Semua endpoint bisnis di bawah prefiks `/api/v1`.
 | `POST /api/v1/sync/push` `op: visit.upsert` | `sale.create` | Sinkron kunjungan offline (tanpa duplikat) |
 | `GET/POST /api/v1/sales-targets` | `crm.commission.view` | Target sales + pencapaian (kunjungan & tertagih) |
 | `GET/POST /api/v1/commissions` · `.../approve` · `.../pay` | `crm.commission.view` | Hitung komisi dari nilai tertagih → setujui → bayar |
+| `GET/POST/PUT/DELETE /api/v1/channels[/:id]` | `channel.manage` | Kanal per outlet + tarif komisi |
+| `GET/POST /api/v1/channels/:id/products` · `DELETE .../:pid` | `channel.manage` | Pemetaan SKU kanal ↔ produk |
+| `POST /api/v1/channels/:id/orders/import` | `channel.order.accept` | Impor CSV laporan harian kanal |
+| `GET/POST /api/v1/channel-orders[/:id]` · `.../status` · `.../cancel` | `channel.order.accept` | Entri pesanan manual, status, pembatalan |
 | `POST /api/v1/shifts/open` · `/shifts/:id/close` | `shift.open` / `shift.close` | Buka / tutup shift |
 | `POST/GET /api/v1/cash-movements` | `cash.movement` | Kas masuk/keluar |
 | `GET  /api/v1/stocks?outlet_id=&low=` | `stock.view` | Saldo stok |

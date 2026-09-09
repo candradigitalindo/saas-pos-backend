@@ -307,6 +307,30 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	com.POST("/:id/approve", controllers.ApproveCommission)
 	com.POST("/:id/pay", controllers.PayCommission)
 
+	// Kanal pesanan online — fondasi (Fase 11a, §5.10). Definisi kanal &
+	// pemetaan SKU butuh channel.manage; entri/impor pesanan butuh
+	// channel.order.accept. Laba bersih per kanal keluar lewat /reports/profit.
+	chMgr := middlewares.Require("channel.manage")
+	chOrd := middlewares.Require("channel.order.accept", "channel.manage")
+
+	ch := t.Group("/channels", chMgr)
+	ch.GET("", controllers.ListChannels)
+	ch.POST("", controllers.CreateChannel)
+	ch.GET("/:id", controllers.GetChannel)
+	ch.PUT("/:id", controllers.UpdateChannel)
+	ch.DELETE("/:id", controllers.DeleteChannel)
+	ch.GET("/:id/products", controllers.ListChannelProducts)
+	ch.POST("/:id/products", controllers.UpsertChannelProduct)
+	ch.DELETE("/:id/products/:pid", controllers.DeleteChannelProduct)
+	ch.POST("/:id/orders/import", middlewares.Require("channel.order.accept", "channel.manage"), controllers.ImportChannelOrders)
+
+	co := t.Group("/channel-orders", chOrd)
+	co.GET("", controllers.ListChannelOrders)
+	co.POST("", controllers.CreateChannelOrder)
+	co.GET("/:id", controllers.GetChannelOrder)
+	co.POST("/:id/status", controllers.UpdateChannelOrderStatus)
+	co.POST("/:id/cancel", controllers.CancelChannelOrder)
+
 	// Stok: baca + penyesuaian manual (saldo awal / koreksi).
 	t.GET("/stocks", middlewares.Require("stock.view"), controllers.ListStocks)
 	t.GET("/stock-movements", middlewares.Require("stock.view"), controllers.ListStockMovements)
