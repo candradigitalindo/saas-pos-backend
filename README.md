@@ -39,6 +39,7 @@ Sebuah framework backend REST API berbasis Golang dan Gin, dengan struktur modul
 - **CRM tenant** — pipeline & tahap yang bisa diatur, deal + alasan menang/kalah, aktivitas follow-up; penawaran → proyek otomatis → invoice bertermin → pembayaran parsial; **pelunasan invoice tercatat sebagai satu penjualan di tabel `sales` yang sama dengan POS** (omzet & laba satu pintu). Visibilitas kepemilikan (lapis 3, `scopeVisibility`): sales hanya melihat datanya sendiri
 - **CRM sales lapangan** — rencana kunjungan (call plan), check-in/out dengan GPS + foto (direkam **hanya** saat check-in/out), kunjungan tanpa pesanan + alasan; kunjungan offline disinkron idempoten lewat `/sync/push` (`op: visit.upsert`); target sales + pencapaian; **komisi berbasis nilai TERTAGIH** (pembayaran non-kredit + setoran piutang lapangan), bukan terkirim
 - **Kanal pesanan online (fondasi, tanpa API)** — definisi kanal per outlet + tarif komisi, pemetaan SKU kanal ↔ produk, entri pesanan manual (WhatsApp/Instagram) + impor CSV laporan harian kanal; setiap pesanan = **satu `sales` bertanda `channel_id`** (potong stok + resep, komisi masuk `sale_payments.fee_amount`) → **laba bersih per kanal setelah komisi** lewat `/reports/profit`; idempoten per `external_order_id`; batal pesanan mengembalikan stok
+- **Pipeline peristiwa kanal (provider-agnostik)** — webhook `POST /webhooks/channels/:provider` **tanpa auth** (kanal ditautkan lewat `(provider, merchant_ref)` unik global) menyimpan payload **mentah** ke `channel_events` lalu balas 200 cepat; pekerja `cmd/process-channel-events` memprosesnya **satu per transaksi** (`FOR UPDATE SKIP LOCKED`) lewat adaptor seragam (`genericAdapter` menerima payload ternormalisasi; adaptor per-provider menyusul seiring kemitraan API) → `order.created` jadi penjualan + rincian `channel_fees` + antrean `channel_stock_syncs`; **pengiriman ganda oleh kanal → tetap satu penjualan** (idempoten `external_order_id`); percobaan ulang bertahap + antrean mati (`status='dead'`) yang bisa dilihat pemilik; **rekonsiliasi pencairan** `channel_settlements` (nilai periode dari penjualan + fee vs. uang yang benar-benar masuk → `matched`/`mismatch`); kegagalan kanal **tidak** menghentikan kasir
 - **Absensi & penggajian** — karyawan + jadwal kerja mingguan, `attendances` buku besar (koreksi tak mengubah baris asli) + `attendance_days` cache yang dibangun ulang (urutan status TETAP: libur > cuti > absen > alpa), hari libur, cuti/izin + saldo; **mesin gaji deterministik** (urutan tetap: upah dasar → aturan earning → deduction → penyesuaian periode lalu → cicilan kasbon; snapshot nama/tipe/params tiap baris slip) → hitung → kunci → bayar (kas keluar `ref_table='payroll_periods'`); hitung ulang dari data sama = angka identik; koreksi setelah kunci → `payroll_adjustments` di periode berikutnya; kasbon dipotong bertahap
 - **Autentikasi JWT** — access token pendek (15 mnt) + refresh token (30 hari) dengan rotasi & deteksi pemakaian ulang
 - **Manajemen Outlet / User / Role** — CRUD tenant-scoped + Pagination ala Laravel
@@ -58,6 +59,7 @@ Sebuah framework backend REST API berbasis Golang dan Gin, dengan struktur modul
 ```
 /cmd/migrate         # Runner migrasi skema (up / down / status)
 /cmd/recognize-revenue # Pekerjaan harian: akui pendapatan diterima di muka (§13.4)
+/cmd/process-channel-events # Pekerja: proses antrean channel_events + sinkron stok (§11)
 /config              # Konfigurasi aplikasi (baca .env)
 /controllers         # Handler endpoint (tipis)
 /database            # Koneksi, connection pool, runner migrasi, seeder
@@ -99,6 +101,11 @@ main.go              # Bootstrap aplikasi
    go run main.go   # atau: air (hot reload)
    ```
    Cek: `curl localhost:8080/health` dan `curl localhost:8080/health/ready`.
+6. **Pekerjaan terjadwal** (cron/systemd timer — bukan bagian dari start aplikasi, semuanya idempoten):
+   ```sh
+   go run ./cmd/recognize-revenue        # harian, awal bulan — akui pendapatan diterima di muka (§13.4)
+   go run ./cmd/process-channel-events   # sering (§11: tiap ~10 dtk) — proses channel_events + sinkron stok
+   ```
 
 > **Upgrade dari versi ber-`AutoMigrate`:** database lama yang tabel `users`/`roles`-nya
 > dibuat `AutoMigrate` perlu disiapkan sekali. Untuk DB dev yang datanya boleh hilang:
@@ -178,6 +185,10 @@ Semua endpoint bisnis di bawah prefiks `/api/v1`.
 | `GET/POST /api/v1/channels/:id/products` · `DELETE .../:pid` | `channel.manage` | Pemetaan SKU kanal ↔ produk |
 | `POST /api/v1/channels/:id/orders/import` | `channel.order.accept` | Impor CSV laporan harian kanal |
 | `GET/POST/PUT /api/v1/channel-orders[/:id]` · `.../status` · `.../cancel` | `channel.order.accept` | Entri pesanan manual, status, pembatalan |
+| `POST /webhooks/channels/:provider` (`?merchant_ref=` / `X-Merchant-Ref`) | — (tanpa auth) | Terima webhook kanal → simpan mentah ke `channel_events`, balas 200 |
+| `GET /api/v1/channels/:id/events?status=` · `GET .../stock-syncs` | `channel.manage` | Inbox peristiwa kanal + antrean sinkron stok (umur keterlambatan) |
+| `POST /api/v1/channel-events/process` | `channel.manage` | Picu pekerja pemroses manual (selain `cmd/process-channel-events`) |
+| `GET/POST /api/v1/channels/:id/settlements` · `.../receipt` | `channel.settlement.view` | Rekonsiliasi pencairan: hitung nilai periode, catat uang masuk (`matched`/`mismatch`) |
 | `GET/POST/PUT /api/v1/employees[/:id]` · `.../schedule` | `hr.employee.*` | Karyawan + jadwal kerja mingguan |
 | `GET/POST /api/v1/attendances` · `/attendance-corrections[/:id/approve]` | `hr.attendance.*` | Absensi (buku besar) + koreksi |
 | `POST /api/v1/leave-requests[/:id/approve\|reject]` | `hr.leave.*` | Cuti/izin + persetujuan (snapshot `is_paid`) |

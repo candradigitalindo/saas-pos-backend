@@ -79,6 +79,12 @@ func SetupRouter() *gin.Engine {
 	r.GET("/health", controllers.Health)
 	r.GET("/health/ready", controllers.Readiness)
 
+	// Webhook kanal (Fase 11b, §5.10, blueprint F.6) — TANPA auth, tanpa
+	// prefiks versi: kanal tidak membawa token kita, ditautkan lewat
+	// (provider, merchant_ref). Payload disimpan MENTAH ke channel_events lalu
+	// balas 200 cepat; pekerja cmd/process-channel-events yang memprosesnya.
+	r.POST("/webhooks/channels/:provider", controllers.IngestChannelWebhook)
+
 	v1 := r.Group("/api/v1")
 	registerAuthRoutes(v1)
 	registerTenantRoutes(v1)
@@ -330,6 +336,19 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	co.GET("/:id", controllers.GetChannelOrder)
 	co.POST("/:id/status", controllers.UpdateChannelOrderStatus)
 	co.POST("/:id/cancel", controllers.CancelChannelOrder)
+
+	// Pipeline peristiwa kanal (Fase 11b, §5.10, blueprint F.6/F.8). Inbox
+	// peristiwa & antrean sinkron stok dijaga channel.manage; rekonsiliasi
+	// pencairan cukup channel.settlement.view (peran keuangan, tanpa akses
+	// kelola kanal). Pemicu pemroses manual global.
+	ch.GET("/:id/events", controllers.ListChannelEvents)
+	ch.GET("/:id/stock-syncs", controllers.ListChannelStockSyncs)
+	t.POST("/channel-events/process", chMgr, controllers.ProcessChannelEventsNow)
+
+	chSet := t.Group("/channels/:id/settlements", middlewares.Require("channel.settlement.view", "channel.manage"))
+	chSet.GET("", controllers.ListChannelSettlements)
+	chSet.POST("", controllers.RecomputeChannelSettlement)
+	chSet.POST("/receipt", controllers.RecordChannelSettlementReceipt)
 
 	// SDM & penggajian (Fase 13, §5.11). hr.salary.view adalah izin paling
 	// sensitif — slip & kasbon.

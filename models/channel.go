@@ -107,3 +107,103 @@ func (o *ChannelOrder) BeforeCreate(tx *gorm.DB) (err error) {
 	}
 	return
 }
+
+// Enum tambahan (Fase 11b, migrasi 000024/000025).
+var (
+	ChannelEventStatuses = []string{"pending", "processing", "done", "failed", "dead"}
+	ChannelFeeKinds      = []string{"commission", "service", "shipping_subsidy", "merchant_promo", "tax", "other"}
+	SettlementStatuses   = []string{"open", "matched", "mismatch", "closed"}
+	StockSyncStatuses    = []string{"pending", "sent", "failed"}
+)
+
+// ChannelEvent adalah peristiwa MENTAH dari kanal (webhook/polling). Webhook
+// tidak memproses — hanya menaruh baris di sini lalu balas 200. Pekerja
+// asinkron yang memprosesnya. `UNIQUE (tenant, channel, event_type,
+// external_ref)` = dedup pengiriman ganda.
+type ChannelEvent struct {
+	ID          string          `json:"id" gorm:"primaryKey;type:char(26)"`
+	TenantID    string          `json:"tenant_id" gorm:"type:char(26);not null;index"`
+	ChannelID   string          `json:"channel_id" gorm:"type:char(26);not null;index"`
+	EventType   string          `json:"event_type" gorm:"not null"`
+	ExternalRef string          `json:"external_ref"`
+	Payload     json.RawMessage `json:"payload" gorm:"type:jsonb;not null"`
+	Status      string          `json:"status" gorm:"not null;default:pending"`
+	Attempts    int             `json:"attempts" gorm:"not null;default:0"`
+	LastError   string          `json:"last_error"`
+	ReceivedAt  time.Time       `json:"received_at"`
+	ProcessedAt *time.Time      `json:"processed_at"`
+}
+
+func (e *ChannelEvent) BeforeCreate(tx *gorm.DB) (err error) {
+	if e.ID == "" {
+		e.ID = ulid.New()
+	}
+	return
+}
+
+// ChannelFee adalah satu komponen potongan kanal atas sebuah penjualan
+// (komisi, biaya layanan, subsidi ongkir, promo, pajak). Rincian untuk
+// rekonsiliasi settlement; total tetap masuk `sale_payments.fee_amount`.
+type ChannelFee struct {
+	ID        string    `json:"id" gorm:"primaryKey;type:char(26)"`
+	TenantID  string    `json:"tenant_id" gorm:"type:char(26);not null;index"`
+	SaleID    string    `json:"sale_id" gorm:"type:char(26);not null;index"`
+	Kind      string    `json:"kind" gorm:"not null"`
+	Amount    int64     `json:"amount" gorm:"not null"`
+	Note      string    `json:"note"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+func (f *ChannelFee) BeforeCreate(tx *gorm.DB) (err error) {
+	if f.ID == "" {
+		f.ID = ulid.New()
+	}
+	return
+}
+
+// ChannelSettlement mencocokkan nilai pesanan sebuah periode dengan uang yang
+// benar-benar masuk rekening.
+type ChannelSettlement struct {
+	ID             string     `json:"id" gorm:"primaryKey;type:char(26)"`
+	TenantID       string     `json:"tenant_id" gorm:"type:char(26);not null;index"`
+	ChannelID      string     `json:"channel_id" gorm:"type:char(26);not null"`
+	PeriodStart    time.Time  `json:"period_start" gorm:"type:date"`
+	PeriodEnd      time.Time  `json:"period_end" gorm:"type:date"`
+	GrossAmount    int64      `json:"gross_amount" gorm:"not null;default:0"`
+	FeeAmount      int64      `json:"fee_amount" gorm:"not null;default:0"`
+	NetAmount      int64      `json:"net_amount" gorm:"not null;default:0"`
+	ReceivedAmount *int64     `json:"received_amount"`
+	Status         string     `json:"status" gorm:"not null;default:open"`
+	ReceivedAt     *time.Time `json:"received_at"`
+	Note           string     `json:"note"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+}
+
+func (s *ChannelSettlement) BeforeCreate(tx *gorm.DB) (err error) {
+	if s.ID == "" {
+		s.ID = ulid.New()
+	}
+	return
+}
+
+// ChannelStockSync adalah satu permintaan pembaruan stok ke kanal dalam antrean.
+type ChannelStockSync struct {
+	ID           string          `json:"id" gorm:"primaryKey;type:char(26)"`
+	TenantID     string          `json:"tenant_id" gorm:"type:char(26);not null;index"`
+	ChannelID    string          `json:"channel_id" gorm:"type:char(26);not null;index"`
+	ProductID    string          `json:"product_id" gorm:"type:char(26);not null"`
+	RequestedQty decimal.Decimal `json:"requested_qty" gorm:"type:numeric(14,3);not null"`
+	Status       string          `json:"status" gorm:"not null;default:pending"`
+	Attempts     int             `json:"attempts" gorm:"not null;default:0"`
+	LastError    string          `json:"last_error"`
+	QueuedAt     time.Time       `json:"queued_at"`
+	SentAt       *time.Time      `json:"sent_at"`
+}
+
+func (s *ChannelStockSync) BeforeCreate(tx *gorm.DB) (err error) {
+	if s.ID == "" {
+		s.ID = ulid.New()
+	}
+	return
+}
