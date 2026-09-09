@@ -14,33 +14,26 @@ import (
 var ErrSaleNotFound = errors.New("transaksi tidak ditemukan")
 
 // NextReceiptSeq mengambil nomor urut struk berikutnya untuk (outlet, hari
-// usaha), mengunci baris penghitung SELECT ... FOR UPDATE lalu menaikkannya.
-// Bukan COUNT(*) — itu menghasilkan nomor ganda saat dua kasir bersamaan (§13.7).
+// usaha) secara ATOMIK lewat satu UPSERT: sisipkan baris penghitung bila belum
+// ada, kalau sudah ada naikkan next_seq — lalu kembalikan nilai sebelum
+// dinaikkan. Bukan COUNT(*) (nomor ganda saat dua kasir bersamaan, §13.7), dan
+// bukan SELECT-lalu-INSERT terpisah (dua checkout pertama-hari yang paralel
+// sama-sama menyisipkan → pelanggaran primary key → checkout gagal 500).
+//
+// ON CONFLICT DO UPDATE mengunci baris; transaksi paralel menunggu giliran lalu
+// membaca next_seq yang sudah dinaikkan — tiap pemanggil mendapat nomor unik.
 func NextReceiptSeq(ctx context.Context, tx *gorm.DB, outletID string, businessDate time.Time) (int64, error) {
 	tid := currentTenantID(ctx)
 
-	var ctr models.ReceiptCounter
-	err := tx.WithContext(ctx).
-		Clauses(lockForUpdate()).
-		Where("tenant_id = ? AND outlet_id = ? AND business_date = ?", tid, outletID, businessDate).
-		First(&ctr).Error
-
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		// Baris belum ada: buat dengan next_seq=2 dan pakai 1 untuk struk ini.
-		ctr = models.ReceiptCounter{TenantID: tid, OutletID: outletID, BusinessDate: businessDate, NextSeq: 2}
-		if err := tx.WithContext(ctx).Create(&ctr).Error; err != nil {
-			return 0, err
-		}
-		return 1, nil
-	}
+	var seq int64
+	err := tx.WithContext(ctx).Raw(`
+		INSERT INTO receipt_counters (tenant_id, outlet_id, business_date, next_seq)
+		VALUES (?, ?, ?, 2)
+		ON CONFLICT (tenant_id, outlet_id, business_date)
+		DO UPDATE SET next_seq = receipt_counters.next_seq + 1
+		RETURNING next_seq - 1
+	`, tid, outletID, businessDate).Scan(&seq).Error
 	if err != nil {
-		return 0, err
-	}
-
-	seq := ctr.NextSeq
-	if err := tx.WithContext(ctx).Model(&models.ReceiptCounter{}).
-		Where("tenant_id = ? AND outlet_id = ? AND business_date = ?", tid, outletID, businessDate).
-		UpdateColumn("next_seq", seq+1).Error; err != nil {
 		return 0, err
 	}
 	return seq, nil
