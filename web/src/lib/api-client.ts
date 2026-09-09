@@ -82,6 +82,12 @@ interface OpsiMinta {
   realm?: Realm
   /** Lewati penyisipan token — dipakai endpoint publik (masuk, daftar). */
   tanpaToken?: boolean
+  /**
+   * Kirim badan apa adanya dengan tipe konten ini, bukan sebagai JSON.
+   * Dipakai impor CSV. Tetap lewat jalur yang sama supaya pembaruan token dan
+   * penerjemahan galat tidak perlu ditulis ulang di tempat kedua.
+   */
+  mentah?: { isi: BodyInit; tipe: string }
 }
 
 export type Realm = 'tenant' | 'mitra' | 'platform'
@@ -199,7 +205,8 @@ async function kirim<T>(jalur: string, opsi: OpsiMinta, ulangi: boolean): Promis
   const realm = opsi.realm ?? 'tenant'
   const headers: Record<string, string> = { Accept: 'application/json' }
 
-  if (opsi.badan !== undefined) headers['Content-Type'] = 'application/json'
+  if (opsi.mentah) headers['Content-Type'] = opsi.mentah.tipe
+  else if (opsi.badan !== undefined) headers['Content-Type'] = 'application/json'
   if (opsi.idempotencyKey) headers['Idempotency-Key'] = opsi.idempotencyKey
   if (!opsi.tanpaToken) {
     const token = ambilSesi(realm)?.access_token
@@ -211,7 +218,11 @@ async function kirim<T>(jalur: string, opsi: OpsiMinta, ulangi: boolean): Promis
     res = await fetch(susunURL(jalur, opsi.query), {
       method: opsi.metode ?? 'GET',
       headers,
-      body: opsi.badan === undefined ? undefined : JSON.stringify(opsi.badan),
+      body: opsi.mentah
+        ? opsi.mentah.isi
+        : opsi.badan === undefined
+          ? undefined
+          : JSON.stringify(opsi.badan),
       signal: opsi.signal,
     })
   } catch (e) {
@@ -257,4 +268,12 @@ export const api = {
 
   hapus: <T>(jalur: string, opsi: Omit<OpsiMinta, 'metode' | 'badan'> = {}) =>
     kirim<T>(jalur, { ...opsi, metode: 'DELETE' }, true),
+
+  /** POST dengan badan mentah (mis. CSV) — bukan JSON. */
+  postMentah: <T>(
+    jalur: string,
+    isi: BodyInit,
+    tipe: string,
+    opsi: Omit<OpsiMinta, 'metode' | 'badan' | 'mentah'> = {},
+  ) => kirim<T>(jalur, { ...opsi, metode: 'POST', mentah: { isi, tipe } }, true),
 }

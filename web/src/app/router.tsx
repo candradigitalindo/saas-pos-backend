@@ -11,6 +11,14 @@ import { HalamanKasir } from '@/fitur/kasir/halaman/halaman-kasir'
 import { HalamanTutupShift } from '@/fitur/kasir/halaman/halaman-tutup-shift'
 import { HalamanRiwayat } from '@/fitur/kasir/halaman/halaman-riwayat'
 import { HalamanKas } from '@/fitur/kasir/halaman/halaman-kas'
+import { HalamanDaftarBarang } from '@/fitur/produk/halaman/halaman-daftar-barang'
+import { HalamanFormBarang } from '@/fitur/produk/halaman/halaman-form-barang'
+import { HalamanImpor } from '@/fitur/produk/halaman/halaman-impor'
+import { HalamanMaster } from '@/fitur/produk/halaman/halaman-master'
+import { HalamanStok } from '@/fitur/stok/halaman/halaman-stok'
+import { HalamanKartuStok } from '@/fitur/stok/halaman/halaman-kartu-stok'
+import { HalamanKoreksiStok } from '@/fitur/stok/halaman/halaman-koreksi-stok'
+import { HalamanBarangMasuk } from '@/fitur/stok/halaman/halaman-barang-masuk'
 import { KeadaanKosong } from '@/bersama/komponen/keadaan-kosong'
 import { Compass } from 'lucide-react'
 import { IZIN } from '@/lib/izin'
@@ -92,7 +100,41 @@ const router = createBrowserRouter([
         path: '/barang',
         element: (
           <ButuhIzin izin={[IZIN.productView]}>
-            <BelumDibangun nama="Barang" tahap="U2" />
+            <HalamanDaftarBarang />
+          </ButuhIzin>
+        ),
+      },
+      {
+        path: '/barang/baru',
+        element: (
+          <ButuhIzin izin={[IZIN.productEdit]}>
+            <HalamanFormBarang />
+          </ButuhIzin>
+        ),
+      },
+      {
+        path: '/barang/impor',
+        element: (
+          <ButuhIzin izin={[IZIN.productImport]}>
+            <HalamanImpor />
+          </ButuhIzin>
+        ),
+      },
+      {
+        path: '/barang/master',
+        element: (
+          <ButuhIzin izin={[IZIN.productEdit]}>
+            <HalamanMaster />
+          </ButuhIzin>
+        ),
+      },
+      {
+        // Setelah /barang/baru dan /barang/impor supaya keduanya tidak tertelan
+        // sebagai id barang.
+        path: '/barang/:id',
+        element: (
+          <ButuhIzin izin={[IZIN.productEdit]}>
+            <HalamanFormBarang />
           </ButuhIzin>
         ),
       },
@@ -100,7 +142,31 @@ const router = createBrowserRouter([
         path: '/stok',
         element: (
           <ButuhIzin izin={[IZIN.stockView]}>
-            <BelumDibangun nama="Stok" tahap="U2" />
+            <HalamanStok />
+          </ButuhIzin>
+        ),
+      },
+      {
+        path: '/stok/kartu/:productId',
+        element: (
+          <ButuhIzin izin={[IZIN.stockView]}>
+            <HalamanKartuStok />
+          </ButuhIzin>
+        ),
+      },
+      {
+        path: '/stok/koreksi',
+        element: (
+          <ButuhIzin izin={[IZIN.stockAdjust]}>
+            <HalamanKoreksiStok />
+          </ButuhIzin>
+        ),
+      },
+      {
+        path: '/stok/masuk',
+        element: (
+          <ButuhIzin izin={[IZIN.stockAdjust]}>
+            <HalamanBarangMasuk />
           </ButuhIzin>
         ),
       },

@@ -11,6 +11,7 @@ import {
   Settings,
   ShoppingBag,
   Store,
+  Tags,
   Users,
   Wallet,
 } from 'lucide-react'
@@ -54,6 +55,7 @@ export const MENU_LAINNYA: ItemMenu[] = [
   { ke: '/kasir/riwayat', label: 'Riwayat Penjualan', ikon: ReceiptText, izin: [IZIN.saleCreate] },
   { ke: '/kasir/kas', label: 'Uang Masuk & Keluar', ikon: Wallet, izin: [IZIN.cashMovement] },
   { ke: '/barang', label: 'Barang', ikon: ShoppingBag, izin: [IZIN.productView] },
+  { ke: '/barang/master', label: 'Kategori & Satuan', ikon: Tags, izin: [IZIN.productEdit] },
   { ke: '/pelanggan', label: 'Pelanggan', ikon: Users, izin: [IZIN.customerView] },
   { ke: '/kasbon', label: 'Kasbon', ikon: NotebookPen, izin: [IZIN.receivableManage] },
   { ke: '/kanal', label: 'Kanal Online', ikon: Store, izin: [IZIN.channelManage, IZIN.channelOrderAccept] },

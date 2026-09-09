@@ -60,8 +60,8 @@ berbagi, naikkan ke `bersama/`.
 |---|---|---|
 | U0 | Fondasi: token desain, api-client, autentikasi, izin, layout, komponen dasar | ✅ Selesai |
 | U1 | Kasir: buka/tutup shift, grid barang, keranjang, bayar, struk, riwayat, batalkan, kas laci | ✅ Selesai |
-| U2 | Barang & stok | ⏳ Berikutnya |
-| U3 | Offline (PWA + Dexie + sinkronisasi) | — |
+| U2 | Barang & stok: CRUD barang, impor CSV, kategori/satuan/pemasok, saldo & kartu stok, koreksi, barang masuk | ✅ Selesai |
+| U3 | Offline (PWA + Dexie + sinkronisasi) | ⏳ Berikutnya |
 | U4 | Laporan | — |
 | U5 | Operasional lanjutan | — |
 | U6 | Modul berbayar | — |
