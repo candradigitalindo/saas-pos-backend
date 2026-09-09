@@ -367,3 +367,49 @@ func PlatformResolveDispute(c *gin.Context) {
 		Success: true, Message: "Keputusan sengketa dicatat", Data: nil,
 	})
 }
+
+// ── Outbox notifikasi (§5.14) ───────────────────────────────────────────
+
+// PlatformListOutbox menampilkan antrean & ANTREAN MATI notifikasi — tanpa ini
+// kegagalan pengiriman tidak pernah terlihat siapa pun.
+func PlatformListOutbox(c *gin.Context) {
+	_, limit, _ := helpers.ParsePaginationParams(c)
+	res, err := services.ListOutboxEvents(c.Request.Context(), c.Query("status"), c.Query("topic"), limit)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[[]structs.OutboxEventResponse]{
+		Success: true, Message: "Antrean notifikasi", Data: res,
+	})
+}
+
+// PlatformRetryOutbox mengembalikan peristiwa mati ke antrean setelah masalahnya
+// diperbaiki.
+func PlatformRetryOutbox(c *gin.Context) {
+	if err := services.RetryOutboxEvent(c.Request.Context(), c.Param("id")); err != nil {
+		notFoundOr(c, err, repositories.ErrOutboxEventNotFound, "Peristiwa tidak ditemukan atau sudah terkirim")
+		return
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[any]{
+		Success: true, Message: "Peristiwa dikembalikan ke antrean", Data: nil,
+	})
+}
+
+// PlatformUpsertTemplate menyimpan template pesan (bawaan sistem bila
+// tenant_id kosong).
+func PlatformUpsertTemplate(c *gin.Context) {
+	var req structs.NotificationTemplateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		validationFailed(c, err)
+		return
+	}
+	if err := services.UpsertNotificationTemplate(c.Request.Context(), req); err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	services.AuditPlatformAction(c.Request.Context(), "notification.template.upsert", "notification_templates", req.Code)
+	c.JSON(http.StatusOK, structs.SuccessResponse[any]{
+		Success: true, Message: "Template pesan disimpan", Data: nil,
+	})
+}

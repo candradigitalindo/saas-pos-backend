@@ -9,6 +9,7 @@ import (
 
 	"candra/backend-api/config"
 	"candra/backend-api/helpers"
+	"candra/backend-api/internal/reqctx"
 	"candra/backend-api/models"
 	"candra/backend-api/repositories"
 	"candra/backend-api/structs"
@@ -158,6 +159,29 @@ func GenerateInvoice(ctx context.Context) (structs.SubInvoiceResponse, error) {
 		if err := repositories.CreateSubInvoice(ctx, tx, &inv); err != nil {
 			return err
 		}
+
+		// Pemberitahuan tagihan — pola OUTBOX (§5.14): peristiwanya ditulis di
+		// dalam transaksi yang SAMA dengan tagihannya. Kalau transaksi ini batal,
+		// pemberitahuannya ikut batal; kalau berhasil, pengirimannya dijamin
+		// tersimpan walau penyedia notifikasi sedang mati. Pengiriman sungguhan
+		// dilakukan cmd/process-outbox belakangan.
+		tid := reqctx.TenantID(ctx)
+		var tenant models.Tenant
+		penerima := ""
+		if err := repositories.FindTenantByID(ctx, tx, tid, &tenant); err == nil {
+			penerima = tenant.Phone
+		}
+		if penerima != "" {
+			_ = EnqueueNotification(ctx, tx, &tid, "invoice.issued", map[string]any{
+				"channel":     "whatsapp",
+				"to":          penerima,
+				"nama_usaha":  tenant.BusinessName,
+				"nomor":       inv.Number,
+				"total":       helpers.FormatRupiah(inv.TotalAmount),
+				"jatuh_tempo": inv.DueDate.Format("02 Jan 2006"),
+			})
+		}
+
 		out = subInvoiceToResponse(inv)
 		return nil
 	})

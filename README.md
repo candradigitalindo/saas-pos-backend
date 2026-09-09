@@ -15,7 +15,7 @@ Sebuah framework backend REST API berbasis Golang dan Gin, dengan struktur modul
 > harus dibuktikan sebelum menambah saluran.
 
 > **Spesifikasi teknis: [docs/TECHNICAL-BACKEND.md](docs/TECHNICAL-BACKEND.md).**
-> Skema 103 tabel beserta relasinya, konvensi ULID & zona waktu (UTC + WIB/WITA/WIT),
+> Skema 104 tabel beserta relasinya, konvensi ULID & zona waktu (UTC + WIB/WITA/WIT),
 > kontrak API, protokol sinkronisasi offline, dan urutan implementasi per fase.
 
 ---
@@ -41,6 +41,8 @@ Sebuah framework backend REST API berbasis Golang dan Gin, dengan struktur modul
 - **Kanal pesanan online (fondasi, tanpa API)** — definisi kanal per outlet + tarif komisi, pemetaan SKU kanal ↔ produk, entri pesanan manual (WhatsApp/Instagram) + impor CSV laporan harian kanal; setiap pesanan = **satu `sales` bertanda `channel_id`** (potong stok + resep, komisi masuk `sale_payments.fee_amount`) → **laba bersih per kanal setelah komisi** lewat `/reports/profit`; idempoten per `external_order_id`; batal pesanan mengembalikan stok
 - **Pipeline peristiwa kanal (provider-agnostik)** — webhook `POST /webhooks/channels/:provider` **tanpa auth** (kanal ditautkan lewat `(provider, merchant_ref)` unik global) menyimpan payload **mentah** ke `channel_events` lalu balas 200 cepat; pekerja `cmd/process-channel-events` memprosesnya **satu per transaksi** (`FOR UPDATE SKIP LOCKED`) lewat adaptor seragam (`genericAdapter` menerima payload ternormalisasi; adaptor per-provider menyusul seiring kemitraan API) → `order.created` jadi penjualan + rincian `channel_fees` + antrean `channel_stock_syncs`; **pengiriman ganda oleh kanal → tetap satu penjualan** (idempoten `external_order_id`); percobaan ulang bertahap + antrean mati (`status='dead'`) yang bisa dilihat pemilik; **rekonsiliasi pencairan** `channel_settlements` (nilai periode dari penjualan + fee vs. uang yang benar-benar masuk → `matched`/`mismatch`); kegagalan kanal **tidak** menghentikan kasir
 - **Program Mitra Penjual (agen & afiliasi)** — modul **platform** untuk merekrut tenant, dengan **realm autentikasi terpisah** (`/api/v1/partner/*`, token realm `partner` ditolak di semua rute tenant dan sebaliknya). Kode referral valid saat pendaftaran → kaitan `partner_referrals` sekali seumur hidup (dasar komisi). **Mesin komisi deterministik** (`cmd/partner-commissions`): berulang selama merchant berlangganan, dihitung dari `subscription_invoices.paid_amount` (uang yang benar-benar diterima), **ambang aktivasi** (≥N transaksi / N hari) sebelum komisi pertama, **clawback** bila merchant berhenti dalam masa tertentu, **potong pajak** dipisah di pencairan (bruto − clawback − pajak = neto); hitung ulang idempoten (hanya baris `held`). Portal mitra: dashboard, daftar prospek, **status merchant binaan SAJA** (status langganan + jatuh tempo + aktif — tidak pernah omzet/produk/pelanggan/transaksi, blueprint G.8), rincian komisi & pencairan. Setiap akses mitra ke data merchant dicatat di `audit_logs` (§5.14, `actor_type='partner_user'`) — satu insert batch per pembukaan halaman, dan kegagalan mencatatnya menggagalkan permintaan
+- **Panel internal penyedia SaaS** — realm autentikasi **ketiga** (`/api/v1/platform/*`), terpisah penuh dari tenant maupun mitra. Peran TETAP (superadmin/operator/finance/support) dengan wewenang dipisah supaya yang memverifikasi mitra bukan yang mencairkan uangnya; setiap tindakan tulis tercatat di `audit_logs` (`actor_type='admin'`). Superadmin aktif terakhir tidak bisa dinonaktifkan. Verifikasi mitra, tingkat komisi, jalankan komisi, pencairan, keputusan sengketa, dan antrean notifikasi kini lewat panel — bukan lagi hanya CLI
+- **Notifikasi keluar (pola outbox)** — peristiwa ditulis ke `outbox_events` **di dalam transaksi bisnis yang sama** dengan perubahan datanya, lalu dikirim `cmd/process-outbox`. Itu yang membuat "tagihan tersimpan tapi notifikasinya hilang" — atau sebaliknya — mustahil. Gagal → penundaan bertahap; 10 kali gagal → antrean mati yang terlihat di panel dan bisa dikembalikan ke antrean. Template `{{penanda}}` per tenant menimpa bawaan sistem. Pengirim WhatsApp/email sungguhan tinggal ditukar lewat antarmuka `Notifier`
 - **Absensi & penggajian** — karyawan + jadwal kerja mingguan, `attendances` buku besar (koreksi tak mengubah baris asli) + `attendance_days` cache yang dibangun ulang (urutan status TETAP: libur > cuti > absen > alpa), hari libur, cuti/izin + saldo; **mesin gaji deterministik** (urutan tetap: upah dasar → aturan earning → deduction → penyesuaian periode lalu → cicilan kasbon; snapshot nama/tipe/params tiap baris slip) → hitung → kunci → bayar (kas keluar `ref_table='payroll_periods'`); hitung ulang dari data sama = angka identik; koreksi setelah kunci → `payroll_adjustments` di periode berikutnya; kasbon dipotong bertahap
 - **Autentikasi JWT** — access token pendek (15 mnt) + refresh token (30 hari) dengan rotasi & deteksi pemakaian ulang
 - **Peran dinamis per tenant** — pendaftaran menyiapkan 4 peran bawaan (Pemilik/Manajer/Kasir/Gudang), lalu tenant bebas menambah, mengubah izin, dan menghapus peran lewat `role.manage`. **Satu user boleh memegang beberapa peran** (`user_roles`); izin efektifnya = gabungan izin seluruh perannya. Dua batas yang dikunci: peran bawaan pemilik wajib mempertahankan `role.manage` (kalau tidak, tenant terkunci permanen), dan peran yang masih dipegang seseorang tidak bisa dihapus
@@ -63,7 +65,9 @@ Sebuah framework backend REST API berbasis Golang dan Gin, dengan struktur modul
 /cmd/recognize-revenue # Pekerjaan harian: akui pendapatan diterima di muka (§13.4)
 /cmd/process-channel-events # Pekerja: proses antrean channel_events + sinkron stok (§11)
 /cmd/partner-commissions # Pekerjaan bulanan: hitung komisi mitra → setujui → cairkan (Fase 12)
-/cmd/partner-admin   # Panel internal mitra sebagai CLI: buat/verifikasi mitra, daftar tingkat
+/cmd/partner-admin   # CLI mitra (pelengkap panel internal)
+/cmd/platform-admin  # Bootstrap akun staf internal (admin pertama)
+/cmd/process-outbox  # Pekerja: kirim notifikasi yang mengantre (§5.14)
 /config              # Konfigurasi aplikasi (baca .env)
 /controllers         # Handler endpoint (tipis)
 /database            # Koneksi, connection pool, runner migrasi, seeder
@@ -116,6 +120,8 @@ Makefile             # make help | build | test | lint | migrate-up | docker-bui
    go run ./cmd/process-channel-events                # sekali jalan (§11: panggil tiap ~10 dtk) — proses channel_events + sinkron stok
    go run ./cmd/process-channel-events -loop -interval 10s   # atau: daemon menetap (systemd), berhenti rapi di SIGTERM
    go run ./cmd/partner-commissions -approve -payout  # bulanan (tanggal 1) — komisi mitra bulan lalu → setujui → pencairan draft
+   go run ./cmd/process-outbox                        # sering (tiap ~30 dtk) — kirim notifikasi yang mengantre
+   go run ./cmd/process-outbox -loop -interval 30s    # atau: daemon menetap
    ```
 
 > **Upgrade dari versi ber-`AutoMigrate`:** database lama yang tabel `users`/`roles`-nya
@@ -184,6 +190,7 @@ koneksi DB; `GET /health` untuk liveness.
 | Jadwal | Perintah |
 |---|---|
 | harian, awal bulan | `/usr/local/bin/recognize-revenue` |
+| tiap ~30 detik (atau daemon `-loop`) | `/usr/local/bin/process-outbox` |
 | tiap ~10 detik (atau daemon `-loop`) | `/usr/local/bin/process-channel-events` |
 | bulanan, tanggal 1 | `/usr/local/bin/partner-commissions -approve -payout` |
 

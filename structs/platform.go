@@ -54,3 +54,31 @@ type PlatformPayoutRequest struct {
 	PeriodStart string `json:"period_start" binding:"required"`
 	PeriodEnd   string `json:"period_end" binding:"required"`
 }
+
+// ── Outbox notifikasi (§5.14) ───────────────────────────────────────────
+
+type OutboxRunResult struct {
+	Sent   int `json:"sent"`
+	Failed int `json:"failed"`
+	Dead   int `json:"dead"`
+}
+
+type OutboxEventResponse struct {
+	ID          string `json:"id"`
+	TenantID    string `json:"tenant_id,omitempty"`
+	Topic       string `json:"topic"`
+	Status      string `json:"status"`
+	Attempts    int    `json:"attempts"`
+	LastError   string `json:"last_error,omitempty"`
+	AvailableAt string `json:"available_at"`
+	ProcessedAt string `json:"processed_at,omitempty"`
+	CreatedAt   string `json:"created_at"`
+}
+
+type NotificationTemplateRequest struct {
+	TenantID string `json:"tenant_id" binding:"omitempty,ulid"` // kosong = template bawaan sistem
+	Code     string `json:"code" binding:"required,min=2,max=80"`
+	Channel  string `json:"channel" binding:"required,oneof=whatsapp email"`
+	Subject  string `json:"subject" binding:"omitempty,max=200"`
+	Body     string `json:"body" binding:"required,min=2,max=2000"`
+}

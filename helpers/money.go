@@ -1,6 +1,11 @@
 package helpers
 
-import "github.com/shopspring/decimal"
+import (
+	"strconv"
+	"strings"
+
+	"github.com/shopspring/decimal"
+)
 
 // Aturan uang (docs/TECHNICAL-BACKEND.md §3.3): rupiah bulat (int64), hitung &
 // bulatkan PER BARIS (setengah ke atas), lalu jumlahkan baris. Jangan pernah
@@ -33,4 +38,29 @@ func InclusiveTax(grossWithTax int64, rate decimal.Decimal) int64 {
 	divisor := decimal.NewFromInt(1).Add(rate)
 	net := RoundHalfUpToInt(decimal.NewFromInt(grossWithTax).Div(divisor))
 	return grossWithTax - net
+}
+
+// FormatRupiah memformat rupiah bulat menjadi teks siap tampil: 1250000 →
+// "Rp 1.250.000". Pemisah ribuan titik, tanpa desimal — sen tidak dipakai.
+//
+// Dipakai untuk teks yang dilihat manusia (notifikasi, struk). Perhitungan
+// TETAP memakai int64; fungsi ini hanya lapisan tampilan.
+func FormatRupiah(v int64) string {
+	tanda := ""
+	if v < 0 {
+		tanda = "-"
+		v = -v
+	}
+	digit := strconv.FormatInt(v, 10)
+
+	var b strings.Builder
+	b.WriteString(tanda)
+	b.WriteString("Rp ")
+	for i, r := range digit {
+		if i > 0 && (len(digit)-i)%3 == 0 {
+			b.WriteByte('.')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }

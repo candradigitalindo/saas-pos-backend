@@ -49,7 +49,7 @@ func LookupIdempotency(ctx context.Context, tx *gorm.DB, scope, key, requestHash
 
 // SaveIdempotency menyimpan hasil sebuah operasi idempoten. Dipanggil di DALAM
 // transaksi yang sama dengan operasinya, sebagai langkah terakhir sebelum commit.
-// Unique index (COALESCE(tenant_id,”), scope, key) menjadi pengaman terakhir
+// Unique index berbasis COALESCE atas tenant_id menjadi pengaman terakhir
 // bila dua permintaan lolos LookupIdempotency bersamaan.
 func SaveIdempotency(ctx context.Context, tx *gorm.DB, scope, key, requestHash string, status int, body []byte, ttl time.Duration) error {
 	row := models.IdempotencyKey{

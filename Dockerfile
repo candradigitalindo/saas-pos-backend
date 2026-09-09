@@ -21,7 +21,9 @@ RUN go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/pos-s
     go build -trimpath -ldflags="-s -w" -o /out/recognize-revenue     ./cmd/recognize-revenue && \
     go build -trimpath -ldflags="-s -w" -o /out/process-channel-events ./cmd/process-channel-events && \
     go build -trimpath -ldflags="-s -w" -o /out/partner-commissions    ./cmd/partner-commissions && \
-    go build -trimpath -ldflags="-s -w" -o /out/partner-admin          ./cmd/partner-admin
+    go build -trimpath -ldflags="-s -w" -o /out/partner-admin          ./cmd/partner-admin && \
+    go build -trimpath -ldflags="-s -w" -o /out/platform-admin         ./cmd/platform-admin && \
+    go build -trimpath -ldflags="-s -w" -o /out/process-outbox         ./cmd/process-outbox
 
 # ── Runtime ──────────────────────────────────────────────────────────────
 # distroless: hanya CA certs + tzdata + user non-root. Tidak ada shell, tidak

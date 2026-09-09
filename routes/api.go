@@ -191,6 +191,11 @@ func registerPlatformRoutes(v1 *gin.RouterGroup) {
 	// Sengketa atribusi — diputus admin dan keputusannya dicatat (G.2 #5).
 	pf.GET("/partner-disputes", baca, controllers.PlatformListDisputes)
 	pf.POST("/partner-disputes/:id/resolve", middlewares.RequirePlatform(models.CapPartnerDispute), controllers.PlatformResolveDispute)
+
+	// Outbox notifikasi (§5.14): antrean, antrean mati, dan template pesan.
+	pf.GET("/outbox", baca, controllers.PlatformListOutbox)
+	pf.POST("/outbox/:id/retry", kelola, controllers.PlatformRetryOutbox)
+	pf.POST("/notification-templates", kelola, controllers.PlatformUpsertTemplate)
 }
 
 // registerValidators memasang validator kustom dan membuat pesan error memakai

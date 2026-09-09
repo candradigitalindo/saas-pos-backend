@@ -3,6 +3,7 @@ package database
 import (
 	"log/slog"
 
+	"candra/backend-api/internal/ulid"
 	"candra/backend-api/models"
 
 	"github.com/shopspring/decimal"
@@ -25,6 +26,10 @@ func SeedData() {
 	}
 	if err := seedPartnerTiers(); err != nil {
 		slog.Error("seeder partner_tiers gagal — sudah `go run ./cmd/migrate up`?", slog.Any("error", err))
+		return
+	}
+	if err := seedNotificationTemplates(); err != nil {
+		slog.Error("seeder notification_templates gagal — sudah `go run ./cmd/migrate up`?", slog.Any("error", err))
 		return
 	}
 	slog.Info("seeding database selesai")
@@ -108,4 +113,23 @@ func seedPartnerTiers() error {
 		Columns:   []clause.Column{{Name: "name"}},
 		DoNothing: true,
 	}).Create(&rows).Error
+}
+
+// seedNotificationTemplates mengisi template pesan bawaan sistem (§5.14).
+//
+// Memakai SQL mentah karena index uniknya berbentuk EKSPRESI
+// berbasis COALESCE atas tenant_id yang NULL — daftar kolom biasa tidak akan
+// dikenali PostgreSQL sebagai target ON CONFLICT. DO NOTHING: teks yang sudah
+// diubah operator tidak ditimpa.
+func seedNotificationTemplates() error {
+	for _, t := range notifTemplateCatalog {
+		if err := DB.Exec(`
+			INSERT INTO notification_templates (id, tenant_id, code, channel, subject, body)
+			VALUES (?, NULL, ?, ?, ?, ?)
+			ON CONFLICT (COALESCE(tenant_id, ''), code, channel) DO NOTHING`,
+			ulid.New(), t.Code, t.Channel, t.Subject, t.Body).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
