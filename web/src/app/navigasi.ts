@@ -5,7 +5,9 @@ import {
   Building2,
   Home,
   MoreHorizontal,
+  NotebookPen,
   Receipt,
+  ReceiptText,
   Settings,
   ShoppingBag,
   Store,
@@ -49,9 +51,11 @@ export const MENU_UTAMA: ItemMenu[] = [
 
 /** Sisanya, muncul di "Lainnya" (HP) atau langsung di navigasi samping. */
 export const MENU_LAINNYA: ItemMenu[] = [
+  { ke: '/kasir/riwayat', label: 'Riwayat Penjualan', ikon: ReceiptText, izin: [IZIN.saleCreate] },
+  { ke: '/kasir/kas', label: 'Uang Masuk & Keluar', ikon: Wallet, izin: [IZIN.cashMovement] },
   { ke: '/barang', label: 'Barang', ikon: ShoppingBag, izin: [IZIN.productView] },
   { ke: '/pelanggan', label: 'Pelanggan', ikon: Users, izin: [IZIN.customerView] },
-  { ke: '/kasbon', label: 'Kasbon', ikon: Wallet, izin: [IZIN.receivableManage] },
+  { ke: '/kasbon', label: 'Kasbon', ikon: NotebookPen, izin: [IZIN.receivableManage] },
   { ke: '/kanal', label: 'Kanal Online', ikon: Store, izin: [IZIN.channelManage, IZIN.channelOrderAccept] },
   { ke: '/crm', label: 'Prospek & Proyek', ikon: Building2, izin: [IZIN.crmLeadViewOwn, IZIN.crmLeadViewAll] },
   { ke: '/sdm', label: 'Karyawan & Gaji', ikon: Users, izin: [IZIN.hrEmployeeView, IZIN.hrEmployeeEdit] },

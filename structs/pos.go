@@ -67,6 +67,19 @@ type ShiftResponse struct {
 	CountedCash  *int64 `json:"counted_cash,omitempty"`
 	Difference   *int64 `json:"difference,omitempty"`
 	Note         string `json:"note,omitempty"`
+
+	// Rincian pembentuk expected_cash:
+	//
+	//	expected = opening_cash + cash_sales + cash_in - cash_out
+	//
+	// Diisi pada GET /shifts/:id. Untuk shift yang MASIH TERBUKA angkanya
+	// dihitung langsung saat diminta, memakai fungsi yang sama dengan penutupan
+	// shift — layar "Tutup Shift" menampilkan rincian ini sebelum kasir
+	// memasukkan hasil hitung fisik, dan angkanya harus tidak mungkin berbeda
+	// dari yang nanti tersimpan.
+	CashSales *int64 `json:"cash_sales,omitempty"`
+	CashIn    *int64 `json:"cash_in,omitempty"`
+	CashOut   *int64 `json:"cash_out,omitempty"`
 }
 
 // ── Cash movement ──────────────────────────────────────────────────────────

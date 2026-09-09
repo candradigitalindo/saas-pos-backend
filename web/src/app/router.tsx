@@ -7,6 +7,10 @@ import { HalamanDaftar } from '@/fitur/auth/halaman/halaman-daftar'
 import { HalamanSelamatDatang } from '@/fitur/onboarding/halaman/halaman-selamat-datang'
 import { HalamanBeranda } from '@/fitur/beranda/halaman/halaman-beranda'
 import { HalamanLainnya } from '@/fitur/beranda/halaman/halaman-lainnya'
+import { HalamanKasir } from '@/fitur/kasir/halaman/halaman-kasir'
+import { HalamanTutupShift } from '@/fitur/kasir/halaman/halaman-tutup-shift'
+import { HalamanRiwayat } from '@/fitur/kasir/halaman/halaman-riwayat'
+import { HalamanKas } from '@/fitur/kasir/halaman/halaman-kas'
 import { KeadaanKosong } from '@/bersama/komponen/keadaan-kosong'
 import { Compass } from 'lucide-react'
 import { IZIN } from '@/lib/izin'
@@ -38,6 +42,19 @@ const router = createBrowserRouter([
       </ButuhMasuk>
     ),
   },
+  // Kasir sengaja DI LUAR LayoutToko: mode fokus satu layar penuh, tanpa
+  // navigasi. Semakin sedikit pintu, semakin kecil peluang tersesat saat
+  // antrean panjang (ui/04-PETA-LAYAR.md).
+  {
+    path: '/kasir',
+    element: (
+      <ButuhMasuk>
+        <ButuhIzin izin={[IZIN.saleCreate]}>
+          <HalamanKasir />
+        </ButuhIzin>
+      </ButuhMasuk>
+    ),
+  },
   {
     element: (
       <ButuhMasuk>
@@ -48,10 +65,26 @@ const router = createBrowserRouter([
       { index: true, element: <HalamanBeranda /> },
       { path: '/lainnya', element: <HalamanLainnya /> },
       {
-        path: '/kasir',
+        path: '/kasir/tutup-shift',
+        element: (
+          <ButuhIzin izin={[IZIN.shiftClose]}>
+            <HalamanTutupShift />
+          </ButuhIzin>
+        ),
+      },
+      {
+        path: '/kasir/riwayat',
         element: (
           <ButuhIzin izin={[IZIN.saleCreate]}>
-            <BelumDibangun nama="Kasir" tahap="U1" />
+            <HalamanRiwayat />
+          </ButuhIzin>
+        ),
+      },
+      {
+        path: '/kasir/kas',
+        element: (
+          <ButuhIzin izin={[IZIN.cashMovement]}>
+            <HalamanKas />
           </ButuhIzin>
         ),
       },

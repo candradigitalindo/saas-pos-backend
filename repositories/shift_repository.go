@@ -67,19 +67,40 @@ func ListShifts(ctx context.Context, outletID string, limit, offset int) ([]mode
 //
 //	expected = opening_cash + cash_sales + cash_in - cash_out
 //
-// cash_sales = Σ sale_payments.amount (method='cash') pada sales berstatus
-// 'completed' milik shift ini.
+// cash_sales = uang tunai yang BENAR-BENAR MASUK LACI, yaitu
+//
+//	Σ sale_payments.amount (method='cash') - Σ sales.change_amount
+//
+// pada sales berstatus 'completed' milik shift ini.
+//
+// Kembalian WAJIB dikurangkan: yang tercatat di sale_payments adalah uang yang
+// DISERAHKAN pembeli, bukan yang tersisa di laci. Pembeli membayar Rp 50.000
+// untuk belanja Rp 36.000 menambah Rp 36.000 ke laci, bukan Rp 50.000 — tanpa
+// pengurangan ini setiap shift akan tampak kurang persis sebesar total
+// kembalian yang diberikan, dan kasir yang jujur akan terus dituduh selisih.
 func ShiftCashTotals(ctx context.Context, tx *gorm.DB, shiftID string) (cashSales, cashIn, cashOut int64, err error) {
 	tid := currentTenantID(ctx)
 
+	var tunaiDiterima int64
 	err = tenantDB(ctx, tx).
 		Table("sale_payments sp").
 		Joins("JOIN sales s ON s.tenant_id = sp.tenant_id AND s.id = sp.sale_id").
 		Where("sp.tenant_id = ? AND s.shift_id = ? AND s.status = 'completed' AND sp.method = 'cash'", tid, shiftID).
-		Select("COALESCE(SUM(sp.amount), 0)").Scan(&cashSales).Error
+		Select("COALESCE(SUM(sp.amount), 0)").Scan(&tunaiDiterima).Error
 	if err != nil {
 		return
 	}
+
+	// Kembalian dihitung terpisah (bukan lewat join di atas) supaya transaksi
+	// dengan lebih dari satu baris pembayaran tunai tidak menghitungnya berkali-kali.
+	var kembalian int64
+	err = scopeTenant(ctx, tenantDB(ctx, tx).Model(&models.Sale{})).
+		Where("shift_id = ? AND status = 'completed'", shiftID).
+		Select("COALESCE(SUM(change_amount), 0)").Scan(&kembalian).Error
+	if err != nil {
+		return
+	}
+	cashSales = tunaiDiterima - kembalian
 
 	err = scopeTenant(ctx, tenantDB(ctx, tx).Model(&models.CashMovement{})).
 		Where("shift_id = ? AND direction = 'in'", shiftID).

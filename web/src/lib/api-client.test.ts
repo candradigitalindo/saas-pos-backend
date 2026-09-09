@@ -9,6 +9,23 @@ function balasan(status: number, badan: unknown): Response {
   })
 }
 
+/** Menangkap GalatAPI dari sebuah panggilan yang memang diharapkan gagal. */
+async function tangkap(janji: Promise<unknown>): Promise<GalatAPI> {
+  try {
+    await janji
+  } catch (e) {
+    if (e instanceof GalatAPI) return e
+    throw e
+  }
+  throw new Error('Panggilan seharusnya gagal, tapi berhasil')
+}
+
+type PanggilanFetch = [string, { headers: Record<string, string> }]
+
+function panggilan(palsu: { mock: { calls: unknown[] } }, ke: number): PanggilanFetch {
+  return palsu.mock.calls[ke] as PanggilanFetch
+}
+
 describe('api-client', () => {
   beforeEach(() => {
     localStorage.clear()
@@ -32,10 +49,10 @@ describe('api-client', () => {
     vi.stubGlobal('fetch', palsu)
 
     await api.post('/sales', { total: 1 }, { idempotencyKey: 'KUNCI-1' })
-    expect(palsu.mock.calls[0]![1].headers['Idempotency-Key']).toBe('KUNCI-1')
+    expect(panggilan(palsu, 0)[1].headers['Idempotency-Key']).toBe('KUNCI-1')
 
     await api.get('/products')
-    expect(palsu.mock.calls[1]![1].headers['Idempotency-Key']).toBeUndefined()
+    expect(panggilan(palsu, 1)[1].headers['Idempotency-Key']).toBeUndefined()
   })
 
   it('422 membawa pesan per kolom untuk ditempel di bawah kolomnya', async () => {
@@ -50,8 +67,7 @@ describe('api-client', () => {
       ),
     )
 
-    const e = await api.post('/products', {}).catch((x) => x)
-    expect(e).toBeInstanceOf(GalatAPI)
+    const e = await tangkap(api.post('/products', {}))
     expect(e.status).toBe(422)
     expect(e.kolom.sell_price).toBe('sell_price wajib diisi')
   })
@@ -63,7 +79,7 @@ describe('api-client', () => {
         balasan(403, { success: false, message: 'Anda tidak memiliki izin untuk tindakan ini' }),
       ),
     )
-    const e: GalatAPI = await api.get('/reports/profit').catch((x) => x)
+    const e = await tangkap(api.get('/reports/profit'))
     expect(e.pesan).toBe('Fitur ini tidak tersedia untuk akun Anda.')
     expect(e.pesan).not.toMatch(/403/)
   })
@@ -73,13 +89,13 @@ describe('api-client', () => {
       'fetch',
       vi.fn().mockResolvedValue(balasan(429, { success: false, message: 'too many' })),
     )
-    const e: GalatAPI = await api.post('/auth/login', {}).catch((x) => x)
+    const e = await tangkap(api.post('/auth/login', {}))
     expect(e.pesan).toBe('Terlalu banyak percobaan. Coba lagi sebentar lagi.')
   })
 
   it('jaringan mati menjadi kesalahan yang bisa diantre, bukan pesan menakutkan', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
-    const e: GalatAPI = await api.post('/sales', {}).catch((x) => x)
+    const e = await tangkap(api.post('/sales', {}))
     expect(e.bisaDiantre).toBe(true)
     expect(e.pesan).toContain('dikirim otomatis nanti')
   })
@@ -89,7 +105,7 @@ describe('api-client', () => {
       'fetch',
       vi.fn().mockResolvedValue(balasan(500, { success: false, message: 'boom' })),
     )
-    const e: GalatAPI = await api.post('/sales', {}).catch((x) => x)
+    const e = await tangkap(api.post('/sales', {}))
     expect(e.bisaDiantre).toBe(true)
     expect(e.pesan).toContain('tidak hilang')
   })
@@ -101,7 +117,7 @@ describe('api-client', () => {
         balasan(409, { success: false, message: 'Transaksi sudah dibatalkan' }),
       ),
     )
-    const e: GalatAPI = await api.get('/sales/1').catch((x) => x)
+    const e = await tangkap(api.get('/sales/1'))
     expect(e.pesan).toBe('Transaksi sudah dibatalkan')
   })
 
@@ -127,9 +143,9 @@ describe('api-client', () => {
 
     await expect(api.get('/me')).resolves.toEqual({ ok: true })
     expect(palsu).toHaveBeenCalledTimes(3)
-    expect(palsu.mock.calls[1]![0]).toContain('/auth/refresh')
+    expect(panggilan(palsu, 1)[0]).toContain('/auth/refresh')
     // Permintaan ulang memakai token yang baru, bukan yang mati.
-    expect(palsu.mock.calls[2]![1].headers.Authorization).toBe('Bearer baru')
+    expect(panggilan(palsu, 2)[1].headers.Authorization).toBe('Bearer baru')
   })
 
   it('lima permintaan yang kena 401 bersamaan hanya memicu SATU pembaruan token', async () => {
@@ -179,7 +195,7 @@ describe('api-client', () => {
       ),
     )
 
-    const e: GalatAPI = await api.get('/me').catch((x) => x)
+    const e = await tangkap(api.get('/me'))
     expect(e.pesan).toBe(GALAT_SESI_HABIS)
     expect(localStorage.getItem('pos.sesi.toko')).toBeNull()
   })
@@ -188,6 +204,6 @@ describe('api-client', () => {
     const palsu = vi.fn().mockResolvedValue(balasan(200, { success: true, message: '', data: [] }))
     vi.stubGlobal('fetch', palsu)
     await api.get('/products', { query: { search: '', page: 2, outlet_id: undefined } })
-    expect(palsu.mock.calls[0]![0]).toBe('/api/v1/products?page=2')
+    expect(panggilan(palsu, 0)[0]).toBe('/api/v1/products?page=2')
   })
 })

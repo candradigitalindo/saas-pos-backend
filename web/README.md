@@ -59,8 +59,8 @@ berbagi, naikkan ke `bersama/`.
 | Tahap | Isi | Status |
 |---|---|---|
 | U0 | Fondasi: token desain, api-client, autentikasi, izin, layout, komponen dasar | ✅ Selesai |
-| U1 | Kasir bisa jualan | ⏳ Berikutnya |
-| U2 | Barang & stok | — |
+| U1 | Kasir: buka/tutup shift, grid barang, keranjang, bayar, struk, riwayat, batalkan, kas laci | ✅ Selesai |
+| U2 | Barang & stok | ⏳ Berikutnya |
 | U3 | Offline (PWA + Dexie + sinkronisasi) | — |
 | U4 | Laporan | — |
 | U5 | Operasional lanjutan | — |

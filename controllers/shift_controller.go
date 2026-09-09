@@ -66,13 +66,33 @@ func ListShifts(c *gin.Context) {
 
 // GetShift mengembalikan satu shift.
 func GetShift(c *gin.Context) {
+	ctx := c.Request.Context()
+
 	var sh models.Shift
-	if err := repositories.FindShiftInTenant(c.Request.Context(), nil, c.Param("id"), &sh); err != nil {
+	if err := repositories.FindShiftInTenant(ctx, nil, c.Param("id"), &sh); err != nil {
 		notFoundOr(c, err, repositories.ErrShiftNotFound, "Shift tidak ditemukan")
 		return
 	}
+
+	res := shiftToResponse(sh)
+
+	// Rincian kas. Untuk shift terbuka, expected_cash di baris belum terisi
+	// (baru ditulis saat penutupan), jadi dihitung di sini memakai fungsi yang
+	// SAMA dengan CloseShift. Layar "Tutup Shift" perlu menampilkan rinciannya
+	// sebelum kasir menghitung laci; pratinjau yang berbeda dari angka akhir
+	// akan lebih merugikan daripada tidak ada pratinjau sama sekali.
+	cashSales, cashIn, cashOut, err := repositories.ShiftCashTotals(ctx, nil, sh.ID)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	res.CashSales, res.CashIn, res.CashOut = &cashSales, &cashIn, &cashOut
+	if sh.Status == "open" {
+		res.ExpectedCash = sh.OpeningCash + cashSales + cashIn - cashOut
+	}
+
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.ShiftResponse]{
-		Success: true, Message: "Berhasil mengambil data shift", Data: shiftToResponse(sh),
+		Success: true, Message: "Berhasil mengambil data shift", Data: res,
 	})
 }
 

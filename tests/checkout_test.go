@@ -308,6 +308,41 @@ func TestShiftCloseReconciles(t *testing.T) {
 	}
 }
 
+// TestShiftCloseSubtractsChange menjaga agar kembalian tidak ikut dihitung
+// sebagai uang yang masuk laci.
+//
+// Yang tercatat di sale_payments adalah uang yang DISERAHKAN pembeli. Pembeli
+// membayar Rp 50.000 untuk belanja Rp 45.000 hanya menambah Rp 45.000 ke laci —
+// Rp 5.000 sisanya kembali ke tangan pembeli. Tanpa pengurangan ini setiap
+// shift tampak kurang persis sebesar total kembalian, dan kasir yang jujur
+// terus-menerus dituduh selisih.
+func TestShiftCloseSubtractsChange(t *testing.T) {
+	requireDB(t)
+	f := setupPOS(t, "shiftkembalian")
+
+	// Belanja 45.000, pembeli menyerahkan 50.000 → kembalian 5.000.
+	sale := checkout(t, f.token, "SK-1", map[string]any{
+		"outlet_id": f.outletID,
+		"items":     []map[string]any{{"product_id": f.prodA, "qty": "3"}},
+		"payments":  []map[string]any{{"method": "cash", "amount": 50000}},
+	}).mustCode(t, "checkout", 201).data(t)
+	assertI64(t, sale, "total", 45000)
+	assertI64(t, sale, "change_amount", 5000)
+
+	// Laci: 100.000 modal + 45.000 bersih = 145.000 (BUKAN 150.000).
+	shift := call(t, "GET", "/api/v1/shifts/"+f.shiftID, f.token, nil).
+		mustOK(t, "detail shift").data(t)
+	assertI64(t, shift, "cash_sales", 45000)
+	assertI64(t, shift, "expected_cash", 145000)
+
+	closed := call(t, "POST", "/api/v1/shifts/"+f.shiftID+"/close", f.token, map[string]any{
+		"counted_cash": 145000,
+	}).mustOK(t, "close shift").data(t)
+	assertI64(t, closed, "expected_cash", 145000)
+	// Kasir yang menghitung laci dengan benar harus mendapat selisih NOL.
+	assertI64(t, closed, "difference", 0)
+}
+
 func TestSaleIsolation(t *testing.T) {
 	requireDB(t)
 	a := setupPOS(t, "saleisoA")
