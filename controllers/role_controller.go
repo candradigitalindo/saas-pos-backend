@@ -14,6 +14,21 @@ import (
 	"gorm.io/gorm"
 )
 
+// permRoleManage adalah izin yang menjadi kunci pemulihan sebuah tenant:
+// pemegangnya bisa mengembalikan izin apa pun. Peran bawaan pemilik wajib
+// mempertahankannya (lihat SetRolePermissions).
+const permRoleManage = "role.manage"
+
+// containsCode melaporkan apakah kode ada di dalam daftar.
+func containsCode(list []string, code string) bool {
+	for _, c := range list {
+		if c == code {
+			return true
+		}
+	}
+	return false
+}
+
 // roleToResponse memetakan model Role + kode permission-nya (opsional) ke DTO.
 func roleToResponse(r models.Role, permCodes []string) structs.RoleResponse {
 	return structs.RoleResponse{
@@ -218,6 +233,21 @@ func SetRolePermissions(c *gin.Context) {
 			return
 		}
 		respondServiceError(c, err)
+		return
+	}
+
+	// Peran bawaan pemilik adalah SATU-SATUNYA jalan pulih: bila ia kehilangan
+	// `role.manage`, tidak ada seorang pun di tenant itu yang masih bisa
+	// mengembalikan hak akses apa pun — tenant terkunci permanen dan hanya bisa
+	// dipulihkan lewat akses database langsung. Izin lain bebas diatur.
+	if role.IsSystem && !containsCode(req.PermissionCodes, permRoleManage) {
+		c.JSON(http.StatusUnprocessableEntity, structs.ErrorResponse{
+			Success: false,
+			Message: "Peran bawaan pemilik wajib tetap memiliki izin " + permRoleManage,
+			Errors: map[string]string{
+				"permission_codes": "tanpa " + permRoleManage + " tidak ada lagi yang bisa mengatur peran di usaha ini",
+			},
+		})
 		return
 	}
 
