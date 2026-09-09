@@ -24,7 +24,7 @@ Sebuah framework backend REST API berbasis Golang dan Gin, dengan struktur modul
 
 - **Multi-tenancy** — isolasi data per usaha di tiga lapisan: `scopeTenant` (repo), Row Level Security PostgreSQL, dan visibilitas kepemilikan (menyusul)
 - **Pendaftaran usaha 1 transaksi** — `POST /api/v1/auth/register` membuat tenant + outlet + peran bawaan + user pemilik sekaligus
-- **Otorisasi granular** — 39 permission, peran per-tenant, middleware `Require(...)` per-endpoint
+- **Otorisasi granular** — 50 permission, peran per-tenant, middleware `Require(...)` per-endpoint
 - **Master data** — kategori, satuan, produk (+ pencarian trigram < 200 ms), supplier
 - **Impor produk CSV** — pratinjau (`dry_run`), impor sebagian, laporan baris gagal per baris
 - **Kasir** — checkout 1 transaksi (harga dari server, hitung & bulat per baris), idempoten via `Idempotency-Key`, penomoran struk terkunci, void & retur, kasbon → piutang
@@ -39,6 +39,7 @@ Sebuah framework backend REST API berbasis Golang dan Gin, dengan struktur modul
 - **CRM tenant** — pipeline & tahap yang bisa diatur, deal + alasan menang/kalah, aktivitas follow-up; penawaran → proyek otomatis → invoice bertermin → pembayaran parsial; **pelunasan invoice tercatat sebagai satu penjualan di tabel `sales` yang sama dengan POS** (omzet & laba satu pintu). Visibilitas kepemilikan (lapis 3, `scopeVisibility`): sales hanya melihat datanya sendiri
 - **CRM sales lapangan** — rencana kunjungan (call plan), check-in/out dengan GPS + foto (direkam **hanya** saat check-in/out), kunjungan tanpa pesanan + alasan; kunjungan offline disinkron idempoten lewat `/sync/push` (`op: visit.upsert`); target sales + pencapaian; **komisi berbasis nilai TERTAGIH** (pembayaran non-kredit + setoran piutang lapangan), bukan terkirim
 - **Kanal pesanan online (fondasi, tanpa API)** — definisi kanal per outlet + tarif komisi, pemetaan SKU kanal ↔ produk, entri pesanan manual (WhatsApp/Instagram) + impor CSV laporan harian kanal; setiap pesanan = **satu `sales` bertanda `channel_id`** (potong stok + resep, komisi masuk `sale_payments.fee_amount`) → **laba bersih per kanal setelah komisi** lewat `/reports/profit`; idempoten per `external_order_id`; batal pesanan mengembalikan stok
+- **Absensi & penggajian** — karyawan + jadwal kerja mingguan, `attendances` buku besar (koreksi tak mengubah baris asli) + `attendance_days` cache yang dibangun ulang (urutan status TETAP: libur > cuti > absen > alpa), hari libur, cuti/izin + saldo; **mesin gaji deterministik** (urutan tetap: upah dasar → aturan earning → deduction → penyesuaian periode lalu → cicilan kasbon; snapshot nama/tipe/params tiap baris slip) → hitung → kunci → bayar (kas keluar `ref_table='payroll_periods'`); hitung ulang dari data sama = angka identik; koreksi setelah kunci → `payroll_adjustments` di periode berikutnya; kasbon dipotong bertahap
 - **Autentikasi JWT** — access token pendek (15 mnt) + refresh token (30 hari) dengan rotasi & deteksi pemakaian ulang
 - **Manajemen Outlet / User / Role** — CRUD tenant-scoped + Pagination ala Laravel
 - **Migrasi skema berversi** (`cmd/migrate`) — `AutoMigrate` dimatikan
@@ -176,7 +177,14 @@ Semua endpoint bisnis di bawah prefiks `/api/v1`.
 | `GET/POST/PUT/DELETE /api/v1/channels[/:id]` | `channel.manage` | Kanal per outlet + tarif komisi |
 | `GET/POST /api/v1/channels/:id/products` · `DELETE .../:pid` | `channel.manage` | Pemetaan SKU kanal ↔ produk |
 | `POST /api/v1/channels/:id/orders/import` | `channel.order.accept` | Impor CSV laporan harian kanal |
-| `GET/POST /api/v1/channel-orders[/:id]` · `.../status` · `.../cancel` | `channel.order.accept` | Entri pesanan manual, status, pembatalan |
+| `GET/POST/PUT /api/v1/channel-orders[/:id]` · `.../status` · `.../cancel` | `channel.order.accept` | Entri pesanan manual, status, pembatalan |
+| `GET/POST/PUT /api/v1/employees[/:id]` · `.../schedule` | `hr.employee.*` | Karyawan + jadwal kerja mingguan |
+| `GET/POST /api/v1/attendances` · `/attendance-corrections[/:id/approve]` | `hr.attendance.*` | Absensi (buku besar) + koreksi |
+| `POST /api/v1/leave-requests[/:id/approve\|reject]` | `hr.leave.*` | Cuti/izin + persetujuan (snapshot `is_paid`) |
+| `GET/POST /api/v1/payroll-rules` | `hr.payroll.run` | Komponen gaji (params per tipe) |
+| `POST /api/v1/payroll-periods/:id/{calculate,lock,pay}` | `hr.payroll.{run,lock,pay}` | Siklus gaji deterministik |
+| `GET /api/v1/payroll-periods/:id/payslips` · `/payslips/:id` | `hr.salary.view` | Slip gaji + rincian baris (izin paling sensitif) |
+| `POST /api/v1/employee-advances[/:id/disburse]` | `hr.advance.approve` | Kasbon → cair (kas keluar) → potong bertahap di gaji |
 | `POST /api/v1/shifts/open` · `/shifts/:id/close` | `shift.open` / `shift.close` | Buka / tutup shift |
 | `POST/GET /api/v1/cash-movements` | `cash.movement` | Kas masuk/keluar |
 | `GET  /api/v1/stocks?outlet_id=&low=` | `stock.view` | Saldo stok |

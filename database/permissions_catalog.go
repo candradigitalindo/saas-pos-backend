@@ -71,4 +71,17 @@ var permissionCatalog = []struct {
 	{"channel.manage", "Kanal", "Mengelola kanal & katalog kanal"},
 	{"channel.order.accept", "Kanal", "Menerima pesanan kanal"},
 	{"channel.settlement.view", "Kanal", "Melihat rekonsiliasi settlement kanal"},
+
+	// SDM & penggajian
+	{"hr.employee.view", "SDM", "Melihat data karyawan"},
+	{"hr.employee.edit", "SDM", "Menambah & mengubah karyawan, jadwal, libur"},
+	{"hr.attendance.view", "SDM", "Melihat absensi & rekap harian"},
+	{"hr.attendance.correct", "SDM", "Menyetujui koreksi absensi"},
+	{"hr.leave.request", "SDM", "Mengajukan cuti/izin"},
+	{"hr.leave.approve", "SDM", "Menyetujui cuti/izin"},
+	{"hr.payroll.run", "SDM", "Menjalankan perhitungan gaji"},
+	{"hr.payroll.lock", "SDM", "Mengunci periode gaji"},
+	{"hr.payroll.pay", "SDM", "Membayar gaji"},
+	{"hr.salary.view", "SDM", "Melihat nominal gaji & slip (izin paling sensitif)"},
+	{"hr.advance.approve", "SDM", "Menyetujui & mencairkan kasbon karyawan"},
 }

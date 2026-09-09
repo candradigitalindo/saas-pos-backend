@@ -48,8 +48,13 @@ type CashMovement struct {
 	Reason       string    `json:"reason" gorm:"not null"`
 	OccurredAt   time.Time `json:"occurred_at"`
 	BusinessDate time.Time `json:"business_date" gorm:"type:date"`
-	CreatedBy    string    `json:"created_by" gorm:"type:char(26);not null"`
-	CreatedAt    time.Time `json:"created_at"`
+	// RefTable/RefID: kas non-shift dari modul lain — 'payroll_periods'
+	// (pembayaran gaji) atau 'employee_advances' (pencairan kasbon), §5.11.
+	// Pointer agar baris kas biasa menyimpannya NULL (CHECK menolak string kosong).
+	RefTable  *string   `json:"ref_table,omitempty"`
+	RefID     *string   `json:"ref_id,omitempty" gorm:"type:char(26)"`
+	CreatedBy string    `json:"created_by" gorm:"type:char(26);not null"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 func (m *CashMovement) BeforeCreate(tx *gorm.DB) (err error) {

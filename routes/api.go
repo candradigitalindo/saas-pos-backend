@@ -331,6 +331,54 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	co.POST("/:id/status", controllers.UpdateChannelOrderStatus)
 	co.POST("/:id/cancel", controllers.CancelChannelOrder)
 
+	// SDM & penggajian (Fase 13, §5.11). hr.salary.view adalah izin paling
+	// sensitif — slip & kasbon.
+	hrView := middlewares.Require("hr.employee.view", "hr.employee.edit")
+	hrEdit := middlewares.Require("hr.employee.edit")
+	attView := middlewares.Require("hr.attendance.view", "hr.attendance.correct")
+
+	emp := t.Group("/employees")
+	emp.GET("", hrView, controllers.ListEmployees)
+	emp.POST("", hrEdit, controllers.CreateEmployee)
+	emp.GET("/:id", hrView, controllers.GetEmployee)
+	emp.PUT("/:id", hrEdit, controllers.UpdateEmployee)
+	emp.POST("/:id/schedule", hrEdit, controllers.SetWorkSchedule)
+
+	t.GET("/holidays", attView, controllers.ListHolidays)
+	t.POST("/holidays", hrEdit, controllers.CreateHoliday)
+
+	att := t.Group("/attendances")
+	att.GET("", attView, controllers.ListAttendances)
+	att.POST("", middlewares.Require("hr.attendance.view"), controllers.RecordAttendance)
+
+	ac := t.Group("/attendance-corrections")
+	ac.POST("", middlewares.Require("hr.attendance.view"), controllers.RequestCorrection)
+	ac.POST("/:id/approve", middlewares.Require("hr.attendance.correct"), controllers.ApproveCorrection)
+
+	lv := t.Group("/leave-requests")
+	lv.POST("", middlewares.Require("hr.leave.request", "hr.leave.approve"), controllers.CreateLeaveRequest)
+	lv.POST("/:id/approve", middlewares.Require("hr.leave.approve"), controllers.ApproveLeaveRequest)
+	lv.POST("/:id/reject", middlewares.Require("hr.leave.approve"), controllers.RejectLeaveRequest)
+
+	pr := t.Group("/payroll-rules", middlewares.Require("hr.payroll.run"))
+	pr.GET("", controllers.ListPayrollRules)
+	pr.POST("", controllers.CreatePayrollRule)
+
+	pp := t.Group("/payroll-periods")
+	pp.GET("", middlewares.Require("hr.payroll.run", "hr.salary.view"), controllers.ListPayrollPeriods)
+	pp.POST("", middlewares.Require("hr.payroll.run"), controllers.CreatePayrollPeriod)
+	pp.POST("/:id/calculate", middlewares.Require("hr.payroll.run"), controllers.CalculatePayroll)
+	pp.POST("/:id/lock", middlewares.Require("hr.payroll.lock"), controllers.LockPayroll)
+	pp.POST("/:id/pay", middlewares.Require("hr.payroll.pay"), controllers.PayPayroll)
+	pp.GET("/:id/payslips", middlewares.Require("hr.salary.view"), controllers.ListPayslips)
+
+	t.GET("/payslips/:id", middlewares.Require("hr.salary.view"), controllers.GetPayslip)
+
+	adv := t.Group("/employee-advances")
+	adv.GET("", middlewares.Require("hr.salary.view", "hr.advance.approve"), controllers.ListAdvances)
+	adv.POST("", middlewares.Require("hr.advance.approve"), controllers.CreateAdvance)
+	adv.POST("/:id/disburse", middlewares.Require("hr.advance.approve"), controllers.DisburseAdvance)
+
 	// Stok: baca + penyesuaian manual (saldo awal / koreksi).
 	t.GET("/stocks", middlewares.Require("stock.view"), controllers.ListStocks)
 	t.GET("/stock-movements", middlewares.Require("stock.view"), controllers.ListStockMovements)
