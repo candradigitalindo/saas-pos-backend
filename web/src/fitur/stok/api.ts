@@ -42,6 +42,46 @@ export interface Pembelian {
   created_at: string
 }
 
+export interface ItemOpname {
+  id: string
+  product_id: string
+  variant_id?: string
+  system_qty: string
+  counted_qty: string
+  diff_qty: string
+}
+
+export interface Opname {
+  id: string
+  outlet_id: string
+  status: string
+  note?: string
+  counted_at?: string
+  business_date: string
+  items?: ItemOpname[]
+  created_at: string
+}
+
+export interface ItemTransfer {
+  id: string
+  product_id: string
+  variant_id?: string
+  qty: string
+}
+
+export interface Transfer {
+  id: string
+  from_outlet_id: string
+  to_outlet_id: string
+  status: string
+  note?: string
+  sent_at?: string
+  received_at?: string
+  business_date: string
+  items?: ItemTransfer[]
+  created_at: string
+}
+
 export const stokApi = {
   saldo: (outlet_id: string, low?: boolean, page = 1, limit = 100) =>
     api.get<Halaman<SaldoStok>>('/stocks', {
@@ -82,4 +122,41 @@ export const stokApi = {
     api.get<Halaman<Pembelian>>('/purchases', { query: { page, limit } }),
 
   pembelian: (id: string) => api.get<Pembelian>(`/purchases/${id}`),
+
+  // ── Hitung fisik (opname) ────────────────────────────────────────────────
+  //
+  // Tiga langkah terpisah di backend, dan itu justru cocok dengan cara orang
+  // bekerja: sesi dibuat dulu, hitungan disimpan sambil berjalan, baru
+  // diposting di akhir. Petugas bisa berhenti di tengah tanpa kehilangan apa
+  // pun yang sudah dihitung.
+  buatOpname: (outlet_id: string, note?: string) =>
+    api.post<Opname>('/stock-opnames', { outlet_id, note }),
+
+  simpanHitungan: (id: string, items: { product_id: string; counted_qty: string }[]) =>
+    api.post<Opname>(`/stock-opnames/${id}/items`, { items }),
+
+  /** Menerapkan hasil hitungan ke stok. Tidak bisa dibatalkan. */
+  postingOpname: (id: string) => api.post<Opname>(`/stock-opnames/${id}/post`, {}),
+
+  daftarOpname: (page = 1, limit = 20) =>
+    api.get<Halaman<Opname>>('/stock-opnames', { query: { page, limit } }),
+
+  opname: (id: string) => api.get<Opname>(`/stock-opnames/${id}`),
+
+  // ── Kirim barang antar toko ──────────────────────────────────────────────
+  buatTransfer: (input: {
+    from_outlet_id: string
+    to_outlet_id: string
+    note?: string
+    items: { product_id: string; qty: string }[]
+  }) => api.post<Transfer>('/stock-transfers', input),
+
+  kirimTransfer: (id: string) => api.post<Transfer>(`/stock-transfers/${id}/send`, {}),
+
+  terimaTransfer: (id: string) => api.post<Transfer>(`/stock-transfers/${id}/receive`, {}),
+
+  daftarTransfer: (page = 1, limit = 20) =>
+    api.get<Halaman<Transfer>>('/stock-transfers', { query: { page, limit } }),
+
+  transfer: (id: string) => api.get<Transfer>(`/stock-transfers/${id}`),
 }

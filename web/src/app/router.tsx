@@ -32,6 +32,14 @@ const HalamanStok = muat(() => import('@/fitur/stok/halaman/halaman-stok'), 'Hal
 const HalamanKartuStok = muat(() => import('@/fitur/stok/halaman/halaman-kartu-stok'), 'HalamanKartuStok')
 const HalamanKoreksiStok = muat(() => import('@/fitur/stok/halaman/halaman-koreksi-stok'), 'HalamanKoreksiStok')
 const HalamanBarangMasuk = muat(() => import('@/fitur/stok/halaman/halaman-barang-masuk'), 'HalamanBarangMasuk')
+const HalamanOpname = muat(() => import('@/fitur/stok/halaman/halaman-opname'), 'HalamanOpname')
+const HalamanTransfer = muat(() => import('@/fitur/stok/halaman/halaman-transfer'), 'HalamanTransfer')
+const HalamanPelanggan = muat(() => import('@/fitur/pelanggan/halaman/halaman-pelanggan'), 'HalamanPelanggan')
+const HalamanKasbon = muat(() => import('@/fitur/pelanggan/halaman/halaman-kasbon'), 'HalamanKasbon')
+const HalamanPengaturan = muat(() => import('@/fitur/pengaturan/halaman/halaman-pengaturan'), 'HalamanPengaturan')
+const HalamanToko = muat(() => import('@/fitur/pengaturan/halaman/halaman-toko'), 'HalamanToko')
+const HalamanPengguna = muat(() => import('@/fitur/pengaturan/halaman/halaman-pengguna'), 'HalamanPengguna')
+const HalamanPeran = muat(() => import('@/fitur/pengaturan/halaman/halaman-peran'), 'HalamanPeran')
 
 /** React.lazy untuk modul yang mengekspor komponen bernama, bukan default. */
 function muat<N extends string>(
@@ -255,6 +263,86 @@ const router = createBrowserRouter([
           <ButuhIzin izin={[IZIN.stockAdjust]}>
             <Tunggu>
               <HalamanBarangMasuk />
+            </Tunggu>
+          </ButuhIzin>
+        ),
+      },
+      {
+        path: '/stok/opname',
+        element: (
+          <ButuhIzin izin={[IZIN.stockOpname]}>
+            <Tunggu>
+              <HalamanOpname />
+            </Tunggu>
+          </ButuhIzin>
+        ),
+      },
+      {
+        path: '/stok/transfer',
+        element: (
+          <ButuhIzin izin={[IZIN.stockTransfer]}>
+            <Tunggu>
+              <HalamanTransfer />
+            </Tunggu>
+          </ButuhIzin>
+        ),
+      },
+      {
+        path: '/pelanggan',
+        element: (
+          <ButuhIzin izin={[IZIN.customerView]}>
+            <Tunggu>
+              <HalamanPelanggan />
+            </Tunggu>
+          </ButuhIzin>
+        ),
+      },
+      {
+        path: '/kasbon',
+        element: (
+          <ButuhIzin izin={[IZIN.receivableManage]}>
+            <Tunggu>
+              <HalamanKasbon />
+            </Tunggu>
+          </ButuhIzin>
+        ),
+      },
+      {
+        path: '/pengaturan',
+        element: (
+          <ButuhIzin izin={[IZIN.outletManage, IZIN.userManage, IZIN.roleManage]}>
+            <Tunggu>
+              <HalamanPengaturan />
+            </Tunggu>
+          </ButuhIzin>
+        ),
+      },
+      {
+        path: '/pengaturan/toko',
+        element: (
+          <ButuhIzin izin={[IZIN.outletManage]}>
+            <Tunggu>
+              <HalamanToko />
+            </Tunggu>
+          </ButuhIzin>
+        ),
+      },
+      {
+        path: '/pengaturan/pengguna',
+        element: (
+          <ButuhIzin izin={[IZIN.userManage]}>
+            <Tunggu>
+              <HalamanPengguna />
+            </Tunggu>
+          </ButuhIzin>
+        ),
+      },
+      {
+        path: '/pengaturan/peran',
+        element: (
+          <ButuhIzin izin={[IZIN.roleManage]}>
+            <Tunggu>
+              <HalamanPeran />
             </Tunggu>
           </ButuhIzin>
         ),

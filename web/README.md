@@ -69,5 +69,6 @@ berbagi, naikkan ke `bersama/`.
 | U2 | Barang & stok: CRUD barang, impor CSV, kategori/satuan/pemasok, saldo & kartu stok, koreksi, barang masuk | ✅ Selesai |
 | U3 | Offline: PWA, Dexie, antrean kirim, halaman "belum terkirim", pecah kode per rute | ✅ Selesai |
 | U4 | Laporan: beranda berangka, untung-rugi, per hari/kanal/kasir/metode bayar, grafik, unduh CSV | ✅ Selesai |
-| U5 | Operasional lanjutan | ⏳ Berikutnya |
-| U6 | Modul berbayar | — |
+| U5 | Operasional lanjutan: hitung fisik, kirim antar toko, pelanggan & kasbon, pengaturan (toko, pengguna, peran dinamis + peran ganda) | ✅ Selesai |
+| U6 | Modul berbayar (kanal, CRM, SDM & gaji, langganan, portal mitra) | ⏳ Berikutnya |
+| UX | Panel internal penyedia SaaS | — |
