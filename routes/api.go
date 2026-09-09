@@ -56,7 +56,13 @@ func SetupRouter() *gin.Engine {
 		[]string{"http://localhost:5173", "http://localhost:3000"},
 	)
 	corsConfig.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
-	corsConfig.AllowHeaders = []string{"Origin", "Content-Type", "Accept", "Authorization"}
+	// Idempotency-Key WAJIB ada di daftar ini. Tanpanya, preflight browser
+	// menolak POST /sales, /purchases, /invoice-payments, dan
+	// /subscription-payments — yaitu seluruh aksi yang menciptakan uang atau
+	// stok — sehingga klien web tidak bisa checkout sama sekali.
+	corsConfig.AllowHeaders = []string{
+		"Origin", "Content-Type", "Accept", "Authorization", "Idempotency-Key",
+	}
 	r.Use(cors.New(corsConfig))
 
 	// Rute & method tak dikenal tetap memakai bentuk response baku aplikasi,

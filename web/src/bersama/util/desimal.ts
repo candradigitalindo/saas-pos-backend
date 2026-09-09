@@ -1,0 +1,36 @@
+/**
+ * Jumlah barang datang dari server sebagai string desimal ("1.5") supaya 0,5 kg
+ * tetap presisi. Diolah dengan decimal.js, tidak pernah dengan Number, lalu
+ * dikirim balik sebagai string.
+ */
+import Decimal from 'decimal.js'
+
+export function tambahQty(qty: string, delta: number | string): string {
+  return new Decimal(qty || '0').plus(delta).toString()
+}
+
+export function kurangQty(qty: string, delta: number | string, minimal = '0'): string {
+  const hasil = new Decimal(qty || '0').minus(delta)
+  const batas = new Decimal(minimal)
+  return (hasil.lessThan(batas) ? batas : hasil).toString()
+}
+
+export function bandingQty(a: string, b: string): number {
+  return new Decimal(a || '0').comparedTo(new Decimal(b || '0'))
+}
+
+export function qtyKosong(qty: string): boolean {
+  return new Decimal(qty || '0').lessThanOrEqualTo(0)
+}
+
+/** "44" bukan "44.00"; "1.5" tetap "1,5" untuk mata Indonesia. */
+export function formatQty(qty: string): string {
+  const d = new Decimal(qty || '0')
+  const teks = d.toDecimalPlaces(3).toString()
+  return teks.replace('.', ',')
+}
+
+/** Teks jumlah + satuan, siap tampil: "44 pcs". */
+export function formatQtySatuan(qty: string, satuan?: string): string {
+  return satuan ? `${formatQty(qty)} ${satuan}` : formatQty(qty)
+}

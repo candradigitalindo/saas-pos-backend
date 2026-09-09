@@ -1,0 +1,152 @@
+/**
+ * Sesi pengguna toko: profil, izin efektif, dan toko yang sedang aktif.
+ *
+ * Izin datang dari GET /me sebagai GABUNGAN seluruh peran yang dipegang
+ * pengguna (backend mendukung peran ganda). UI tidak pernah menghitungnya
+ * sendiri.
+ */
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { authApi } from '@/fitur/auth/api'
+import type { ProfilSaya } from '@/fitur/auth/tipe'
+import { GalatAPI } from '@/lib/api-client'
+import { adaSesi, ambilSesi, hapusSesi, langganSesi, simpanSesi } from '@/lib/penyimpanan-sesi'
+import type { KodeIzin } from '@/lib/izin'
+
+interface NilaiSesi {
+  profil: ProfilSaya | undefined
+  memuat: boolean
+  sudahMasuk: boolean
+  /** true bila salah satu kode izin dimiliki (sama seperti Require di backend). */
+  boleh: (...kode: KodeIzin[]) => boolean
+  /** Toko yang sedang dipakai. Kasir hampir selalu hanya punya satu. */
+  tokoAktif: string | undefined
+  gantiToko: (id: string) => void
+  masuk: (username: string, password: string) => Promise<void>
+  keluar: () => Promise<void>
+  /** Dipakai setelah pendaftaran: sesi sudah diberikan server, tinggal disimpan. */
+  pakaiSesiBaru: (auth: {
+    access_token: string
+    refresh_token: string
+    expires_in: number
+  }) => void
+}
+
+const KonteksSesi = createContext<NilaiSesi | null>(null)
+const KUNCI_TOKO = 'pos.toko-aktif'
+
+export function PenyediaSesi({ children }: { children: ReactNode }) {
+  const qc = useQueryClient()
+  const [punyaSesi, setPunyaSesi] = useState(() => adaSesi('tenant'))
+  const [tokoDipilih, setTokoDipilih] = useState<string | null>(() =>
+    localStorage.getItem(KUNCI_TOKO),
+  )
+
+  useEffect(() => langganSesi(() => setPunyaSesi(adaSesi('tenant'))), [])
+
+  const { data: profil, isLoading } = useQuery({
+    queryKey: ['me'],
+    queryFn: authApi.saya,
+    enabled: punyaSesi,
+    staleTime: 5 * 60 * 1000,
+    retry: (gagal, e) => !(e instanceof GalatAPI && e.status === 401) && gagal < 2,
+  })
+
+  const izin = useMemo(() => new Set(profil?.permissions ?? []), [profil])
+
+  const boleh = useCallback(
+    (...kode: KodeIzin[]) => kode.some((k) => izin.has(k)),
+    [izin],
+  )
+
+  const tokoAktif = useMemo(() => {
+    const daftar = profil?.outlet_ids ?? []
+    if (tokoDipilih && daftar.includes(tokoDipilih)) return tokoDipilih
+    return daftar[0]
+  }, [profil, tokoDipilih])
+
+  const gantiToko = useCallback((id: string) => {
+    localStorage.setItem(KUNCI_TOKO, id)
+    setTokoDipilih(id)
+  }, [])
+
+  const pakaiSesiBaru = useCallback(
+    (auth: { access_token: string; refresh_token: string; expires_in: number }) => {
+      simpanSesi('tenant', {
+        access_token: auth.access_token,
+        refresh_token: auth.refresh_token,
+        kedaluwarsa: Date.now() + auth.expires_in * 1000,
+      })
+      setPunyaSesi(true)
+    },
+    [],
+  )
+
+  const masuk = useCallback(
+    async (username: string, password: string) => {
+      const hasil = await authApi.masuk(username, password)
+      pakaiSesiBaru(hasil)
+      await qc.invalidateQueries({ queryKey: ['me'] })
+    },
+    [pakaiSesiBaru, qc],
+  )
+
+  const keluar = useCallback(async () => {
+    const sesi = ambilSesi('tenant')
+    try {
+      if (sesi?.refresh_token) await authApi.keluar(sesi.refresh_token)
+    } catch {
+      // Keluar tidak boleh gagal dari sisi pengguna. Kalau server tak terjangkau,
+      // sesi lokal tetap dibuang.
+    }
+    hapusSesi('tenant')
+    localStorage.removeItem(KUNCI_TOKO)
+    setPunyaSesi(false)
+    qc.clear()
+  }, [qc])
+
+  const nilai = useMemo<NilaiSesi>(
+    () => ({
+      profil,
+      memuat: punyaSesi && isLoading,
+      sudahMasuk: punyaSesi && !!profil,
+      boleh,
+      tokoAktif,
+      gantiToko,
+      masuk,
+      keluar,
+      pakaiSesiBaru,
+    }),
+    [profil, punyaSesi, isLoading, boleh, tokoAktif, gantiToko, masuk, keluar, pakaiSesiBaru],
+  )
+
+  return <KonteksSesi.Provider value={nilai}>{children}</KonteksSesi.Provider>
+}
+
+export function useSesi(): NilaiSesi {
+  const v = useContext(KonteksSesi)
+  if (!v) throw new Error('useSesi dipakai di luar PenyediaSesi')
+  return v
+}
+
+/**
+ * Pintasan untuk penjagaan izin di dalam komponen.
+ *
+ *   const { boleh } = useIzin()
+ *   {boleh('sale.void') && <TombolBatalkan />}
+ *
+ * Ingat aturannya: izin MENYEMBUNYIKAN, bukan menonaktifkan. Tombol abu-abu
+ * yang tidak bisa diklik membuat pengguna menelepon dukungan.
+ */
+export function useIzin() {
+  const { boleh } = useSesi()
+  return { boleh }
+}

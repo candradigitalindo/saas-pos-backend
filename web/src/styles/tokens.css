@@ -1,0 +1,172 @@
+/* Token desain — sumber kebenaran tunggal.
+   Nilainya diambil apa adanya dari ui/02-SISTEM-DESAIN.md, termasuk rasio
+   kontras yang sudah diverifikasi di sana. Jangan mengubah angka di sini tanpa
+   memperbarui dokumen itu lebih dulu. */
+
+@import 'tailwindcss';
+@import '@fontsource-variable/plus-jakarta-sans';
+
+@theme {
+  /* ── Hijau Tumbuh — warna utama ─────────────────────────────────────── */
+  --color-hijau-50: #ecfdf5;
+  --color-hijau-100: #d1fae5;
+  --color-hijau-500: #10b981;
+  --color-hijau-600: #059669;
+  --color-hijau-700: #047857; /* isian tombol utama — 5.48:1 dgn teks putih */
+  --color-hijau-800: #065f46;
+
+  /* ── Jingga Semangat — aksen, SELALU teks gelap di atasnya ──────────── */
+  --color-jingga-100: #fef3c7;
+  --color-jingga-400: #fbbf24;
+  --color-jingga-600: #d97706;
+  --color-jingga-700: #b45309;
+
+  /* ── Semantik ───────────────────────────────────────────────────────── */
+  --color-bahaya: #dc2626; /* isian, teks putih 4.83:1 */
+  --color-bahaya-teks: #b91c1c; /* teks di latar terang 6.47:1 */
+  --color-info: #2563eb; /* isian, teks putih 5.17:1 */
+  --color-info-teks: #1d4ed8; /* teks di latar terang 6.70:1 */
+
+  /* ── Netral hangat (batu), bukan abu kebiruan ───────────────────────── */
+  --color-latar: var(--warna-latar);
+  --color-permukaan: var(--warna-permukaan);
+  --color-permukaan-2: var(--warna-permukaan-2);
+  --color-garis: var(--warna-garis);
+  --color-teks-redup: var(--warna-teks-redup);
+  --color-teks-sekunder: var(--warna-teks-sekunder);
+  --color-teks-utama: var(--warna-teks-utama);
+  --color-utama: var(--warna-utama);
+  --color-utama-teks: var(--warna-utama-teks);
+  --color-sorot: var(--warna-sorot);
+
+  /* ── Warna kategori grafik (tetap terbedakan oleh buta warna) ───────── */
+  --color-grafik-1: #047857;
+  --color-grafik-2: #2563eb;
+  --color-grafik-3: #b45309;
+  --color-grafik-4: #7c3aed;
+  --color-grafik-5: #0e7490;
+  --color-grafik-6: #be185d;
+
+  /* ── Tipografi ──────────────────────────────────────────────────────── */
+  --font-sans: 'Plus Jakarta Sans Variable', -apple-system, 'Segoe UI', Roboto,
+    sans-serif;
+
+  --text-keterangan: 0.8125rem; /* 13px — minimum absolut */
+  --text-keterangan--line-height: 1.125rem;
+  --text-label: 0.875rem; /* 14px */
+  --text-label--line-height: 1.25rem;
+  --text-isi: 1rem; /* 16px — jangan lebih kecil */
+  --text-isi--line-height: 1.5rem;
+  --text-judul-kartu: 1.125rem; /* 18px */
+  --text-judul-kartu--line-height: 1.625rem;
+  --text-judul: 1.5rem; /* 24px */
+  --text-judul--line-height: 2rem;
+  --text-angka: 2.5rem; /* 40px — angka sorotan */
+  --text-angka--line-height: 2.75rem;
+
+  /* ── Sudut ──────────────────────────────────────────────────────────── */
+  --radius-kontrol: 8px;
+  --radius-kartu: 12px;
+  --radius-dialog: 16px;
+
+  /* ── Bayangan — hanya tiga tingkat ──────────────────────────────────── */
+  --shadow-kartu: 0 1px 2px rgb(0 0 0 / 0.05);
+  --shadow-melayang: 0 4px 12px rgb(0 0 0 / 0.08);
+  --shadow-dialog: 0 16px 40px rgb(0 0 0 / 0.16);
+
+  /* ── Tinggi kontrol — target sentuh jari, bukan kursor ──────────────── */
+  --spacing-padat: 40px;
+  --spacing-normal: 48px; /* minimum target sentuh */
+  --spacing-kasir: 64px; /* tombol utama layar kasir */
+}
+
+/* Palet terang (bawaan). */
+:root {
+  --warna-latar: #fafaf9;
+  --warna-permukaan: #ffffff;
+  --warna-permukaan-2: #f5f5f4;
+  --warna-garis: #e7e5e4;
+  --warna-teks-redup: #78716c; /* 4.59:1 */
+  --warna-teks-sekunder: #57534e; /* 7.30:1 */
+  --warna-teks-utama: #1c1917; /* 16.74:1 */
+  --warna-utama: #047857;
+  --warna-utama-teks: #ffffff;
+  --warna-sorot: #ecfdf5;
+  color-scheme: light;
+}
+
+/* Palet gelap — dipakai kasir malam hari. Bukan pembalikan warna: hitam murni
+   #000 sengaja dihindari karena melelahkan mata saat dipakai berjam-jam. */
+:root[data-tema='gelap'] {
+  --warna-latar: #1c1917;
+  --warna-permukaan: #292524;
+  --warna-permukaan-2: #33302d;
+  --warna-garis: #44403c;
+  --warna-teks-redup: #a8a29e;
+  --warna-teks-sekunder: #d6d3d1;
+  --warna-teks-utama: #fafaf9;
+  --warna-utama: #34d399; /* lebih terang agar tetap terbaca di latar gelap */
+  --warna-utama-teks: #1c1917;
+  --warna-sorot: #064e3b;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema='terang']) {
+    --warna-latar: #1c1917;
+    --warna-permukaan: #292524;
+    --warna-permukaan-2: #33302d;
+    --warna-garis: #44403c;
+    --warna-teks-redup: #a8a29e;
+    --warna-teks-sekunder: #d6d3d1;
+    --warna-teks-utama: #fafaf9;
+    --warna-utama: #34d399;
+    --warna-utama-teks: #1c1917;
+    --warna-sorot: #064e3b;
+    color-scheme: dark;
+  }
+}
+
+@layer base {
+  * {
+    border-color: var(--warna-garis);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--warna-latar);
+    color: var(--warna-teks-utama);
+    font-family: var(--font-sans);
+    font-size: var(--text-isi);
+    line-height: var(--text-isi--line-height);
+    -webkit-font-smoothing: antialiased;
+    /* Ruang aman untuk navigasi bawah di HP berponi. */
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Semua angka lurus dan tidak "bergoyang" saat berubah. */
+  :is(input, td, th, .angka, [data-angka]) {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Fokus selalu terlihat — kasir sering memakai papan tik eksternal. */
+  :focus-visible {
+    outline: 2px solid var(--warna-utama);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Hormati permintaan pengguna untuk mengurangi gerak. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
