@@ -4,16 +4,19 @@ package structs
 // klien tidak perlu resolve terpisah. Token diisi hanya pada endpoint auth lama
 // (dipertahankan untuk kompatibilitas; alur baru memakai AuthResponse).
 type UserResponse struct {
-	Id        string  `json:"id"`
-	Name      string  `json:"name"`
-	Username  string  `json:"username"`
-	Email     string  `json:"email"`
-	RoleID    string  `json:"role_id,omitempty"`
-	RoleName  string  `json:"role_name"`
-	IsActive  bool    `json:"is_active"`
-	CreatedAt string  `json:"created_at"`
-	UpdatedAt string  `json:"updated_at"`
-	Token     *string `json:"token,omitempty"`
+	Id       string `json:"id"`
+	Name     string `json:"name"`
+	Username string `json:"username"`
+	Email    string `json:"email"`
+	RoleID   string `json:"role_id,omitempty"` // peran UTAMA
+	RoleName string `json:"role_name"`
+	// RoleIDs = SELURUH peran yang dipegang (termasuk peran utama). Izin
+	// efektifnya adalah gabungan izin peran-peran ini.
+	RoleIDs   []string `json:"role_ids,omitempty"`
+	IsActive  bool     `json:"is_active"`
+	CreatedAt string   `json:"created_at"`
+	UpdatedAt string   `json:"updated_at"`
+	Token     *string  `json:"token,omitempty"`
 }
 
 // UserCreateRequest — pembuatan user staf oleh pemilik/manajer
@@ -25,7 +28,10 @@ type UserCreateRequest struct {
 	Username string `json:"username" binding:"required,min=3,max=50"`
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required,min=8"`
-	RoleID   string `json:"role_id" binding:"required,ulid"` // harus role milik tenant yang sama (dicek di controller)
+	RoleID   string `json:"role_id" binding:"required,ulid"` // peran UTAMA; harus milik tenant yang sama (dicek di controller)
+	// RoleIDs = peran TAMBAHAN, opsional. Izin efektif = gabungan peran utama +
+	// peran tambahan (migrasi 000034). Kosong = hanya peran utama.
+	RoleIDs []string `json:"role_ids" binding:"omitempty,dive,ulid"`
 }
 
 // UserUpdateRequest — perubahan user staf. omitempty: field yang tidak dikirim
@@ -36,7 +42,11 @@ type UserUpdateRequest struct {
 	Email    string `json:"email" binding:"omitempty,email"`
 	Password string `json:"password" binding:"omitempty,min=8"`
 	RoleID   string `json:"role_id" binding:"omitempty,ulid"`
-	IsActive *bool  `json:"is_active" binding:"omitempty"`
+	// RoleIDs dikirim = ganti SELURUH peran tambahan. Tidak dikirim = peran
+	// tidak diubah sama sekali (pakai pointer agar "kirim array kosong" —
+	// artinya hapus semua peran tambahan — bisa dibedakan dari "tidak dikirim").
+	RoleIDs  *[]string `json:"role_ids" binding:"omitempty,dive,ulid"`
+	IsActive *bool     `json:"is_active" binding:"omitempty"`
 }
 
 // Struct ini digunakan saat user melakukan proses login.

@@ -44,3 +44,19 @@ type UserOutlet struct {
 
 // TableName memastikan GORM memakai "user_outlets".
 func (UserOutlet) TableName() string { return "user_outlets" }
+
+// UserRole menautkan user ke peran-perannya. Satu user boleh memegang beberapa
+// peran; izin efektifnya adalah GABUNGAN izin seluruh peran itu (migrasi
+// 000034). Tabel penghubung murni — tanpa kolom `id` (§5.17).
+//
+// `users.role_id` tetap ada sebagai peran UTAMA (jabatan yang ditampilkan) dan
+// nilainya selalu ikut hadir di sini; sinkronisasinya dijaga di satu tempat,
+// repositories.SetUserRoles.
+type UserRole struct {
+	TenantID string `json:"tenant_id" gorm:"type:char(26);not null"`
+	UserID   string `json:"user_id" gorm:"primaryKey;type:char(26)"`
+	RoleID   string `json:"role_id" gorm:"primaryKey;type:char(26)"`
+}
+
+// TableName memastikan GORM memakai "user_roles".
+func (UserRole) TableName() string { return "user_roles" }

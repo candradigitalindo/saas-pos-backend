@@ -27,6 +27,14 @@ func userToResponse(user models.User) structs.UserResponse {
 	}
 }
 
+// userToResponseWithRoles sama seperti userToResponse, ditambah SELURUH peran
+// yang dipegang user (peran utama + tambahan, migrasi 000034).
+func userToResponseWithRoles(user models.User, roleIDs []string) structs.UserResponse {
+	r := userToResponse(user)
+	r.RoleIDs = roleIDs
+	return r
+}
+
 // newRefreshTokenRow membuat baris refresh token baru (belum disimpan) beserta
 // nilai MENTAH yang harus dikembalikan ke klien. Hanya hash-nya yang tersimpan.
 func newRefreshTokenRow(userID, deviceName string) (row *models.RefreshToken, raw string, err error) {

@@ -202,6 +202,12 @@ func RegisterTenant(ctx context.Context, in RegisterTenantInput) (*RegisterTenan
 			return err
 		}
 
+		// Peran utama pemilik juga dicatat di `user_roles` — sumber kebenaran
+		// hak akses sejak migrasi 000034.
+		if err := repositories.SetUserRoles(ctx, tx, tenant.ID, owner.ID, ownerRoleID, nil); err != nil {
+			return err
+		}
+
 		// 6. Akses ke outlet pertama.
 		if err := repositories.LinkUserOutlet(ctx, tx, models.UserOutlet{
 			TenantID: tenant.ID,

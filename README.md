@@ -15,7 +15,7 @@ Sebuah framework backend REST API berbasis Golang dan Gin, dengan struktur modul
 > harus dibuktikan sebelum menambah saluran.
 
 > **Spesifikasi teknis: [docs/TECHNICAL-BACKEND.md](docs/TECHNICAL-BACKEND.md).**
-> Skema 102 tabel beserta relasinya, konvensi ULID & zona waktu (UTC + WIB/WITA/WIT),
+> Skema 103 tabel beserta relasinya, konvensi ULID & zona waktu (UTC + WIB/WITA/WIT),
 > kontrak API, protokol sinkronisasi offline, dan urutan implementasi per fase.
 
 ---
@@ -43,7 +43,8 @@ Sebuah framework backend REST API berbasis Golang dan Gin, dengan struktur modul
 - **Program Mitra Penjual (agen & afiliasi)** — modul **platform** untuk merekrut tenant, dengan **realm autentikasi terpisah** (`/api/v1/partner/*`, token realm `partner` ditolak di semua rute tenant dan sebaliknya). Kode referral valid saat pendaftaran → kaitan `partner_referrals` sekali seumur hidup (dasar komisi). **Mesin komisi deterministik** (`cmd/partner-commissions`): berulang selama merchant berlangganan, dihitung dari `subscription_invoices.paid_amount` (uang yang benar-benar diterima), **ambang aktivasi** (≥N transaksi / N hari) sebelum komisi pertama, **clawback** bila merchant berhenti dalam masa tertentu, **potong pajak** dipisah di pencairan (bruto − clawback − pajak = neto); hitung ulang idempoten (hanya baris `held`). Portal mitra: dashboard, daftar prospek, **status merchant binaan SAJA** (status langganan + jatuh tempo + aktif — tidak pernah omzet/produk/pelanggan/transaksi, blueprint G.8), rincian komisi & pencairan. Setiap akses mitra ke data merchant dicatat di `audit_logs` (§5.14, `actor_type='partner_user'`) — satu insert batch per pembukaan halaman, dan kegagalan mencatatnya menggagalkan permintaan
 - **Absensi & penggajian** — karyawan + jadwal kerja mingguan, `attendances` buku besar (koreksi tak mengubah baris asli) + `attendance_days` cache yang dibangun ulang (urutan status TETAP: libur > cuti > absen > alpa), hari libur, cuti/izin + saldo; **mesin gaji deterministik** (urutan tetap: upah dasar → aturan earning → deduction → penyesuaian periode lalu → cicilan kasbon; snapshot nama/tipe/params tiap baris slip) → hitung → kunci → bayar (kas keluar `ref_table='payroll_periods'`); hitung ulang dari data sama = angka identik; koreksi setelah kunci → `payroll_adjustments` di periode berikutnya; kasbon dipotong bertahap
 - **Autentikasi JWT** — access token pendek (15 mnt) + refresh token (30 hari) dengan rotasi & deteksi pemakaian ulang
-- **Manajemen Outlet / User / Role** — CRUD tenant-scoped + Pagination ala Laravel
+- **Peran dinamis per tenant** — pendaftaran menyiapkan 4 peran bawaan (Pemilik/Manajer/Kasir/Gudang), lalu tenant bebas menambah, mengubah izin, dan menghapus peran lewat `role.manage`. **Satu user boleh memegang beberapa peran** (`user_roles`); izin efektifnya = gabungan izin seluruh perannya. Dua batas yang dikunci: peran bawaan pemilik wajib mempertahankan `role.manage` (kalau tidak, tenant terkunci permanen), dan peran yang masih dipegang seseorang tidak bisa dihapus
+- **Manajemen Outlet / User** — CRUD tenant-scoped + Pagination ala Laravel
 - **Migrasi skema berversi** (`cmd/migrate`) — `AutoMigrate` dimatikan
 - **Soft delete** + partial unique index (baris terhapus tidak memblokir pendaftaran ulang)
 - **Health check** — `/health` (liveness) & `/health/ready` (readiness)

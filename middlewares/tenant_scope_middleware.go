@@ -48,7 +48,7 @@ func TenantScope() gin.HandlerFunc {
 			return
 		}
 
-		codes, err := repositories.EffectivePermissionCodes(ctx, user.RoleID)
+		codes, err := repositories.UserPermissionCodes(ctx, user.ID)
 		if err != nil {
 			log.Error("gagal memuat permission efektif", slog.Any("error", err), slog.String("user_id", userID))
 			abort(c, http.StatusInternalServerError, "server", "Terjadi kesalahan internal")

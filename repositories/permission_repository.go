@@ -66,6 +66,110 @@ func EffectivePermissionCodes(ctx context.Context, roleID string) ([]string, err
 	return codes, err
 }
 
+// UserPermissionCodes mengembalikan izin efektif seorang USER: GABUNGAN izin
+// seluruh peran yang dipegangnya (migrasi 000034). Satu query, DISTINCT.
+//
+// Inilah yang dipakai middleware TenantScope setiap permintaan — bukan
+// EffectivePermissionCodes(user.role_id), yang hanya melihat peran utama dan
+// akan mengabaikan peran tambahan.
+func UserPermissionCodes(ctx context.Context, userID string) ([]string, error) {
+	if userID == "" {
+		return nil, nil
+	}
+	var codes []string
+	err := database.DB.WithContext(ctx).
+		Table("user_roles AS ur").
+		Joins("JOIN role_permissions rp ON rp.role_id = ur.role_id").
+		Joins("JOIN permissions p ON p.id = rp.permission_id").
+		Where("ur.user_id = ?", userID).
+		Distinct().
+		Pluck("p.code", &codes).Error
+	return codes, err
+}
+
+// RoleIDsForUsers memuat peran BANYAK user sekaligus — satu query untuk seluruh
+// halaman daftar user, bukan satu query per baris.
+func RoleIDsForUsers(ctx context.Context, userIDs []string) (map[string][]string, error) {
+	out := map[string][]string{}
+	if len(userIDs) == 0 {
+		return out, nil
+	}
+	var rows []models.UserRole
+	if err := scopeTenant(ctx, tenantDB(ctx, nil)).
+		Where("user_id IN ?", userIDs).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		out[r.UserID] = append(out[r.UserID], r.RoleID)
+	}
+	return out, nil
+}
+
+// RoleIDsForUser mengembalikan seluruh peran yang dipegang user.
+func RoleIDsForUser(ctx context.Context, tx *gorm.DB, userID string) ([]string, error) {
+	var ids []string
+	err := scopeTenant(ctx, tenantDB(ctx, tx).Model(&models.UserRole{})).
+		Where("user_id = ?", userID).Pluck("role_id", &ids).Error
+	return ids, err
+}
+
+// SetUserRoles mengganti SELURUH peran seorang user sekaligus menyetel peran
+// utamanya (`users.role_id`), dalam satu operasi.
+//
+// SATU-SATUNYA tempat kedua sumber itu ditulis, supaya tidak pernah bisa
+// berbeda: peran utama dipastikan selalu ikut masuk `user_roles`. roleIDs boleh
+// kosong — artinya user hanya memegang peran utama.
+// tenantID diminta EKSPLISIT, tidak diambil dari context: pendaftaran usaha
+// baru memanggil ini saat tenant-nya baru saja lahir dan belum ada di context.
+func SetUserRoles(ctx context.Context, tx *gorm.DB, tenantID, userID, primaryRoleID string, roleIDs []string) error {
+	tid := tenantID
+
+	// Peran utama WAJIB termasuk; duplikat dibuang.
+	want := map[string]struct{}{}
+	if primaryRoleID != "" {
+		want[primaryRoleID] = struct{}{}
+	}
+	for _, id := range roleIDs {
+		if id != "" {
+			want[id] = struct{}{}
+		}
+	}
+
+	if err := tx.WithContext(ctx).
+		Where("tenant_id = ? AND user_id = ?", tid, userID).
+		Delete(&models.UserRole{}).Error; err != nil {
+		return err
+	}
+	if len(want) > 0 {
+		rows := make([]models.UserRole, 0, len(want))
+		for id := range want {
+			rows = append(rows, models.UserRole{TenantID: tid, UserID: userID, RoleID: id})
+		}
+		if err := tx.WithContext(ctx).Create(&rows).Error; err != nil {
+			return err
+		}
+	}
+	return tx.WithContext(ctx).Model(&models.User{}).
+		Where("tenant_id = ? AND id = ?", tid, userID).
+		UpdateColumn("role_id", nilIfEmptyStr(primaryRoleID)).Error
+}
+
+// UsersHoldingRole menghitung berapa user yang masih memegang sebuah peran —
+// lewat peran utama MAUPUN peran tambahan. Dipakai sebelum menghapus peran.
+func UsersHoldingRole(ctx context.Context, tx *gorm.DB, roleID string) (int64, error) {
+	var n int64
+	err := scopeTenant(ctx, tenantDB(ctx, tx).Model(&models.UserRole{})).
+		Where("role_id = ?", roleID).Count(&n).Error
+	return n, err
+}
+
+func nilIfEmptyStr(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
 // ReplaceRolePermissions mengganti seluruh pemetaan permission sebuah role
 // dengan permissionIDs yang diberikan, dalam satu transaksi (hapus lalu sisip).
 // Dipakai endpoint pengaturan peran.

@@ -103,6 +103,7 @@ func DeleteRole(ctx context.Context, id string) error {
 			return ErrRoleInUse
 		}
 
+		// Dipakai sebagai peran UTAMA?
 		var inUse int64
 		if err := scopeTenant(ctx, tx.Model(&models.User{})).
 			Where("role_id = ?", id).
@@ -110,6 +111,16 @@ func DeleteRole(ctx context.Context, id string) error {
 			return err
 		}
 		if inUse > 0 {
+			return ErrRoleInUse
+		}
+		// Dipakai sebagai peran TAMBAHAN? Sejak migrasi 000034 seorang user bisa
+		// memegang peran tanpa menjadikannya peran utama; tanpa cek ini, peran
+		// yang masih terpasang bisa terhapus dan FK-nya menolak diam-diam.
+		heldBy, err := UsersHoldingRole(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		if heldBy > 0 {
 			return ErrRoleInUse
 		}
 

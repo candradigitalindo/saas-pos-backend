@@ -1,7 +1,9 @@
 package controllers
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"candra/backend-api/helpers"
@@ -28,9 +30,18 @@ func GetAllUsers(c *gin.Context) {
 		return
 	}
 
+	ids := make([]string, len(users))
+	for i, u := range users {
+		ids[i] = u.ID
+	}
+	rolesByUser, err := repositories.RoleIDsForUsers(c.Request.Context(), ids)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
 	items := make([]structs.UserResponse, len(users))
 	for i, u := range users {
-		items[i] = userToResponse(u)
+		items[i] = userToResponseWithRoles(u, rolesByUser[u.ID])
 	}
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.PaginatedResponse[structs.UserResponse]]{
 		Success: true,
@@ -57,10 +68,15 @@ func GetUserByID(c *gin.Context) {
 		return
 	}
 
+	roleIDs, err := repositories.RoleIDsForUser(c.Request.Context(), nil, user.ID)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.UserResponse]{
 		Success: true,
 		Message: "Berhasil mengambil data user",
-		Data:    userToResponse(user),
+		Data:    userToResponseWithRoles(user, roleIDs),
 	})
 }
 
@@ -80,6 +96,13 @@ func CreateUser(c *gin.Context) {
 		badRequest(c, "role_id", "Role tidak ditemukan di usaha ini")
 		return
 	}
+	// Peran tambahan juga harus milik tenant ini — kalau tidak, seorang manajer
+	// bisa menempelkan peran tenant lain lewat tebakan id. FK komposit
+	// (tenant_id, role_id) di user_roles adalah jaring pengaman terakhirnya.
+	if err := ensureRolesInTenant(ctx, req.RoleIDs); err != nil {
+		badRequest(c, "role_ids", err.Error())
+		return
+	}
 
 	hash, err := helpers.HashPassword(req.Password)
 	if err != nil {
@@ -97,7 +120,10 @@ func CreateUser(c *gin.Context) {
 		IsActive: true,
 	}
 	if err := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
-		return repositories.CreateUser(ctx, tx, &user)
+		if err := repositories.CreateUser(ctx, tx, &user); err != nil {
+			return err
+		}
+		return repositories.SetUserRoles(ctx, tx, reqctx.TenantID(ctx), user.ID, role.ID, req.RoleIDs)
 	}); err != nil {
 		if helpers.IsDuplicateEntryError(err) {
 			c.JSON(http.StatusConflict, structs.ErrorResponse{
@@ -147,12 +173,20 @@ func UpdateUser(c *gin.Context) {
 
 	var newRole models.Role
 	roleChanged := false
+	oldPrimaryRoleID := user.RoleID // sebelum diganti; dipakai saat menyusun peran tambahan
 	if req.RoleID != "" && req.RoleID != user.RoleID {
 		if err := repositories.FindRoleInTenant(ctx, nil, req.RoleID, &newRole); err != nil {
 			badRequest(c, "role_id", "Role tidak ditemukan di usaha ini")
 			return
 		}
 		user.RoleID = newRole.ID
+		roleChanged = true
+	}
+	if req.RoleIDs != nil {
+		if err := ensureRolesInTenant(ctx, *req.RoleIDs); err != nil {
+			badRequest(c, "role_ids", err.Error())
+			return
+		}
 		roleChanged = true
 	}
 	if req.Name != "" {
@@ -177,7 +211,34 @@ func UpdateUser(c *gin.Context) {
 	}
 
 	if err := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
-		return repositories.UpdateUser(ctx, tx, &user)
+		if err := repositories.UpdateUser(ctx, tx, &user); err != nil {
+			return err
+		}
+		if !roleChanged {
+			return nil
+		}
+		// Peran tambahan hanya diganti bila klien mengirim role_ids; bila hanya
+		// role_id yang berubah, peran tambahan yang sudah ada dipertahankan.
+		//
+		// Peran utama LAMA dibuang dari daftar itu: ia ada di user_roles karena
+		// menjadi peran utama, bukan karena ditambahkan terpisah. Tanpa ini,
+		// memindahkan staf ke peran lain akan menyisakan peran lamanya menempel
+		// selamanya (dan peran itu jadi tak pernah bisa dihapus).
+		extra := req.RoleIDs
+		if extra == nil {
+			existing, err := repositories.RoleIDsForUser(ctx, tx, user.ID)
+			if err != nil {
+				return err
+			}
+			kept := make([]string, 0, len(existing))
+			for _, id := range existing {
+				if id != oldPrimaryRoleID {
+					kept = append(kept, id)
+				}
+			}
+			extra = &kept
+		}
+		return repositories.SetUserRoles(ctx, tx, reqctx.TenantID(ctx), user.ID, user.RoleID, *extra)
 	}); err != nil {
 		if errors.Is(err, repositories.ErrUserNotFound) {
 			notFound(c, "User tidak ditemukan")
@@ -235,4 +296,19 @@ func DeleteUser(c *gin.Context) {
 		Message: "Berhasil menghapus data user",
 		Data:    nil,
 	})
+}
+
+// ensureRolesInTenant memastikan setiap id peran benar-benar milik tenant
+// permintaan ini. Dipakai sebelum menempelkan peran tambahan ke seorang user.
+func ensureRolesInTenant(ctx context.Context, roleIDs []string) error {
+	for _, id := range roleIDs {
+		if id == "" {
+			continue
+		}
+		var r models.Role
+		if err := repositories.FindRoleInTenant(ctx, nil, id, &r); err != nil {
+			return fmt.Errorf("role %s tidak ditemukan di usaha ini", id)
+		}
+	}
+	return nil
 }

@@ -138,3 +138,60 @@ func TestOwnerRoleCannotLockItselfOut(t *testing.T) {
 		"permission_codes": codes,
 	}).mustOK(t, "set ulang seluruh izin Pemilik")
 }
+
+// TestUserHoldsMultipleRoles — satu orang merangkap beberapa peran; izin
+// efektifnya adalah GABUNGAN izin seluruh peran itu (migrasi 000034).
+func TestUserHoldsMultipleRoles(t *testing.T) {
+	requireDB(t)
+	f := registerTenant(t, "multirole")
+	kasir := roleByName(t, f, "Kasir")["id"].(string)
+	gudang := roleByName(t, f, "Gudang")["id"].(string)
+
+	// Staf dibuat dengan peran utama Kasir + peran tambahan Gudang.
+	created := call(t, "POST", "/api/v1/users", f.token, map[string]any{
+		"name": "Rangkap", "username": "rangkap_multirole",
+		"email": "rangkap@multirole.test", "password": "rahasia123",
+		"role_id": kasir, "role_ids": []string{gudang},
+	}).mustCode(t, "buat staf 2 peran", 201).data(t)
+	uid := created["id"].(string)
+
+	login := call(t, "POST", "/api/v1/auth/login", "", map[string]any{
+		"username": "rangkap_multirole", "password": "rahasia123",
+	}).mustOK(t, "login staf").data(t)
+	tok := get[string](t, login, "access_token")
+
+	// Izin Kasir (sale.create) DAN izin Gudang (stock.adjust) berlaku bersamaan.
+	checkout(t, tok, "multirole-1", map[string]any{
+		"outlet_id": f.outletID, "items": []map[string]any{}, "payments": []map[string]any{},
+	}).mustCode(t, "punya izin kasir (bukan 403)", 422)
+	call(t, "POST", "/api/v1/stock-adjustments", tok, map[string]any{}).
+		mustCode(t, "punya izin gudang (bukan 403)", 422)
+	// Yang tidak dimiliki keduanya tetap ditolak.
+	call(t, "GET", "/api/v1/roles", tok, nil).
+		mustCode(t, "tidak punya role.manage", 403)
+
+	// Daftar peran user terlihat di API.
+	detail := call(t, "GET", "/api/v1/users/"+uid, f.token, nil).mustOK(t, "detail staf").data(t)
+	if n := len(jsonArray(detail["role_ids"])); n != 2 {
+		t.Fatalf("role_ids = %v, mau 2 peran", detail["role_ids"])
+	}
+
+	// Cabut peran tambahan → izin gudang hilang, izin kasir tetap.
+	call(t, "PUT", "/api/v1/users/"+uid, f.token, map[string]any{"role_ids": []string{}}).
+		mustOK(t, "cabut peran tambahan")
+	login2 := call(t, "POST", "/api/v1/auth/login", "", map[string]any{
+		"username": "rangkap_multirole", "password": "rahasia123",
+	}).mustOK(t, "login ulang").data(t)
+	tok2 := get[string](t, login2, "access_token")
+	call(t, "POST", "/api/v1/stock-adjustments", tok2, map[string]any{}).
+		mustCode(t, "izin gudang sudah dicabut", 403)
+	checkout(t, tok2, "multirole-2", map[string]any{
+		"outlet_id": f.outletID, "items": []map[string]any{}, "payments": []map[string]any{},
+	}).mustCode(t, "izin kasir tetap ada", 422)
+
+	// Peran yang masih dipegang sebagai peran TAMBAHAN tidak boleh dihapus.
+	call(t, "PUT", "/api/v1/users/"+uid, f.token, map[string]any{"role_ids": []string{gudang}}).
+		mustOK(t, "pasang lagi peran gudang")
+	call(t, "DELETE", "/api/v1/roles/"+gudang, f.token, nil).
+		mustCode(t, "hapus peran yang dipegang sebagai tambahan", 409)
+}
