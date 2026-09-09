@@ -63,6 +63,16 @@ func Auth() gin.HandlerFunc {
 			return
 		}
 
+		// Token realm mitra tidak boleh menyentuh rute tenant (blueprint G.8).
+		if claims.Rlm != helpers.RealmTenant {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, structs.ErrorResponse{
+				Success: false,
+				Message: "Token tidak valid",
+				Errors:  map[string]string{"token": "Token bukan untuk aplikasi ini"},
+			})
+			return
+		}
+
 		c.Set(authorizationPayloadKey, claims.Subject)
 		c.Request = c.Request.WithContext(reqctx.WithUserID(c.Request.Context(), claims.Subject))
 		c.Next()

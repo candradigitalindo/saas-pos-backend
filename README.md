@@ -40,6 +40,7 @@ Sebuah framework backend REST API berbasis Golang dan Gin, dengan struktur modul
 - **CRM sales lapangan** — rencana kunjungan (call plan), check-in/out dengan GPS + foto (direkam **hanya** saat check-in/out), kunjungan tanpa pesanan + alasan; kunjungan offline disinkron idempoten lewat `/sync/push` (`op: visit.upsert`); target sales + pencapaian; **komisi berbasis nilai TERTAGIH** (pembayaran non-kredit + setoran piutang lapangan), bukan terkirim
 - **Kanal pesanan online (fondasi, tanpa API)** — definisi kanal per outlet + tarif komisi, pemetaan SKU kanal ↔ produk, entri pesanan manual (WhatsApp/Instagram) + impor CSV laporan harian kanal; setiap pesanan = **satu `sales` bertanda `channel_id`** (potong stok + resep, komisi masuk `sale_payments.fee_amount`) → **laba bersih per kanal setelah komisi** lewat `/reports/profit`; idempoten per `external_order_id`; batal pesanan mengembalikan stok
 - **Pipeline peristiwa kanal (provider-agnostik)** — webhook `POST /webhooks/channels/:provider` **tanpa auth** (kanal ditautkan lewat `(provider, merchant_ref)` unik global) menyimpan payload **mentah** ke `channel_events` lalu balas 200 cepat; pekerja `cmd/process-channel-events` memprosesnya **satu per transaksi** (`FOR UPDATE SKIP LOCKED`) lewat adaptor seragam (`genericAdapter` menerima payload ternormalisasi; adaptor per-provider menyusul seiring kemitraan API) → `order.created` jadi penjualan + rincian `channel_fees` + antrean `channel_stock_syncs`; **pengiriman ganda oleh kanal → tetap satu penjualan** (idempoten `external_order_id`); percobaan ulang bertahap + antrean mati (`status='dead'`) yang bisa dilihat pemilik; **rekonsiliasi pencairan** `channel_settlements` (nilai periode dari penjualan + fee vs. uang yang benar-benar masuk → `matched`/`mismatch`); kegagalan kanal **tidak** menghentikan kasir
+- **Program Mitra Penjual (agen & afiliasi)** — modul **platform** untuk merekrut tenant, dengan **realm autentikasi terpisah** (`/api/v1/partner/*`, token realm `partner` ditolak di semua rute tenant dan sebaliknya). Kode referral valid saat pendaftaran → kaitan `partner_referrals` sekali seumur hidup (dasar komisi). **Mesin komisi deterministik** (`cmd/partner-commissions`): berulang selama merchant berlangganan, dihitung dari `subscription_invoices.paid_amount` (uang yang benar-benar diterima), **ambang aktivasi** (≥N transaksi / N hari) sebelum komisi pertama, **clawback** bila merchant berhenti dalam masa tertentu, **potong pajak** dipisah di pencairan (bruto − clawback − pajak = neto); hitung ulang idempoten (hanya baris `held`). Portal mitra: dashboard, daftar prospek, **status merchant binaan SAJA** (status langganan + jatuh tempo + aktif — tidak pernah omzet/produk/pelanggan/transaksi, blueprint G.8), rincian komisi & pencairan. Setiap akses mitra ke data merchant dicatat di `partner_merchant_access_log`
 - **Absensi & penggajian** — karyawan + jadwal kerja mingguan, `attendances` buku besar (koreksi tak mengubah baris asli) + `attendance_days` cache yang dibangun ulang (urutan status TETAP: libur > cuti > absen > alpa), hari libur, cuti/izin + saldo; **mesin gaji deterministik** (urutan tetap: upah dasar → aturan earning → deduction → penyesuaian periode lalu → cicilan kasbon; snapshot nama/tipe/params tiap baris slip) → hitung → kunci → bayar (kas keluar `ref_table='payroll_periods'`); hitung ulang dari data sama = angka identik; koreksi setelah kunci → `payroll_adjustments` di periode berikutnya; kasbon dipotong bertahap
 - **Autentikasi JWT** — access token pendek (15 mnt) + refresh token (30 hari) dengan rotasi & deteksi pemakaian ulang
 - **Manajemen Outlet / User / Role** — CRUD tenant-scoped + Pagination ala Laravel
@@ -60,6 +61,8 @@ Sebuah framework backend REST API berbasis Golang dan Gin, dengan struktur modul
 /cmd/migrate         # Runner migrasi skema (up / down / status)
 /cmd/recognize-revenue # Pekerjaan harian: akui pendapatan diterima di muka (§13.4)
 /cmd/process-channel-events # Pekerja: proses antrean channel_events + sinkron stok (§11)
+/cmd/partner-commissions # Pekerjaan bulanan: hitung komisi mitra → setujui → cairkan (Fase 12)
+/cmd/partner-admin   # Panel internal mitra sebagai CLI: buat/verifikasi mitra, daftar tingkat
 /config              # Konfigurasi aplikasi (baca .env)
 /controllers         # Handler endpoint (tipis)
 /database            # Koneksi, connection pool, runner migrasi, seeder
@@ -106,6 +109,7 @@ main.go              # Bootstrap aplikasi
    go run ./cmd/recognize-revenue                     # harian, awal bulan — akui pendapatan diterima di muka (§13.4)
    go run ./cmd/process-channel-events                # sekali jalan (§11: panggil tiap ~10 dtk) — proses channel_events + sinkron stok
    go run ./cmd/process-channel-events -loop -interval 10s   # atau: daemon menetap (systemd), berhenti rapi di SIGTERM
+   go run ./cmd/partner-commissions -approve -payout  # bulanan (tanggal 1) — komisi mitra bulan lalu → setujui → pencairan draft
    ```
 
 > **Upgrade dari versi ber-`AutoMigrate`:** database lama yang tabel `users`/`roles`-nya
@@ -190,6 +194,8 @@ Semua endpoint bisnis di bawah prefiks `/api/v1`.
 | `GET /api/v1/channels/:id/events?status=` · `GET .../stock-syncs` | `channel.manage` | Inbox peristiwa kanal + antrean sinkron stok (umur keterlambatan) |
 | `POST /api/v1/channel-events/process` | `channel.manage` | Picu pekerja pemroses manual (selain `cmd/process-channel-events`) |
 | `GET/POST /api/v1/channels/:id/settlements` · `.../receipt` | `channel.settlement.view` | Rekonsiliasi pencairan: hitung nilai periode, catat uang masuk (`matched`/`mismatch`) |
+| `POST /api/v1/partner/auth/login` | — (realm mitra, bukan tenant) | Masuk portal mitra; token realm `partner` ditolak di semua rute tenant |
+| `GET /api/v1/partner/{me,dashboard,leads,merchants,commissions,payouts}` · `POST .../leads` | realm `partner` | Portal mitra; `/merchants` = status langganan merchant binaan SAJA (blueprint G.8), akses dicatat |
 | `GET/POST/PUT /api/v1/employees[/:id]` · `.../schedule` | `hr.employee.*` | Karyawan + jadwal kerja mingguan |
 | `GET/POST /api/v1/attendances` · `/attendance-corrections[/:id/approve]` | `hr.attendance.*` | Absensi (buku besar) + koreksi |
 | `POST /api/v1/leave-requests[/:id/approve\|reject]` | `hr.leave.*` | Cuti/izin + persetujuan (snapshot `is_paid`) |

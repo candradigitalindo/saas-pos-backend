@@ -32,10 +32,12 @@ type Tenant struct {
 	NIB          string `json:"nib" gorm:"column:nib"`
 	Status       string `json:"status" gorm:"not null;default:trial"` // salah satu TenantStatuses
 
-	// Diisi saat registrasi bila memakai kode referral mitra. FK ke partners
-	// menyusul di Fase 12; untuk sekarang hanya kolom.
-	ReferredByPartnerID string `json:"referred_by_partner_id" gorm:"column:referred_by_partner_id"`
-	ReferralCodeUsed    string `json:"referral_code_used"`
+	// Diisi SEKALI saat registrasi bila kode referral cocok dengan mitra aktif
+	// (Fase 12, §5.16). `*string` — kolom FK nullable ke `partners`: harus NULL,
+	// bukan "" (CHAR(26) blank-pad → pelanggaran FK). `ReferralCodeUsed` menyimpan
+	// kode mentah apa adanya (untuk audit) walau mitranya tak ditemukan.
+	ReferredByPartnerID *string `json:"referred_by_partner_id" gorm:"column:referred_by_partner_id"`
+	ReferralCodeUsed    string  `json:"referral_code_used"`
 
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`

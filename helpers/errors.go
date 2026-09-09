@@ -14,6 +14,7 @@ var (
 	ErrInsufficient = errors.New("stok tidak mencukupi")
 	ErrForbidden    = errors.New("tidak punya akses")
 	ErrValidation   = errors.New("input tidak valid")
+	ErrUnauthorized = errors.New("kredensial tidak valid")
 )
 
 // StatusForError memetakan sentinel di atas ke kode status HTTP. Error yang tidak
@@ -32,6 +33,8 @@ func StatusForError(err error) int {
 		return 409
 	case errors.Is(err, ErrForbidden):
 		return 403
+	case errors.Is(err, ErrUnauthorized):
+		return 401
 	default:
 		return 500
 	}

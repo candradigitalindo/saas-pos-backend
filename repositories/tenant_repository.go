@@ -19,6 +19,14 @@ func CreateTenant(ctx context.Context, tx *gorm.DB, tenant *models.Tenant) error
 	return tx.WithContext(ctx).Create(tenant).Error
 }
 
+// SetTenantReferredBy menautkan tenant ke mitra perujuk — dipanggil SEKALI saat
+// pendaftaran (§5.16). tx wajib (di dalam transaksi registrasi).
+func SetTenantReferredBy(ctx context.Context, tx *gorm.DB, tenantID, partnerID string) error {
+	return tx.WithContext(ctx).Model(&models.Tenant{}).
+		Where("id = ?", tenantID).
+		UpdateColumn("referred_by_partner_id", partnerID).Error
+}
+
 // FindTenantByID mengambil tenant berdasarkan id.
 //
 // tx opsional: bila nil, memakai DB global. Karena RLS `tenants` mengunci

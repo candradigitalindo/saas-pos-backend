@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"candra/backend-api/helpers"
 	"candra/backend-api/internal/timez"
@@ -208,6 +209,40 @@ func RegisterTenant(ctx context.Context, in RegisterTenantInput) (*RegisterTenan
 			OutletID: outlet.ID,
 		}); err != nil {
 			return err
+		}
+
+		// 7. Atribusi mitra (Fase 12, blueprint G.6 langkah 6). Kode referral
+		// yang cocok dengan mitra AKTIF membuat kaitan mitra↔tenant SEKALI —
+		// dasar seluruh komisi. Kode tak dikenal tetap tersimpan mentah di
+		// tenants.referral_code_used tapi TIDAK membuat atribusi dan TIDAK
+		// menggagalkan pendaftaran.
+		if in.ReferralCode != "" {
+			partner, matched, perr := repositories.FindActivePartnerByReferralCode(ctx, tx, in.ReferralCode)
+			if perr != nil {
+				return perr
+			}
+			if matched {
+				if err := repositories.SetTenantReferredBy(ctx, tx, tenant.ID, partner.ID); err != nil {
+					return err
+				}
+				tenant.ReferredByPartnerID = &partner.ID
+				ref := models.PartnerReferral{
+					PartnerID: partner.ID, TenantID: tenant.ID,
+					ReferralCode: in.ReferralCode, AttributedAt: time.Now().UTC(),
+					AttributionStatus: "active",
+				}
+				if lead, leadOK, lerr := repositories.MatchOpenLeadForPartner(ctx, tx, partner.ID, in.Phone); lerr != nil {
+					return lerr
+				} else if leadOK {
+					ref.LeadID = &lead.ID
+					if err := repositories.MarkLeadRegistered(ctx, tx, lead.ID, tenant.ID); err != nil {
+						return err
+					}
+				}
+				if err := repositories.CreatePartnerReferral(ctx, tx, &ref); err != nil {
+					return err
+				}
+			}
 		}
 
 		// Muat role ke owner agar controller punya nama role tanpa query ulang.

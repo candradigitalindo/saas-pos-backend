@@ -18,9 +18,23 @@ var jwtKey []byte
 // jenis token mencegah sebuah token dipakai di tempat yang bukan peruntukannya.
 const tokenTypeAccess = "access"
 
+// Realm memisahkan dua populasi akun yang TIDAK boleh saling menembus:
+//   - RealmTenant ("") — user tenant (kasir/pemilik/dst). Klaim tanpa `rlm`
+//     otomatis realm ini, jadi token lama tetap sah.
+//   - RealmPartner — akun mitra penjual (Fase 12, blueprint G.8). Mitra bukan
+//     user tenant mana pun dan tak boleh menyentuh data operasional tenant.
+const (
+	RealmTenant  = ""
+	RealmPartner = "partner"
+)
+
 // ErrWrongTokenType dikembalikan ParseAccessToken bila token sah secara tanda
 // tangan tetapi bukan access token.
 var ErrWrongTokenType = errors.New("jenis token tidak sesuai")
+
+// ErrWrongRealm dikembalikan bila token sah tetapi milik populasi akun yang
+// salah untuk endpoint ini (mis. token mitra dipakai di rute tenant).
+var ErrWrongRealm = errors.New("token bukan untuk lingkungan ini")
 
 // AccessClaims adalah isi access token JWT.
 //
@@ -32,6 +46,9 @@ var ErrWrongTokenType = errors.New("jenis token tidak sesuai")
 //     keduanya dibaca dari database setiap permintaan (§9).
 type AccessClaims struct {
 	Typ string `json:"typ"`
+	// Rlm = realm akun (RealmTenant / RealmPartner). Kosong = tenant (token
+	// lama). Middleware WAJIB memverifikasi ini cocok dengan rute.
+	Rlm string `json:"rlm,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -59,17 +76,35 @@ func RefreshTokenTTL() time.Duration {
 	return time.Duration(config.GetIntEnv("JWT_REFRESH_DAYS", 30)) * 24 * time.Hour
 }
 
-// GenerateAccessToken membuat access token berumur pendek untuk userID.
-// Mengembalikan token yang sudah ditandatangani beserta waktu kedaluwarsanya
-// (dipakai controller untuk mengisi field expires_in di response).
+// PartnerAccessTokenTTL mengembalikan umur access token portal mitra dari
+// PARTNER_JWT_ACCESS_MINUTES (default 120 menit). Lebih panjang dari token
+// tenant: portal mitra dipakai lebih jarang dan belum punya alur refresh.
+func PartnerAccessTokenTTL() time.Duration {
+	return time.Duration(config.GetIntEnv("PARTNER_JWT_ACCESS_MINUTES", 120)) * time.Minute
+}
+
+// GenerateAccessToken membuat access token berumur pendek untuk userID (realm
+// tenant). Mengembalikan token yang sudah ditandatangani beserta waktu
+// kedaluwarsanya (dipakai controller untuk mengisi field expires_in di response).
 func GenerateAccessToken(userID string) (token string, expiresAt time.Time, err error) {
+	return generateAccessToken(userID, RealmTenant, AccessTokenTTL())
+}
+
+// GeneratePartnerAccessToken membuat access token untuk akun mitra (realm
+// partner). Rute tenant menolak token ber-realm ini, dan sebaliknya.
+func GeneratePartnerAccessToken(partnerUserID string) (token string, expiresAt time.Time, err error) {
+	return generateAccessToken(partnerUserID, RealmPartner, PartnerAccessTokenTTL())
+}
+
+func generateAccessToken(subject, realm string, ttl time.Duration) (string, time.Time, error) {
 	now := time.Now()
-	expiresAt = now.Add(AccessTokenTTL())
+	expiresAt := now.Add(ttl)
 
 	claims := AccessClaims{
 		Typ: tokenTypeAccess,
+		Rlm: realm,
 		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   userID,
+			Subject:   subject,
 			ID:        ulid.New(),
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now),

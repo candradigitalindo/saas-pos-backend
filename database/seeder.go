@@ -23,6 +23,10 @@ func SeedData() {
 		slog.Error("seeder plans gagal — sudah `go run ./cmd/migrate up`?", slog.Any("error", err))
 		return
 	}
+	if err := seedPartnerTiers(); err != nil {
+		slog.Error("seeder partner_tiers gagal — sudah `go run ./cmd/migrate up`?", slog.Any("error", err))
+		return
+	}
 	slog.Info("seeding database selesai")
 }
 
@@ -80,4 +84,28 @@ func seedPlans() error {
 		Columns:   []clause.Column{{Name: "term_months"}},
 		DoNothing: true,
 	}).Create(&discounts).Error
+}
+
+// seedPartnerTiers mengisi katalog `partner_tiers` (Fase 12, blueprint G.1/G.2).
+// ON CONFLICT (code) DO NOTHING → idempoten; angka yang sudah diubah admin tidak
+// ditimpa. Tabel platform, tanpa RLS.
+func seedPartnerTiers() error {
+	rows := make([]models.PartnerTier, 0, len(partnerTierCatalog))
+	for _, t := range partnerTierCatalog {
+		rate, err := decimal.NewFromString(t.Rate)
+		if err != nil {
+			return err
+		}
+		rows = append(rows, models.PartnerTier{
+			Code: t.Code, Name: t.Name, Kind: t.Kind, CommissionRate: rate,
+			Recurring: t.Recurring, OneTimeMonths: t.OneTimeMonths,
+			ActivationMinTxn: t.ActMinTxn, ActivationMinDays: t.ActMinDays,
+			AttributionDays: t.AttributionDays, ClawbackDays: t.ClawbackDays,
+			IsActive: true,
+		})
+	}
+	return DB.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "code"}},
+		DoNothing: true,
+	}).Create(&rows).Error
 }

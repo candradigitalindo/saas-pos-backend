@@ -96,9 +96,32 @@ func SetupRouter() *gin.Engine {
 
 	v1 := r.Group("/api/v1")
 	registerAuthRoutes(v1)
+	registerPartnerRoutes(v1)
 	registerTenantRoutes(v1)
 
 	return r
+}
+
+// registerPartnerRoutes memasang portal Program Mitra di bawah
+// /api/v1/partner/* (Fase 12, blueprint G.4/G.8). Jalur autentikasi TERPISAH:
+// PartnerAuth hanya menerima token ber-realm "partner", dan token itu ditolak
+// di seluruh rute tenant. Mitra TIDAK PERNAH bisa menyentuh data operasional
+// tenant — yang boleh dilihat hanya status langganan merchant binaannya.
+func registerPartnerRoutes(v1 *gin.RouterGroup) {
+	loginLimiter := middlewares.RateLimit(
+		config.GetFloatEnv("AUTH_RATELIMIT_RPS", 0.2),
+		float64(config.GetIntEnv("AUTH_RATELIMIT_BURST", 5)),
+	)
+	v1.POST("/partner/auth/login", loginLimiter, controllers.PartnerLogin)
+
+	p := v1.Group("/partner", middlewares.PartnerAuth())
+	p.GET("/me", controllers.PartnerMe)
+	p.GET("/dashboard", controllers.PartnerDashboard)
+	p.GET("/leads", controllers.PartnerListLeads)
+	p.POST("/leads", controllers.PartnerCreateLead)
+	p.GET("/merchants", controllers.PartnerListMerchants)
+	p.GET("/commissions", controllers.PartnerListCommissions)
+	p.GET("/payouts", controllers.PartnerListPayouts)
 }
 
 // registerValidators memasang validator kustom dan membuat pesan error memakai

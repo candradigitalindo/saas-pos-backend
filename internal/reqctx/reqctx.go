@@ -21,6 +21,8 @@ const (
 	tenantIDKey ctxKey = iota
 	userIDKey
 	permissionsKey
+	partnerIDKey
+	partnerUserIDKey
 )
 
 // WithTenantID menautkan tenant_id efektif ke context.
@@ -88,4 +90,31 @@ func Permissions(ctx context.Context) []string {
 		out = append(out, c)
 	}
 	return out
+}
+
+// ── Realm mitra (Fase 12) ────────────────────────────────────────────────
+//
+// Di-set oleh middleware PartnerAuth. Populasi akun yang TERPISAH dari
+// tenant/user di atas — sebuah permintaan tidak pernah punya keduanya.
+
+// WithPartnerID menautkan id mitra ke context.
+func WithPartnerID(ctx context.Context, partnerID string) context.Context {
+	return context.WithValue(ctx, partnerIDKey, partnerID)
+}
+
+// PartnerID mengembalikan id mitra permintaan ini, atau "".
+func PartnerID(ctx context.Context) string {
+	s, _ := ctx.Value(partnerIDKey).(string)
+	return s
+}
+
+// WithPartnerUserID menautkan id akun-login mitra ke context.
+func WithPartnerUserID(ctx context.Context, partnerUserID string) context.Context {
+	return context.WithValue(ctx, partnerUserIDKey, partnerUserID)
+}
+
+// PartnerUserID mengembalikan id akun-login mitra permintaan ini, atau "".
+func PartnerUserID(ctx context.Context) string {
+	s, _ := ctx.Value(partnerUserIDKey).(string)
+	return s
 }
