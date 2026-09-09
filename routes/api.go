@@ -83,7 +83,16 @@ func SetupRouter() *gin.Engine {
 	// prefiks versi: kanal tidak membawa token kita, ditautkan lewat
 	// (provider, merchant_ref). Payload disimpan MENTAH ke channel_events lalu
 	// balas 200 cepat; pekerja cmd/process-channel-events yang memprosesnya.
-	r.POST("/webhooks/channels/:provider", controllers.IngestChannelWebhook)
+	//
+	// Rate limit per-IP: endpoint publik yang menulis ke channel_events, jadi
+	// dibatasi agar banjir permintaan tidak membanjiri inbox. Longgar (kanal
+	// wajar membebankan puluhan pesanan/detik saat jam sibuk) & dapat diatur
+	// (CHANNEL_WEBHOOK_RATELIMIT_RPS / _BURST).
+	webhookLimiter := middlewares.RateLimit(
+		config.GetFloatEnv("CHANNEL_WEBHOOK_RATELIMIT_RPS", 20),
+		float64(config.GetIntEnv("CHANNEL_WEBHOOK_RATELIMIT_BURST", 40)),
+	)
+	r.POST("/webhooks/channels/:provider", webhookLimiter, controllers.IngestChannelWebhook)
 
 	v1 := r.Group("/api/v1")
 	registerAuthRoutes(v1)

@@ -307,3 +307,33 @@ func TestChannelEventIsolation(t *testing.T) {
 		t.Fatalf("B melihat %d antrean sinkron kanal A — bocor", len(ssB))
 	}
 }
+
+// TestChannelWebhookRateLimited — webhook publik dibatasi per-IP; banjir
+// permintaan menabrak 429. Ditaruh TERAKHIR di berkas ini agar tidak menghabiskan
+// token untuk test webhook lain (limiter global per proses, isi ulang 20/dtk).
+func TestChannelWebhookRateLimited(t *testing.T) {
+	requireDB(t)
+	f := setupPOS(t, "chwhrl")
+	makeChannelWithRef(t, f, "gofood", "0", "MERCH-chwhrl")
+	payload := map[string]any{
+		"event_type": "order.created", "external_order_id": "RL-1",
+		"items": []map[string]any{{"product_id": f.prodA, "qty": "1"}},
+	}
+
+	got429, got2xx := 0, 0
+	for i := 0; i < 60; i++ { // burst 40 → sisanya kena 429
+		code := sendChannelWebhook(t, "gofood", "MERCH-chwhrl", payload).Code
+		switch {
+		case code == 429:
+			got429++
+		case code >= 200 && code < 300:
+			got2xx++
+		}
+	}
+	if got2xx == 0 {
+		t.Fatalf("tak satu pun permintaan lolos — limiter terlalu ketat")
+	}
+	if got429 == 0 {
+		t.Fatalf("60 permintaan beruntun tak ada yang 429 — limiter tidak terpasang")
+	}
+}

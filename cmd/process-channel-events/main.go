@@ -1,26 +1,33 @@
 // Command process-channel-events menjalankan pekerja pemroses antrean kanal
 // (docs/TECHNICAL-BACKEND.md §5.10, §11; blueprint F.6).
 //
-// Ini PEKERJAAN TERJADWAL — §11 menyebut "Pemrosesan channel_events | tiap 10
-// detik". Dijalankan cron/systemd timer sesering itu, BUKAN bagian dari start
-// aplikasi. Sekali jalan: menguras seluruh peristiwa 'pending'/'failed' (satu
-// per transaksi, FOR UPDATE SKIP LOCKED — aman beberapa instance), lalu
-// mengosongkan antrean channel_stock_syncs, lalu keluar.
+// §11 menyebut "Pemrosesan channel_events | tiap 10 detik". Dua cara memakainya:
+//
+//   - SEKALI JALAN (default) — dipanggil cron/systemd timer sesering itu:
+//     go run ./cmd/process-channel-events
+//
+//   - DAEMON — proses menetap, memproses lalu tidur `-interval`, berulang;
+//     cocok untuk systemd service:
+//     go run ./cmd/process-channel-events -loop -interval 10s
+//
+// Sekali jalan: menguras seluruh peristiwa 'pending'/'failed' (satu per
+// transaksi, FOR UPDATE SKIP LOCKED — aman beberapa instance), lalu mengosongkan
+// antrean channel_stock_syncs.
 //
 // Idempoten: peristiwa yang diproses ulang tidak membuat penjualan kedua
 // (RecordChannelOrder mengenali external_order_id yang sudah tercatat).
-//
-// Pemakaian:
-//
-//	go run ./cmd/process-channel-events
 //
 // Konfigurasi database dibaca dari environment / .env yang sama dengan aplikasi.
 package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"candra/backend-api/config"
 	"candra/backend-api/database"
@@ -29,18 +36,53 @@ import (
 )
 
 func main() {
+	loop := flag.Bool("loop", false, "jalan menetap: proses lalu tidur -interval, berulang")
+	interval := flag.Duration("interval", 10*time.Second, "jeda antar putaran saat -loop")
+	flag.Parse()
+
 	config.LoadEnv()
 	helpers.InitLogger()
 	database.InitDatabase()
 	defer database.Close()
 
-	res, err := services.ProcessChannelEvents(context.Background())
+	if !*loop {
+		if err := runOnce(context.Background()); err != nil {
+			fmt.Fprintf(os.Stderr, "process-channel-events: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	// Mode daemon: berhenti rapi saat SIGINT/SIGTERM.
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	log := helpers.LoggerFromContext(ctx)
+	log.Info("process-channel-events daemon mulai", "interval", interval.String())
+	ticker := time.NewTicker(*interval)
+	defer ticker.Stop()
+	for {
+		if err := runOnce(ctx); err != nil {
+			log.Error("putaran pemrosesan gagal", "error", err)
+		}
+		select {
+		case <-ctx.Done():
+			log.Info("process-channel-events daemon berhenti")
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+// runOnce menjalankan satu putaran penuh: peristiwa + antrean sinkron stok.
+func runOnce(ctx context.Context) error {
+	res, err := services.ProcessChannelEvents(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "process-channel-events: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 	fmt.Printf(
-		"Pemrosesan kanal selesai: peristiwa selesai=%d gagal=%d mati=%d; sinkron stok terkirim=%d gagal=%d.\n",
+		"Pemrosesan kanal: peristiwa selesai=%d gagal=%d mati=%d; sinkron stok terkirim=%d gagal=%d.\n",
 		res.EventsDone, res.EventsFailed, res.EventsDead, res.StockSyncsSent, res.StockSyncsFail,
 	)
+	return nil
 }

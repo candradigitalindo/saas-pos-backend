@@ -103,8 +103,9 @@ main.go              # Bootstrap aplikasi
    Cek: `curl localhost:8080/health` dan `curl localhost:8080/health/ready`.
 6. **Pekerjaan terjadwal** (cron/systemd timer — bukan bagian dari start aplikasi, semuanya idempoten):
    ```sh
-   go run ./cmd/recognize-revenue        # harian, awal bulan — akui pendapatan diterima di muka (§13.4)
-   go run ./cmd/process-channel-events   # sering (§11: tiap ~10 dtk) — proses channel_events + sinkron stok
+   go run ./cmd/recognize-revenue                     # harian, awal bulan — akui pendapatan diterima di muka (§13.4)
+   go run ./cmd/process-channel-events                # sekali jalan (§11: panggil tiap ~10 dtk) — proses channel_events + sinkron stok
+   go run ./cmd/process-channel-events -loop -interval 10s   # atau: daemon menetap (systemd), berhenti rapi di SIGTERM
    ```
 
 > **Upgrade dari versi ber-`AutoMigrate`:** database lama yang tabel `users`/`roles`-nya
