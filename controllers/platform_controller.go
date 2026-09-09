@@ -254,3 +254,116 @@ func PlatformMarkPayoutPaid(c *gin.Context) {
 		Success: true, Message: "Pencairan ditandai sudah dibayar", Data: nil,
 	})
 }
+
+// ── Pelengkap panel: target, materi, pelatihan, sengketa ────────────────
+
+func PlatformSetTarget(c *gin.Context) {
+	var req structs.PartnerTargetRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		validationFailed(c, err)
+		return
+	}
+	res, err := services.SetPartnerTarget(c.Request.Context(), req)
+	if err != nil {
+		notFoundOr(c, err, repositories.ErrPartnerNotFound, "Mitra tidak ditemukan")
+		return
+	}
+	services.AuditPlatformAction(c.Request.Context(), "partner.target.set", "partner_targets", res.ID)
+	c.JSON(http.StatusOK, structs.SuccessResponse[structs.PartnerTargetResponse]{
+		Success: true, Message: "Target disimpan", Data: res,
+	})
+}
+
+func PlatformListTargets(c *gin.Context) {
+	res, err := services.ListPartnerTargets(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[[]structs.PartnerTargetResponse]{
+		Success: true, Message: "Target mitra", Data: res,
+	})
+}
+
+func PlatformListMaterials(c *gin.Context) {
+	res, err := services.ListAllPartnerMaterials(c.Request.Context())
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[[]structs.PartnerMaterialResponse]{
+		Success: true, Message: "Materi jualan", Data: res,
+	})
+}
+
+func PlatformCreateMaterial(c *gin.Context) {
+	var req structs.PartnerMaterialRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		validationFailed(c, err)
+		return
+	}
+	res, err := services.CreatePartnerMaterial(c.Request.Context(), req)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	services.AuditPlatformAction(c.Request.Context(), "partner.material.create", "partner_materials", res.ID)
+	c.JSON(http.StatusCreated, structs.SuccessResponse[structs.PartnerMaterialResponse]{
+		Success: true, Message: "Materi ditambahkan", Data: res,
+	})
+}
+
+func PlatformListTrainings(c *gin.Context) {
+	rows, err := services.ListAllTrainings(c.Request.Context())
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[[]structs.PartnerTrainingResponse]{
+		Success: true, Message: "Modul pelatihan", Data: rows,
+	})
+}
+
+func PlatformCreateTraining(c *gin.Context) {
+	var req structs.PartnerTrainingRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		validationFailed(c, err)
+		return
+	}
+	res, err := services.CreatePartnerTraining(c.Request.Context(), req)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	services.AuditPlatformAction(c.Request.Context(), "partner.training.create", "partner_trainings", res.ID)
+	c.JSON(http.StatusCreated, structs.SuccessResponse[structs.PartnerTrainingResponse]{
+		Success: true, Message: "Modul pelatihan ditambahkan", Data: res,
+	})
+}
+
+func PlatformListDisputes(c *gin.Context) {
+	res, err := services.ListDisputes(c.Request.Context(), c.Query("partner_id"), c.Query("status"))
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[[]structs.PartnerDisputeResponse]{
+		Success: true, Message: "Sengketa atribusi", Data: res,
+	})
+}
+
+// PlatformResolveDispute mencatat keputusan admin beserta alasannya.
+func PlatformResolveDispute(c *gin.Context) {
+	var req structs.PartnerDisputeResolveRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		validationFailed(c, err)
+		return
+	}
+	if err := services.ResolveDispute(c.Request.Context(), c.Param("id"), req); err != nil {
+		notFoundOr(c, err, repositories.ErrPartnerDisputeNotFound, "Sengketa tidak ditemukan atau sudah diputus")
+		return
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[any]{
+		Success: true, Message: "Keputusan sengketa dicatat", Data: nil,
+	})
+}

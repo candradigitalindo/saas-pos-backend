@@ -124,6 +124,16 @@ func registerPartnerRoutes(v1 *gin.RouterGroup) {
 	p.GET("/merchants", controllers.PartnerListMerchants)
 	p.GET("/commissions", controllers.PartnerListCommissions)
 	p.GET("/payouts", controllers.PartnerListPayouts)
+
+	// Pelengkap (blueprint G.4): materi jualan disaring per tingkat, pelatihan
+	// beserta status penyelesaiannya, target berbasis MERCHANT AKTIF, dan
+	// pengajuan sengketa atribusi.
+	p.GET("/materials", controllers.PartnerListMaterials)
+	p.GET("/trainings", controllers.PartnerListTrainings)
+	p.POST("/trainings/:id/complete", controllers.PartnerCompleteTraining)
+	p.GET("/targets", controllers.PartnerListTargets)
+	p.GET("/disputes", controllers.PartnerListDisputes)
+	p.POST("/disputes", controllers.PartnerCreateDispute)
 }
 
 // registerPlatformRoutes memasang panel internal penyedia SaaS di bawah
@@ -169,6 +179,18 @@ func registerPlatformRoutes(v1 *gin.RouterGroup) {
 	pf.POST("/partner-commissions/:id/approve", uang, controllers.PlatformApproveCommission)
 	pf.POST("/partner-payouts", uang, controllers.PlatformCreatePayout)
 	pf.POST("/partner-payouts/:id/paid", uang, controllers.PlatformMarkPayoutPaid)
+
+	// Target, materi jualan, pelatihan.
+	pf.GET("/partners/:id/targets", baca, controllers.PlatformListTargets)
+	pf.POST("/partner-targets", verif, controllers.PlatformSetTarget)
+	pf.GET("/partner-materials", baca, controllers.PlatformListMaterials)
+	pf.POST("/partner-materials", verif, controllers.PlatformCreateMaterial)
+	pf.GET("/partner-trainings", baca, controllers.PlatformListTrainings)
+	pf.POST("/partner-trainings", verif, controllers.PlatformCreateTraining)
+
+	// Sengketa atribusi — diputus admin dan keputusannya dicatat (G.2 #5).
+	pf.GET("/partner-disputes", baca, controllers.PlatformListDisputes)
+	pf.POST("/partner-disputes/:id/resolve", middlewares.RequirePlatform(models.CapPartnerDispute), controllers.PlatformResolveDispute)
 }
 
 // registerValidators memasang validator kustom dan membuat pesan error memakai

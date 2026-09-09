@@ -186,3 +186,82 @@ type PartnerPayoutMarkPaidRequest struct {
 	TransferProofURL string `json:"transfer_proof_url" binding:"required,min=2,max=300"`
 	TaxSlipURL       string `json:"tax_slip_url" binding:"omitempty,max=300"`
 }
+
+// ── Pelengkap: target, materi, pelatihan, sengketa (migrasi 000028) ──────
+
+type PartnerTargetRequest struct {
+	PartnerID       string `json:"partner_id" binding:"required,ulid"`
+	PeriodStart     string `json:"period_start" binding:"required"` // YYYY-MM-DD
+	PeriodEnd       string `json:"period_end" binding:"required"`
+	TargetMerchants int    `json:"target_merchants" binding:"gte=0"`
+}
+
+type PartnerTargetResponse struct {
+	ID                string `json:"id"`
+	PeriodStart       string `json:"period_start"`
+	PeriodEnd         string `json:"period_end"`
+	TargetMerchants   int    `json:"target_merchants"`
+	AchievedMerchants int    `json:"achieved_merchants"`
+}
+
+type PartnerMaterialRequest struct {
+	Title     string `json:"title" binding:"required,min=2,max=160"`
+	Kind      string `json:"kind" binding:"required,oneof=brochure video template pricelist"`
+	FileURL   string `json:"file_url" binding:"required,url"`
+	Version   int    `json:"version" binding:"omitempty,gte=1"`
+	MinTierID string `json:"min_tier_id" binding:"omitempty,ulid"` // kosong = semua tingkat
+}
+
+type PartnerMaterialResponse struct {
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Kind     string `json:"kind"`
+	FileURL  string `json:"file_url"`
+	Version  int    `json:"version"`
+	IsActive bool   `json:"is_active"`
+}
+
+type PartnerTrainingRequest struct {
+	Title      string `json:"title" binding:"required,min=2,max=160"`
+	ContentURL string `json:"content_url" binding:"omitempty,url"`
+	IsRequired bool   `json:"is_required"`
+	SortOrder  int    `json:"sort_order" binding:"omitempty,gte=0"`
+}
+
+type PartnerTrainingResponse struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	ContentURL  string `json:"content_url,omitempty"`
+	IsRequired  bool   `json:"is_required"`
+	SortOrder   int    `json:"sort_order"`
+	Completed   bool   `json:"completed"`
+	CompletedAt string `json:"completed_at,omitempty"`
+	Score       *int   `json:"score,omitempty"`
+}
+
+type PartnerTrainingCompleteRequest struct {
+	Score *int `json:"score" binding:"omitempty,gte=0,lte=100"`
+}
+
+type PartnerDisputeRequest struct {
+	TenantID string `json:"tenant_id" binding:"omitempty,ulid"`
+	LeadID   string `json:"lead_id" binding:"omitempty,ulid"`
+	Reason   string `json:"reason" binding:"required,min=10,max=1000"`
+}
+
+type PartnerDisputeResolveRequest struct {
+	Status       string `json:"status" binding:"required,oneof=accepted rejected"`
+	DecisionNote string `json:"decision_note" binding:"required,min=5,max=1000"`
+}
+
+type PartnerDisputeResponse struct {
+	ID                string `json:"id"`
+	ClaimantPartnerID string `json:"claimant_partner_id"`
+	TenantID          string `json:"tenant_id,omitempty"`
+	LeadID            string `json:"lead_id,omitempty"`
+	Reason            string `json:"reason"`
+	Status            string `json:"status"`
+	DecisionNote      string `json:"decision_note,omitempty"`
+	DecidedAt         string `json:"decided_at,omitempty"`
+	CreatedAt         string `json:"created_at"`
+}
