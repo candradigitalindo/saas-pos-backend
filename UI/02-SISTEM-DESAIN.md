@@ -78,7 +78,23 @@ Untuk laporan per kanal / per metode bayar. Dipilih agar tetap terbedakan oleh
 mata dengan buta warna merah-hijau, dan **selalu** disertai label — warna tidak
 pernah jadi satu-satunya penanda.
 
-`#047857` · `#2563EB` · `#B45309` · `#7C3AED` · `#0E7490` · `#BE185D`
+`#047857` · `#2563EB` · `#B45309` · `#7C3AED` · `#0891B2` · `#BE185D`
+
+**Urutannya tetap dan tidak pernah diputar.** Warna mengikuti *entitas*, bukan
+peringkatnya: kalau sebuah penyaring menghilangkan satu kanal, kanal yang
+tersisa tidak boleh berganti warna. Deret ketujuh dan seterusnya digabung
+menjadi "Lainnya", bukan diberi warna baru hasil generate.
+
+> ⚠️ Slot kelima sebelumnya `#0E7490`. Diubah ke `#0891B2` setelah rasio
+> warnanya dihitung, bukan dikira-kira: chroma `#0E7490` hanya 0,094 — di bawah
+> ambang, sehingga di grafik ia terbaca **abu-abu** dan justru melanggar tujuan
+> palet ini sendiri. `#0891B2` menaikkan chroma di atas ambang sekaligus
+> memperbaiki jarak buta-warna terhadap `#BE185D` dari ΔE 10,5 → 13,0.
+> Keduanya lulus di mode terang maupun gelap.
+
+Pemisahan untuk buta warna biru-kuning (tritan) ada di angka 7,5 — di bawah
+ambang aman 8. Itu sebabnya aturan "selalu disertai label" di atas **bukan
+anjuran**: tanpa label langsung, dua kanal bisa tertukar oleh sebagian pembaca.
 
 ---
 

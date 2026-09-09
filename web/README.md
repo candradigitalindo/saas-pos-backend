@@ -68,6 +68,6 @@ berbagi, naikkan ke `bersama/`.
 | U1 | Kasir: buka/tutup shift, grid barang, keranjang, bayar, struk, riwayat, batalkan, kas laci | ✅ Selesai |
 | U2 | Barang & stok: CRUD barang, impor CSV, kategori/satuan/pemasok, saldo & kartu stok, koreksi, barang masuk | ✅ Selesai |
 | U3 | Offline: PWA, Dexie, antrean kirim, halaman "belum terkirim", pecah kode per rute | ✅ Selesai |
-| U4 | Laporan | ⏳ Berikutnya |
-| U5 | Operasional lanjutan | — |
+| U4 | Laporan: beranda berangka, untung-rugi, per hari/kanal/kasir/metode bayar, grafik, unduh CSV | ✅ Selesai |
+| U5 | Operasional lanjutan | ⏳ Berikutnya |
 | U6 | Modul berbayar | — |

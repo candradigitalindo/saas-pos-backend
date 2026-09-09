@@ -140,6 +140,42 @@ func TestSalesReportGroupings(t *testing.T) {
 	call(t, "GET", "/api/v1/reports/sales", f.token, nil).mustCode(t, "tanpa rentang", 400)
 }
 
+// TestPaymentGroupingSubtractsChange — rincian per metode bayar harus berjumlah
+// sama dengan total laporannya.
+//
+// sale_payments menyimpan uang yang DISERAHKAN pembeli, jadi tanpa mengurangkan
+// kembalian, baris "Tunai" selalu lebih besar daripada penjualan hari itu.
+// Pemilik yang melihat rincian tidak pernah cocok dengan totalnya akan berhenti
+// percaya pada seluruh laporan — kerugiannya jauh lebih besar daripada satu
+// kolom yang salah.
+func TestPaymentGroupingSubtractsChange(t *testing.T) {
+	requireDB(t)
+	f := setupPOS(t, "paykembalian")
+
+	// Belanja 45.000 (3 × prodA), pembeli menyerahkan 50.000 → kembalian 5.000.
+	sale := checkout(t, f.token, "PK-1", map[string]any{
+		"outlet_id": f.outletID,
+		"items":     []map[string]any{{"product_id": f.prodA, "qty": "3"}},
+		"payments":  []map[string]any{{"method": "cash", "amount": 50000}},
+	}).mustCode(t, "checkout", 201).data(t)
+	assertI64(t, sale, "change_amount", 5000)
+	bd := sale["business_date"].(string)
+
+	base := "/api/v1/reports/sales?from=" + bd + "&to=" + bd + "&outlet_id=" + f.outletID
+	pay := call(t, "GET", base+"&group_by=payment", f.token, nil).
+		mustOK(t, "group payment").data(t)
+
+	rows := pay["rows"].([]any)
+	if len(rows) != 1 {
+		t.Fatalf("mau 1 baris pembayaran, dapat %d", len(rows))
+	}
+	// 50.000 diserahkan − 5.000 kembali = 45.000 yang benar-benar masuk.
+	assertI64(t, rows[0].(map[string]any), "net_amount", 45000)
+
+	// Dan yang paling penting: rincian berjumlah sama dengan totalnya.
+	assertI64(t, pay["totals"].(map[string]any), "net_amount", 45000)
+}
+
 // TestProfitReportReflectsVoidAndRefund — void membuang kontribusi transaksi,
 // retur mencatat nilai negatif pada hari retur; laba bersih menyesuaikan.
 func TestProfitReportReflectsVoidAndRefund(t *testing.T) {

@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"candra/backend-api/models"
@@ -229,8 +230,14 @@ func SalesByCashier(ctx context.Context, outletID, from, to string) ([]SummaryGr
 }
 
 // SalesByPaymentMethod mengelompokkan tender penjualan 'completed' per metode.
-// net_amount di sini berarti "nominal diterima lewat metode itu"; kolom modal &
-// laba tidak berlaku untuk dimensi ini.
+// net_amount di sini berarti "nominal yang benar-benar masuk lewat metode itu";
+// kolom modal & laba tidak berlaku untuk dimensi ini.
+//
+// KEMBALIAN DIKURANGKAN dari baris 'cash'. Yang tercatat di sale_payments adalah
+// uang yang DISERAHKAN pembeli, jadi tanpa pengurangan ini baris Tunai selalu
+// lebih besar dari penjualannya sendiri — pemilik melihat rincian yang tidak
+// pernah berjumlah sama dengan totalnya, lalu berhenti percaya pada laporannya.
+// Kembalian selalu diambil dari laci tunai, apa pun metode pembayarannya.
 func SalesByPaymentMethod(ctx context.Context, outletID, from, to string) ([]SummaryGroupRow, error) {
 	tid := currentTenantID(ctx)
 	q := tenantDB(ctx, nil).
@@ -254,5 +261,35 @@ func SalesByPaymentMethod(ctx context.Context, outletID, from, to string) ([]Sum
 		Group("sp.method").
 		Order("net_amount DESC").
 		Scan(&rows).Error
-	return rows, err
+	if err != nil {
+		return nil, err
+	}
+
+	// Kembalian dihitung terpisah (bukan lewat join di atas) supaya transaksi
+	// dengan lebih dari satu baris pembayaran tidak menghitungnya berkali-kali.
+	kq := scopeTenant(ctx, tenantDB(ctx, nil).Model(&models.Sale{})).
+		Where("business_date BETWEEN ? AND ? AND status = 'completed'", from, to)
+	if outletID != "" {
+		kq = kq.Where("outlet_id = ?", outletID)
+	}
+	var kembalian int64
+	if err := kq.Select("COALESCE(SUM(change_amount), 0)").Scan(&kembalian).Error; err != nil {
+		return nil, err
+	}
+
+	if kembalian > 0 {
+		for i := range rows {
+			if rows[i].Key == "cash" {
+				rows[i].NetAmount -= kembalian
+				break
+			}
+		}
+		// Urutan bisa berubah setelah pengurangan; laporan menampilkan yang
+		// terbesar lebih dulu.
+		sort.SliceStable(rows, func(a, b int) bool {
+			return rows[a].NetAmount > rows[b].NetAmount
+		})
+	}
+
+	return rows, nil
 }

@@ -5,10 +5,8 @@ import { LayoutToko } from './layouts/layout-toko'
 import { ButuhIzin, ButuhMasuk, TamuSaja } from './penjaga'
 import { HalamanMasuk } from '@/fitur/auth/halaman/halaman-masuk'
 import { HalamanDaftar } from '@/fitur/auth/halaman/halaman-daftar'
-import { HalamanBeranda } from '@/fitur/beranda/halaman/halaman-beranda'
-import { KeadaanKosong } from '@/bersama/komponen/keadaan-kosong'
+import { HalamanBeranda } from '@/fitur/laporan/halaman/halaman-beranda'
 import { KerangkaBaris } from '@/bersama/komponen/kerangka'
-import { Compass } from 'lucide-react'
 import { IZIN } from '@/lib/izin'
 
 /**
@@ -23,7 +21,8 @@ const HalamanTutupShift = muat(() => import('@/fitur/kasir/halaman/halaman-tutup
 const HalamanRiwayat = muat(() => import('@/fitur/kasir/halaman/halaman-riwayat'), 'HalamanRiwayat')
 const HalamanKas = muat(() => import('@/fitur/kasir/halaman/halaman-kas'), 'HalamanKas')
 const HalamanPerluDiperiksa = muat(() => import('@/fitur/kasir/halaman/halaman-perlu-diperiksa'), 'HalamanPerluDiperiksa')
-const HalamanLainnya = muat(() => import('@/fitur/beranda/halaman/halaman-lainnya'), 'HalamanLainnya')
+const HalamanLaporan = muat(() => import('@/fitur/laporan/halaman/halaman-laporan'), 'HalamanLaporan')
+const HalamanLainnya = muat(() => import('./halaman/halaman-lainnya'), 'HalamanLainnya')
 const HalamanSelamatDatang = muat(() => import('@/fitur/onboarding/halaman/halaman-selamat-datang'), 'HalamanSelamatDatang')
 const HalamanDaftarBarang = muat(() => import('@/fitur/produk/halaman/halaman-daftar-barang'), 'HalamanDaftarBarang')
 const HalamanFormBarang = muat(() => import('@/fitur/produk/halaman/halaman-form-barang'), 'HalamanFormBarang')
@@ -264,7 +263,9 @@ const router = createBrowserRouter([
         path: '/laporan',
         element: (
           <ButuhIzin izin={[IZIN.reportView]}>
-            <BelumDibangun nama="Laporan" tahap="U4" />
+            <Tunggu>
+              <HalamanLaporan />
+            </Tunggu>
           </ButuhIzin>
         ),
       },
@@ -275,19 +276,4 @@ const router = createBrowserRouter([
 
 export function Rute() {
   return <RouterProvider router={router} />
-}
-
-/**
- * Penanda tahap roadmap yang belum dikerjakan. Ada supaya menu tidak pernah
- * membawa ke layar kosong tanpa penjelasan — "tidak ada jalan buntu" berlaku
- * juga untuk aplikasi yang masih dibangun.
- */
-function BelumDibangun({ nama, tahap }: { nama: string; tahap: string }) {
-  return (
-    <KeadaanKosong
-      ikon={Compass}
-      judul={`${nama} sedang disiapkan`}
-      penjelasan={`Layar ini dibangun pada tahap ${tahap}. Menunya sudah terpasang supaya alurnya bisa diuji lebih dulu.`}
-    />
-  )
 }
