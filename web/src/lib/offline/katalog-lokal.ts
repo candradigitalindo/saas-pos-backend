@@ -70,6 +70,30 @@ export function useKatalogLokal(
   }
 }
 
+/**
+ * Cari satu barang dari barcode-nya.
+ *
+ * Dibaca dari Dexie, bukan dari server: memindai barang di kasir harus tetap
+ * jalan saat sinyal mati, dan perjalanan ke server per pindaian terlalu lambat
+ * untuk antrean.
+ */
+export async function produkDariBarcode(kode: string): Promise<Produk | undefined> {
+  const bersih = kode.trim()
+  if (!bersih) return undefined
+
+  const cocok =
+    (await db.produk.where('barcode').equals(bersih).first()) ??
+    // Sebagian barcode ritel dicetak dengan nol di depan yang tidak ikut
+    // terbaca pemindai (EAN-13 vs UPC-A 12 digit).
+    (await db.produk.filter((p) => !!p.barcode && p.barcode.replace(/^0+/, '') === bersih.replace(/^0+/, '')).first()) ??
+    // Terakhir: SKU, karena banyak warung menempel kode sendiri.
+    (await db.produk.where('sku').equals(bersih).first())
+
+  if (!cocok || !cocok.is_active) return undefined
+  const satuan = await db.satuan.get(cocok.unit_id)
+  return keProduk(cocok, satuan?.name)
+}
+
 /** Satu produk dari cache, untuk membangun struk offline. */
 export async function produkLokal(id: string): Promise<Produk | undefined> {
   const p = await db.produk.get(id)

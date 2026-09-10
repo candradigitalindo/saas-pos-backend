@@ -1,10 +1,13 @@
 import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { PackageX, Search, ShoppingCart, X } from 'lucide-react'
+import { PackageX, ScanLine, Search, ShoppingCart, X } from 'lucide-react'
 import { Tombol } from '@/bersama/ui/tombol'
 import { KeadaanKosong } from '@/bersama/komponen/keadaan-kosong'
 import { Kerangka } from '@/bersama/komponen/kerangka'
 import { StatusKoneksi } from '@/bersama/komponen/status-koneksi'
+import { PemindaiBarcode } from '@/bersama/komponen/pemindai-barcode'
+import { bisaMemindai } from '@/bersama/hooks/use-pemindai'
+import { produkDariBarcode } from '@/lib/offline/katalog-lokal'
 import { useSinkron } from '@/lib/offline/mesin'
 import { useSesi } from '@/bersama/hooks/use-sesi'
 import { useToast } from '@/bersama/komponen/toast'
@@ -40,6 +43,7 @@ export function HalamanKasir() {
     useKatalogKasir(cari, kategori)
   const keranjang = useKeranjang()
 
+  const [bukaPindai, setBukaPindai] = useState(false)
   const [bukaBayar, setBukaBayar] = useState(false)
   const [bukaKeranjangHP, setBukaKeranjangHP] = useState(false)
   const [struk, setStruk] = useState<{ transaksi: Transaksi; diantre: boolean } | null>(null)
@@ -115,6 +119,19 @@ export function HalamanKasir() {
             className="h-12 w-full rounded-kontrol border border-garis bg-permukaan pl-10 pr-3 text-isi text-teks-utama placeholder:text-teks-redup"
           />
         </div>
+        {/* Tombol pindai hanya muncul bila perangkatnya memang punya kamera —
+            izin & kemampuan menyembunyikan, bukan menonaktifkan (ui/01 §3). */}
+        {bisaMemindai() && (
+          <Tombol
+            jenis="kedua"
+            ukuran="normal"
+            onClick={() => setBukaPindai(true)}
+            aria-label="Pindai barcode"
+          >
+            <ScanLine className="h-5 w-5" aria-hidden />
+            <span className="hidden sm:inline">Pindai</span>
+          </Tombol>
+        )}
         <Tombol jenis="kedua" ukuran="normal" asChild>
           <Link to="/kasir/tutup-shift">Tutup Shift</Link>
         </Tombol>
@@ -239,6 +256,22 @@ export function HalamanKasir() {
           </div>
         </div>
       )}
+
+      <PemindaiBarcode
+        terbuka={bukaPindai}
+        onTutup={() => setBukaPindai(false)}
+        keterangan="Arahkan kamera ke barcode. Barang langsung masuk keranjang."
+        onKode={async (kode) => {
+          // Sengaja TIDAK menutup dialog setelah berhasil: kasir biasanya
+          // memindai beberapa barang berturut-turut, dan menutup-buka kamera
+          // tiap barang membuat alurnya jauh lebih lambat.
+          const p = await produkDariBarcode(kode)
+          if (!p) return false
+          keranjang.tambah(p)
+          toast.tampilkan(`${p.name} ditambahkan`, 'berhasil')
+          return true
+        }}
+      />
 
       <LayarBayar
         terbuka={bukaBayar}

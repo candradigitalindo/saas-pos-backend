@@ -12,19 +12,27 @@ import {
   type StokLokal,
 } from './db'
 
-/** Bentuk apa adanya dari GET /sync/pull — model backend, bukan DTO layar. */
+/**
+ * Bentuk apa adanya dari GET /sync/pull — model backend, bukan DTO layar.
+ *
+ * Setiap daftar bisa datang sebagai `null`, BUKAN `[]`: Go memarshal irisan nil
+ * jadi `null`. Itu keadaan normal untuk warung baru yang belum punya kategori
+ * atau pelanggan — persis pengguna pertama yang lahir dari alur onboarding.
+ * Backend sudah diperbaiki mengirim `[]`, tapi tipe di sini tetap mengakui
+ * `null` supaya klien lama tidak pecah saat bicara dengan server lama.
+ */
 export interface PerubahanTarik {
   cursor: number
   has_more: boolean
   safety_lag: number
-  categories: {
+  categories: null | {
     id: string
     name: string
     sort_order: number
     sync_version: number
   }[]
-  units: { id: string; name: string; sync_version: number }[]
-  products: {
+  units: null | { id: string; name: string; sync_version: number }[]
+  products: null | {
     id: string
     category_id: string | null
     unit_id: string
@@ -39,14 +47,14 @@ export interface PerubahanTarik {
     image_url: string
     sync_version: number
   }[]
-  customers: {
+  customers: null | {
     id: string
     name: string
     phone: string | null
     credit_limit: number
     sync_version: number
   }[]
-  stocks: {
+  stocks: null | {
     outlet_id: string
     product_id: string
     variant_id: string
@@ -54,7 +62,7 @@ export interface PerubahanTarik {
     reserved_qty: string
   }[]
   /** Batu nisan penghapusan: { "products": ["id1", …], … } */
-  deleted: Record<string, string[]>
+  deleted: null | Record<string, string[]>
 }
 
 /**
@@ -76,9 +84,20 @@ export async function tarikMasterData(outletId: string): Promise<{ halaman: numb
 
   for (;;) {
     const sejak = await ambilKursor()
-    const p = await api.get<PerubahanTarik>('/sync/pull', {
+    const mentah = await api.get<PerubahanTarik>('/sync/pull', {
       query: { since: sejak, outlet_id: outletId, limit: 500 },
     })
+    // Dinormalkan SEKALI di sini: daftar yang null jadi array kosong, supaya
+    // sisa fungsi ini tidak perlu memeriksa null di tiap baris.
+    const p = {
+      ...mentah,
+      categories: mentah.categories ?? [],
+      units: mentah.units ?? [],
+      products: mentah.products ?? [],
+      customers: mentah.customers ?? [],
+      stocks: mentah.stocks ?? [],
+      deleted: mentah.deleted ?? {},
+    }
     halaman++
 
     await db.transaction(

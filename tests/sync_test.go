@@ -253,3 +253,36 @@ func TestSyncPermission(t *testing.T) {
 	kasir := staffToken(t, f.tenantFixture, roleID(t, f.tenantFixture, "Kasir"), "kasir_syncperm")
 	call(t, "GET", "/api/v1/sync/pull?since=0", kasir, nil).mustOK(t, "kasir pull")
 }
+
+// TestSyncPullEmptyListsAreArrays — daftar kosong dikirim sebagai [], bukan null.
+//
+// encoding/json memarshal irisan nil jadi `null`. Klien yang membaca kontrak
+// `[]Category` akan memanggil `.length` di atasnya dan pecah. Warung yang BARU
+// didaftarkan belum punya kategori maupun pelanggan, jadi ini mengenai pengguna
+// PERTAMA — bukan kasus pinggiran.
+func TestSyncPullEmptyListsAreArrays(t *testing.T) {
+	requireDB(t)
+	f := registerTenant(t, "pullkosong")
+
+	res := call(t, "GET", "/api/v1/sync/pull?since=0", f.token, nil).
+		mustOK(t, "pull tenant baru").data(t)
+
+	for _, kunci := range []string{
+		"categories", "units", "products", "product_variants",
+		"price_lists", "product_prices", "customers", "stocks",
+	} {
+		nilai, ada := res[kunci]
+		if !ada {
+			t.Fatalf("%s tidak ada di balasan", kunci)
+		}
+		if nilai == nil {
+			t.Fatalf("%s dikirim null, seharusnya [] — klien akan pecah saat memanggil .length", kunci)
+		}
+		if _, ok := nilai.([]any); !ok {
+			t.Fatalf("%s bukan array, dapat %T", kunci, nilai)
+		}
+	}
+	if res["deleted"] == nil {
+		t.Fatal("deleted dikirim null, seharusnya {}")
+	}
+}

@@ -90,9 +90,11 @@ export function PenyediaSinkron({ children }: { children: ReactNode }) {
     let batal = false
     setMenyiapkan(true)
     tarikMasterData(tokoAktif)
-      .catch(() => {
+      .catch((e) => {
         // Gagal menarik bukan alasan menghentikan kasir: data lama di Dexie
-        // masih bisa dipakai berjualan.
+        // masih bisa dipakai berjualan. Tapi menelan galatnya diam-diam
+        // membuat "katalog kosong" mustahil didiagnosis — jadi tetap dicatat.
+        console.error('[sinkron] gagal menarik master data:', e)
       })
       .finally(() => {
         if (!batal) setMenyiapkan(false)

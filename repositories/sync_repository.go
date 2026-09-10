@@ -205,5 +205,46 @@ func GetPullChanges(ctx context.Context, outletID string, since int64, limit int
 			out.Cursor = since
 		}
 	}
+
+	// Irisan kosong dikirim sebagai [] , bukan null.
+	//
+	// encoding/json memarshal irisan nil jadi `null`, dan klien yang wajar
+	// membaca kontrak `[]Category` akan langsung memanggil `.length` di
+	// atasnya. Bagi warung yang BARU didaftarkan — belum punya kategori, belum
+	// punya pelanggan — hampir semua daftar di sini nil, jadi bug itu justru
+	// mengenai pengguna pertama, bukan kasus pinggiran.
+	nonNil(&out)
 	return out, nil
+}
+
+// nonNil memastikan setiap daftar pada PullChanges berupa array kosong alih-alih
+// nil, supaya JSON-nya `[]` dan bukan `null`. Lihat catatan di GetPullChanges.
+func nonNil(p *PullChanges) {
+	if p.Categories == nil {
+		p.Categories = []models.Category{}
+	}
+	if p.Units == nil {
+		p.Units = []models.Unit{}
+	}
+	if p.Products == nil {
+		p.Products = []models.Product{}
+	}
+	if p.Variants == nil {
+		p.Variants = []models.ProductVariant{}
+	}
+	if p.PriceLists == nil {
+		p.PriceLists = []models.PriceList{}
+	}
+	if p.ProductPrices == nil {
+		p.ProductPrices = []models.ProductPrice{}
+	}
+	if p.Customers == nil {
+		p.Customers = []models.Customer{}
+	}
+	if p.Stocks == nil {
+		p.Stocks = []models.Stock{}
+	}
+	if p.Deleted == nil {
+		p.Deleted = map[string][]string{}
+	}
 }

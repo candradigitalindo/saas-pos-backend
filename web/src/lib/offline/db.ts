@@ -94,8 +94,25 @@ class DBOffline extends Dexie {
 
   constructor() {
     super('pos-umkm')
+
+    // Versi lama tetap dideklarasikan: perangkat yang sudah memakai v1 butuh
+    // jalur naik yang jelas, dan Dexie memindahkan datanya sendiri selama
+    // rantainya utuh. Menghapus baris ini akan mengosongkan katalog offline
+    // milik kasir yang sudah terpasang.
     this.version(1).stores({
       produk: 'id, name, cari, category_id, is_active',
+      kategori: 'id, name',
+      satuan: 'id, name',
+      pelanggan: 'id, name, phone',
+      stok: 'kunci, product_id, outlet_id',
+      antrean: 'id, status, dibuatPada',
+      meta: 'kunci',
+    })
+
+    // v2 menambah indeks barcode & sku supaya pemindai kasir bisa mencari
+    // tanpa memindai seluruh tabel.
+    this.version(2).stores({
+      produk: 'id, name, cari, category_id, is_active, barcode, sku',
       kategori: 'id, name',
       satuan: 'id, name',
       pelanggan: 'id, name, phone',

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronDown, ChevronUp, ScanLine } from 'lucide-react'
 import { Kartu } from '@/bersama/ui/kartu'
 import { Kolom, Pilihan } from '@/bersama/ui/kolom'
 import { KolomUang } from '@/bersama/ui/kolom-uang'
@@ -11,6 +11,8 @@ import { useToast } from '@/bersama/komponen/toast'
 import { useKategori, useSatuan } from '@/bersama/hooks/use-katalog'
 import { GalatAPI } from '@/lib/api-client'
 import { galatKolom } from '@/lib/galat-kolom'
+import { PemindaiBarcode } from '@/bersama/komponen/pemindai-barcode'
+import { bisaMemindai } from '@/bersama/hooks/use-pemindai'
 import { produkApi } from '../api'
 
 /**
@@ -51,6 +53,7 @@ export function HalamanFormBarang() {
     track_stock: true,
   })
   const [bukaDetail, setBukaDetail] = useState(false)
+  const [bukaPindai, setBukaPindai] = useState(false)
   const [kolomGalat, setKolomGalat] = useState<Record<string, string>>({})
   const [galat, setGalat] = useState<string | null>(null)
 
@@ -219,13 +222,33 @@ export function HalamanFormBarang() {
                 galat={galatKolom(kolomGalat, 'sku')}
               />
 
-              <Kolom
-                label="Barcode"
-                value={form.barcode}
-                onChange={(e) => setForm((f) => ({ ...f, barcode: e.target.value }))}
-                bantuan="Boleh dikosongkan."
-                galat={galatKolom(kolomGalat, 'barcode')}
-              />
+              <div className="flex items-end gap-2">
+                <div className="min-w-0 flex-1">
+                  <Kolom
+                    label="Barcode"
+                    inputMode="numeric"
+                    value={form.barcode}
+                    onChange={(e) => setForm((f) => ({ ...f, barcode: e.target.value }))}
+                    bantuan="Boleh dikosongkan. Isi supaya barang ini bisa dipindai di kasir."
+                    galat={galatKolom(kolomGalat, 'barcode')}
+                  />
+                </div>
+                {/* Tanpa tombol ini, satu-satunya cara mendaftarkan barcode
+                    adalah mengetik 13 digit dari kemasan — dan itu yang
+                    membuat fitur pindai di kasir tidak pernah terpakai. */}
+                {bisaMemindai() && (
+                  <Tombol
+                    type="button"
+                    jenis="kedua"
+                    ukuran="ikon"
+                    onClick={() => setBukaPindai(true)}
+                    aria-label="Pindai barcode barang ini"
+                    className="mb-6 shrink-0"
+                  >
+                    <ScanLine className="h-5 w-5" aria-hidden />
+                  </Tombol>
+                )}
+              </div>
 
               <Kolom
                 label="Ingatkan bila stok tinggal"
@@ -271,6 +294,18 @@ export function HalamanFormBarang() {
           </Tombol>
         </form>
       </Kartu>
+
+      <PemindaiBarcode
+        terbuka={bukaPindai}
+        onTutup={() => setBukaPindai(false)}
+        judul="Pindai Barcode Barang"
+        keterangan="Arahkan kamera ke barcode di kemasan. Kodenya langsung terisi."
+        onKode={(kode) => {
+          setForm((f) => ({ ...f, barcode: kode }))
+          setBukaPindai(false)
+          return true
+        }}
+      />
     </div>
   )
 }

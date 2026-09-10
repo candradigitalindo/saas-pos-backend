@@ -65,7 +65,7 @@ berbagi, naikkan ke `bersama/`.
 | Tahap | Isi | Status |
 |---|---|---|
 | U0 | Fondasi: token desain, api-client, autentikasi, izin, layout, komponen dasar | ✅ Selesai |
-| U1 | Kasir: buka/tutup shift, grid barang, keranjang, bayar, struk, riwayat, batalkan, kas laci | ✅ Selesai |
+| U1 | Kasir: buka/tutup shift, grid barang, penyaring kategori, pindai barcode, keranjang, bayar, struk, riwayat, batalkan, kas laci | ✅ Selesai |
 | U2 | Barang & stok: CRUD barang, impor CSV, kategori/satuan/pemasok, saldo & kartu stok, koreksi, barang masuk | ✅ Selesai |
 | U3 | Offline: PWA, Dexie, antrean kirim, halaman "belum terkirim", pecah kode per rute | ✅ Selesai |
 | U4 | Laporan: beranda berangka, untung-rugi, per hari/kanal/kasir/metode bayar, grafik, unduh CSV | ✅ Selesai |

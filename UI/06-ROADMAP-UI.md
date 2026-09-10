@@ -30,7 +30,12 @@ Belum ada layar bisnis; ini yang membuat sisanya cepat.
 Tahap paling menentukan. Kalau berhenti di sini pun, produknya sudah berguna.
 
 - Buka/tutup shift
-- Layar kasir: grid produk, pencarian, keranjang, bayar (tunai/QRIS/kasbon)
+- Layar kasir: grid produk, pencarian, penyaring kategori, keranjang, bayar
+  (tunai/QRIS/kasbon)
+- Pindai barcode lewat kamera — `BarcodeDetector` bawaan di Chrome Android
+  (nol byte tambahan), pustaka WASM ditarik saat dibutuhkan di peramban lain.
+  Jalan penuh saat offline, dan kolom ketik manual selalu tersedia di layar yang
+  sama karena barcode bisa saja sobek
 - `Idempotency-Key` pada checkout
 - Struk di layar + cetak
 - Riwayat transaksi, batalkan, retur
