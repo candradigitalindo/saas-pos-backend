@@ -45,6 +45,8 @@ const HalamanKaryawan = muat(() => import('@/fitur/sdm/halaman/halaman-karyawan'
 const HalamanGaji = muat(() => import('@/fitur/sdm/halaman/halaman-gaji'), 'HalamanGaji')
 const HalamanKanal = muat(() => import('@/fitur/kanal/halaman/halaman-kanal'), 'HalamanKanal')
 const HalamanLangganan = muat(() => import('@/fitur/langganan/halaman/halaman-langganan'), 'HalamanLangganan')
+const HalamanProspekCRM = muat(() => import('@/fitur/crm/halaman/halaman-prospek'), 'HalamanProspek')
+const HalamanKunjungan = muat(() => import('@/fitur/crm/halaman/halaman-kunjungan'), 'HalamanKunjungan')
 
 // Realm mitra: aplikasi terpisah dengan sesi, layout, dan menu sendiri.
 const LayoutMitra = muat(() => import('./layouts/layout-mitra'), 'LayoutMitra')
@@ -52,6 +54,9 @@ const HalamanMasukMitra = muat(() => import('@/fitur/mitra/halaman/halaman-masuk
 const HalamanDashboardMitra = muat(() => import('@/fitur/mitra/halaman/halaman-dashboard-mitra'), 'HalamanDashboardMitra')
 const HalamanProspekMitra = muat(() => import('@/fitur/mitra/halaman/halaman-prospek-mitra'), 'HalamanProspekMitra')
 const HalamanKomisiMitra = muat(() => import('@/fitur/mitra/halaman/halaman-komisi-mitra'), 'HalamanKomisiMitra')
+
+// Realm ketiga: panel internal penyedia SaaS. Desktop saja, tanpa offline.
+const HalamanPanel = muat(() => import('@/fitur/panel/halaman/halaman-panel'), 'HalamanPanel')
 
 /** React.lazy untuk modul yang mengekspor komponen bernama, bukan default. */
 function muat<N extends string>(
@@ -400,6 +405,26 @@ const router = createBrowserRouter([
         ),
       },
       {
+        path: '/crm',
+        element: (
+          <ButuhIzin izin={[IZIN.crmLeadViewOwn, IZIN.crmLeadViewAll]}>
+            <Tunggu>
+              <HalamanProspekCRM />
+            </Tunggu>
+          </ButuhIzin>
+        ),
+      },
+      {
+        path: '/crm/kunjungan',
+        element: (
+          <ButuhIzin izin={[IZIN.crmVisitCheckin]}>
+            <Tunggu>
+              <HalamanKunjungan />
+            </Tunggu>
+          </ButuhIzin>
+        ),
+      },
+      {
         path: '/laporan',
         element: (
           <ButuhIzin izin={[IZIN.reportView]}>
@@ -427,6 +452,15 @@ const router = createBrowserRouter([
       { path: 'prospek', element: <Tunggu><HalamanProspekMitra /></Tunggu> },
       { path: 'komisi', element: <Tunggu><HalamanKomisiMitra /></Tunggu> },
     ],
+  },
+  // ── Panel internal: realm ketiga ─────────────────────────────────────────
+  {
+    path: '/panel',
+    element: (
+      <Tunggu>
+        <HalamanPanel />
+      </Tunggu>
+    ),
   },
   { path: '*', element: <Navigate to="/" replace /> },
 ])

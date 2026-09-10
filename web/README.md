@@ -70,5 +70,16 @@ berbagi, naikkan ke `bersama/`.
 | U3 | Offline: PWA, Dexie, antrean kirim, halaman "belum terkirim", pecah kode per rute | ✅ Selesai |
 | U4 | Laporan: beranda berangka, untung-rugi, per hari/kanal/kasir/metode bayar, grafik, unduh CSV | ✅ Selesai |
 | U5 | Operasional lanjutan: hitung fisik, kirim antar toko, pelanggan & kasbon, pengaturan (toko, pengguna, peran dinamis + peran ganda) | ✅ Selesai |
-| U6 | Modul berbayar: SDM & gaji, portal mitra, langganan, kanal online — CRM menyusul | 🔨 Sebagian |
-| UX | Panel internal penyedia SaaS | — |
+| U6 | Modul berbayar: SDM & gaji, portal mitra, langganan, kanal online, CRM (prospek & kunjungan) | ✅ Selesai |
+| UX | Panel internal penyedia SaaS: mitra, komisi, antrean notifikasi | ✅ Selesai |
+
+### Tiga realm, tiga aplikasi
+
+Backend menolak token silang antar-realm, jadi frontend memisahkannya juga —
+bukan sekadar cabang di dalam satu pohon rute:
+
+| Realm | Rute | Sesi | Catatan |
+|---|---|---|---|
+| Toko | `/` | `pos.sesi.toko` | PWA, offline, navigasi menurut izin |
+| Mitra | `/mitra` | `pos.sesi.mitra` | Masuk pakai email, aksen biru, batas privasi permanen |
+| Panel internal | `/panel` | `pos.sesi.panel` | Desktop saja, menu dari `capabilities` |

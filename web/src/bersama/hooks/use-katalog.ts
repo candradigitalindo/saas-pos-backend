@@ -8,6 +8,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { api, type Halaman } from '@/lib/api-client'
 import type { Kategori, Pemasok, Produk, Satuan } from '@/bersama/tipe/katalog'
+import type { Pelanggan } from '@/bersama/tipe/pos'
 
 export function useDaftarProduk(cari?: string, kategoriId?: string, aktifSaja = true) {
   return useQuery({
@@ -46,5 +47,20 @@ export function usePemasok() {
     queryKey: ['katalog-pemasok'],
     queryFn: () => api.get<Halaman<Pemasok>>('/suppliers', { query: { limit: 100 } }),
     staleTime: 5 * 60_000,
+  })
+}
+
+/**
+ * Daftar pelanggan — dibaca kasir (untuk kasbon), CRM (untuk kunjungan), dan
+ * modul pelanggan sendiri. Perubahannya tetap milik modul pelanggan.
+ */
+export function usePelanggan(cari?: string) {
+  return useQuery({
+    queryKey: ['katalog-pelanggan', cari ?? ''],
+    queryFn: () =>
+      api.get<Halaman<Pelanggan>>('/customers', {
+        query: { search: cari || undefined, limit: 100 },
+      }),
+    staleTime: 60_000,
   })
 }
