@@ -4,6 +4,7 @@ import {
   Boxes,
   Building2,
   ClipboardList,
+  CreditCard,
   Home,
   MoreHorizontal,
   NotebookPen,
@@ -14,6 +15,7 @@ import {
   Store,
   Tags,
   Truck,
+  UserCog,
   Users,
   Wallet,
 } from 'lucide-react'
@@ -64,7 +66,9 @@ export const MENU_LAINNYA: ItemMenu[] = [
   { ke: '/stok/transfer', label: 'Kirim Antar Toko', ikon: Truck, izin: [IZIN.stockTransfer] },
   { ke: '/kanal', label: 'Kanal Online', ikon: Store, izin: [IZIN.channelManage, IZIN.channelOrderAccept] },
   { ke: '/crm', label: 'Prospek & Proyek', ikon: Building2, izin: [IZIN.crmLeadViewOwn, IZIN.crmLeadViewAll] },
-  { ke: '/sdm', label: 'Karyawan & Gaji', ikon: Users, izin: [IZIN.hrEmployeeView, IZIN.hrEmployeeEdit] },
+  { ke: '/sdm', label: 'Karyawan', ikon: UserCog, izin: [IZIN.hrEmployeeView, IZIN.hrEmployeeEdit] },
+  { ke: '/sdm/gaji', label: 'Gaji', ikon: Wallet, izin: [IZIN.hrPayrollRun, IZIN.hrSalaryView] },
+  { ke: '/langganan', label: 'Langganan', ikon: CreditCard, izin: [IZIN.billingManage] },
   { ke: '/pengaturan', label: 'Pengaturan', ikon: Settings, izin: [IZIN.outletManage, IZIN.userManage, IZIN.roleManage] },
 ]
 

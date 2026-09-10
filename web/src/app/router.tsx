@@ -8,6 +8,7 @@ import { HalamanDaftar } from '@/fitur/auth/halaman/halaman-daftar'
 import { HalamanBeranda } from '@/fitur/laporan/halaman/halaman-beranda'
 import { KerangkaBaris } from '@/bersama/komponen/kerangka'
 import { IZIN } from '@/lib/izin'
+import { PenyediaSesiMitra, useSesiMitra } from '@/fitur/mitra/sesi-mitra'
 
 /**
  * Rute dipecah per berkas supaya muat pertama di 3G tetap di bawah tiga detik:
@@ -40,6 +41,17 @@ const HalamanPengaturan = muat(() => import('@/fitur/pengaturan/halaman/halaman-
 const HalamanToko = muat(() => import('@/fitur/pengaturan/halaman/halaman-toko'), 'HalamanToko')
 const HalamanPengguna = muat(() => import('@/fitur/pengaturan/halaman/halaman-pengguna'), 'HalamanPengguna')
 const HalamanPeran = muat(() => import('@/fitur/pengaturan/halaman/halaman-peran'), 'HalamanPeran')
+const HalamanKaryawan = muat(() => import('@/fitur/sdm/halaman/halaman-karyawan'), 'HalamanKaryawan')
+const HalamanGaji = muat(() => import('@/fitur/sdm/halaman/halaman-gaji'), 'HalamanGaji')
+const HalamanKanal = muat(() => import('@/fitur/kanal/halaman/halaman-kanal'), 'HalamanKanal')
+const HalamanLangganan = muat(() => import('@/fitur/langganan/halaman/halaman-langganan'), 'HalamanLangganan')
+
+// Realm mitra: aplikasi terpisah dengan sesi, layout, dan menu sendiri.
+const LayoutMitra = muat(() => import('./layouts/layout-mitra'), 'LayoutMitra')
+const HalamanMasukMitra = muat(() => import('@/fitur/mitra/halaman/halaman-masuk-mitra'), 'HalamanMasukMitra')
+const HalamanDashboardMitra = muat(() => import('@/fitur/mitra/halaman/halaman-dashboard-mitra'), 'HalamanDashboardMitra')
+const HalamanProspekMitra = muat(() => import('@/fitur/mitra/halaman/halaman-prospek-mitra'), 'HalamanProspekMitra')
+const HalamanKomisiMitra = muat(() => import('@/fitur/mitra/halaman/halaman-komisi-mitra'), 'HalamanKomisiMitra')
 
 /** React.lazy untuk modul yang mengekspor komponen bernama, bukan default. */
 function muat<N extends string>(
@@ -348,6 +360,46 @@ const router = createBrowserRouter([
         ),
       },
       {
+        path: '/sdm',
+        element: (
+          <ButuhIzin izin={[IZIN.hrEmployeeView, IZIN.hrEmployeeEdit]}>
+            <Tunggu>
+              <HalamanKaryawan />
+            </Tunggu>
+          </ButuhIzin>
+        ),
+      },
+      {
+        path: '/sdm/gaji',
+        element: (
+          <ButuhIzin izin={[IZIN.hrPayrollRun, IZIN.hrSalaryView]}>
+            <Tunggu>
+              <HalamanGaji />
+            </Tunggu>
+          </ButuhIzin>
+        ),
+      },
+      {
+        path: '/kanal',
+        element: (
+          <ButuhIzin izin={[IZIN.channelManage, IZIN.channelOrderAccept]}>
+            <Tunggu>
+              <HalamanKanal />
+            </Tunggu>
+          </ButuhIzin>
+        ),
+      },
+      {
+        path: '/langganan',
+        element: (
+          <ButuhIzin izin={[IZIN.billingManage]}>
+            <Tunggu>
+              <HalamanLangganan />
+            </Tunggu>
+          </ButuhIzin>
+        ),
+      },
+      {
         path: '/laporan',
         element: (
           <ButuhIzin izin={[IZIN.reportView]}>
@@ -359,9 +411,68 @@ const router = createBrowserRouter([
       },
     ],
   },
+  // ── Portal mitra: realm terpisah ──────────────────────────────────────────
+  //
+  // Bukan cabang dari pohon toko. Tokennya berbeda dan ditolak silang oleh
+  // backend, jadi penjagaan, layout, dan penyimpanan sesinya juga dipisah.
+  {
+    path: '/mitra',
+    element: (
+      <Tunggu>
+        <PenjagaMitra />
+      </Tunggu>
+    ),
+    children: [
+      { index: true, element: <Tunggu><HalamanDashboardMitra /></Tunggu> },
+      { path: 'prospek', element: <Tunggu><HalamanProspekMitra /></Tunggu> },
+      { path: 'komisi', element: <Tunggu><HalamanKomisiMitra /></Tunggu> },
+    ],
+  },
   { path: '*', element: <Navigate to="/" replace /> },
 ])
 
 export function Rute() {
   return <RouterProvider router={router} />
+}
+
+/**
+ * Penjaga realm mitra. Menyediakan sesinya sekaligus — sesi mitra tidak boleh
+ * hidup di seluruh aplikasi, hanya di bawah /mitra.
+ */
+function PenjagaMitra() {
+  return (
+    <PenyediaSesiMitra>
+      <IsiMitra />
+    </PenyediaSesiMitra>
+  )
+}
+
+function IsiMitra() {
+  const { sudahMasuk, memuat } = useSesiMitra()
+
+  if (memuat) {
+    return (
+      <div className="p-4">
+        <KerangkaBaris jumlah={4} />
+      </div>
+    )
+  }
+
+  if (!sudahMasuk) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-latar px-4 py-8">
+        <div className="w-full max-w-md">
+          <Tunggu>
+            <HalamanMasukMitra />
+          </Tunggu>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <Tunggu>
+      <LayoutMitra />
+    </Tunggu>
+  )
 }

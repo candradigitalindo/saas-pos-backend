@@ -70,5 +70,5 @@ berbagi, naikkan ke `bersama/`.
 | U3 | Offline: PWA, Dexie, antrean kirim, halaman "belum terkirim", pecah kode per rute | ✅ Selesai |
 | U4 | Laporan: beranda berangka, untung-rugi, per hari/kanal/kasir/metode bayar, grafik, unduh CSV | ✅ Selesai |
 | U5 | Operasional lanjutan: hitung fisik, kirim antar toko, pelanggan & kasbon, pengaturan (toko, pengguna, peran dinamis + peran ganda) | ✅ Selesai |
-| U6 | Modul berbayar (kanal, CRM, SDM & gaji, langganan, portal mitra) | ⏳ Berikutnya |
+| U6 | Modul berbayar: SDM & gaji, portal mitra, langganan, kanal online — CRM menyusul | 🔨 Sebagian |
 | UX | Panel internal penyedia SaaS | — |
