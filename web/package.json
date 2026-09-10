@@ -9,7 +9,10 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "tsc -b --noEmit"
+    "lint": "tsc -b --noEmit",
+    "tangkap-layar": "SHOT_DIR=${SHOT_DIR:-./tangkapan} node skrip/tangkap-layar.mjs",
+    "periksa:tataletak": "node skrip/audit-tataletak.mjs",
+    "periksa:kontras": "node skrip/audit-kontras.mjs"
   },
   "dependencies": {
     "@fontsource-variable/plus-jakarta-sans": "^5.1.0",
@@ -45,6 +48,7 @@
     "@vitejs/plugin-react": "^6.1.1",
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^25.0.1",
+    "playwright": "^1.63.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.7.2",
     "vite": "^8.2.2",

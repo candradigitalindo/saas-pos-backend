@@ -116,7 +116,24 @@ Ini yang membuat pesan error terasa manusiawi.
 ### Autentikasi
 
 - Masuk → `POST /api/v1/auth/login` → simpan `access_token` (15 menit) + `refresh_token` (30 hari).
-- Token akses di memori; refresh token di penyimpanan aman.
+- **Keduanya disimpan, lengkap dengan waktu kedaluwarsa access token.**
+
+  > ⚠️ Rancangan awal menahan access token **di memori saja**. Setelah
+  > dijalankan sungguhan, aturan itu dicabut karena dua alasan:
+  >
+  > 1. **Manfaat keamanannya nyaris nol.** Refresh token — kredensial yang jauh
+  >    lebih berkuasa karena bisa mencetak access token berkali-kali — memang
+  >    harus menetap di penyimpanan supaya kasir tidak diminta masuk ulang tiap
+  >    pagi. Penyerang yang bisa membacanya sudah mendapat yang lebih besar.
+  > 2. **Ongkosnya nyata.** Memori hilang tiap halaman dimuat ulang, jadi setiap
+  >    muat ulang memaksa satu `/auth/refresh`. Endpoint itu dibatasi ~0,2
+  >    permintaan/detik burst 5 **per alamat IP** (`middlewares.RateLimit`
+  >    memakai `c.ClientIP()`). Satu warung dengan tablet kasir + HP pemilik +
+  >    HP gudang berbagi satu IP: mereka saling menghabiskan jatah lalu
+  >    terlempar ke layar masuk bersamaan.
+  >
+  > Pembaruan token kini hanya dijalankan saat token benar-benar kedaluwarsa
+  > atau saat server membalas 401.
 - Satu *interceptor* memperbarui token saat 401, **dan mengantre permintaan lain**
   supaya tidak terjadi lima kali refresh bersamaan.
 - **Portal mitra adalah realm terpisah** (`POST /api/v1/partner/auth/login`, masuk

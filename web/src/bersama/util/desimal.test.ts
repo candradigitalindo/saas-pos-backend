@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { bandingQty, formatQty, kurangQty, qtyKosong, tambahQty } from './desimal'
+import {
+  bandingQty,
+  formatQty,
+  formatSisaStok,
+  kurangQty,
+  qtyKosong,
+  stokPerluDicocokkan,
+  tambahQty,
+} from './desimal'
 
 describe('aritmetika qty', () => {
   it('menjumlah tanpa galat pecahan biner', () => {
@@ -31,5 +39,30 @@ describe('formatQty', () => {
   it('membuang nol berlebih dan memakai koma desimal', () => {
     expect(formatQty('44.000')).toBe('44')
     expect(formatQty('1.5')).toBe('1,5')
+  })
+})
+
+describe('formatSisaStok', () => {
+  it('menyebut sisa bila stok masih ada', () => {
+    expect(formatSisaStok('44', 'pcs')).toBe('sisa 44 pcs')
+  })
+
+  it('stok nol dan MINUS sama-sama disebut "habis"', () => {
+    // "sisa −2 pcs" tidak berarti apa-apa bagi pemilik warung; yang ia butuh
+    // tahu adalah barangnya habis.
+    expect(formatSisaStok('0', 'pcs')).toBe('habis')
+    expect(formatSisaStok('-2', 'pcs')).toBe('habis')
+  })
+
+  it('tetap pendek supaya tidak menggencet nama barang di layar HP', () => {
+    // Versi sebelumnya memuat "catatan perlu dicocokkan (−2 pcs)" dan membuat
+    // "Air Mineral 600ml" tersisa jadi "Air …".
+    expect(formatSisaStok('-2', 'pcs').length).toBeLessThanOrEqual(12)
+  })
+
+  it('stok minus ditandai terpisah untuk layar yang punya ruang', () => {
+    expect(stokPerluDicocokkan('-2')).toBe(true)
+    expect(stokPerluDicocokkan('0')).toBe(false)
+    expect(stokPerluDicocokkan('5')).toBe(false)
   })
 })

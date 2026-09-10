@@ -1,6 +1,6 @@
 import type { Produk } from '@/bersama/tipe/katalog'
 import { formatRupiah } from '@/bersama/util/uang'
-import { formatQty } from '@/bersama/util/desimal'
+import { formatQty, formatSisaStok } from '@/bersama/util/desimal'
 import { cn } from '@/bersama/util/cn'
 
 /**
@@ -64,7 +64,7 @@ export function KartuProduk({
           produk.track_stock &&
           stok !== undefined && (
             <span className="text-keterangan text-teks-redup">
-              sisa {formatQty(stok)} {produk.unit_name}
+              {formatSisaStok(stok, produk.unit_name)}
             </span>
           )
         )}

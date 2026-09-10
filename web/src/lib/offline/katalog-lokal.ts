@@ -18,12 +18,18 @@ import { db, type ProdukLokal } from './db'
 export interface HasilKatalogLokal {
   produk: Produk[]
   petaStok: Map<string, string>
+  /** Kategori yang benar-benar dipakai barang aktif. */
+  kategori: { id: string; nama: string }[]
   /** true bila Dexie masih kosong — belum pernah menarik master data. */
   kosong: boolean
   memuat: boolean
 }
 
-export function useKatalogLokal(cari: string, outletId?: string): HasilKatalogLokal {
+export function useKatalogLokal(
+  cari: string,
+  outletId?: string,
+  kategoriId?: string,
+): HasilKatalogLokal {
   const hasil = useLiveQuery(async () => {
     const [semuaProduk, satuan, stok] = await Promise.all([
       db.produk.filter((p) => p.is_active).toArray(),
@@ -34,9 +40,8 @@ export function useKatalogLokal(cari: string, outletId?: string): HasilKatalogLo
     const namaSatuan = new Map(satuan.map((s) => [s.id, s.name]))
     const kunci = cari.trim().toLowerCase()
 
-    const cocok = kunci
-      ? semuaProduk.filter((p) => p.cari.includes(kunci))
-      : semuaProduk
+    let cocok = kunci ? semuaProduk.filter((p) => p.cari.includes(kunci)) : semuaProduk
+    if (kategoriId) cocok = cocok.filter((p) => p.category_id === kategoriId)
 
     const produk = cocok
       .sort((a, b) => a.name.localeCompare(b.name, 'id'))
@@ -45,12 +50,21 @@ export function useKatalogLokal(cari: string, outletId?: string): HasilKatalogLo
     const petaStok = new Map<string, string>()
     for (const s of stok) petaStok.set(s.product_id, s.qty)
 
-    return { produk, petaStok, kosong: semuaProduk.length === 0 }
-  }, [cari, outletId])
+    // Kategori yang benar-benar dipakai barang aktif — bukan seluruh katalog,
+    // supaya kasir tidak melihat tab kategori yang isinya selalu kosong.
+    const idTerpakai = new Set(semuaProduk.map((p) => p.category_id).filter(Boolean))
+    const kategori = (await db.kategori.toArray())
+      .filter((k) => idTerpakai.has(k.id))
+      .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'id'))
+      .map((k) => ({ id: k.id, nama: k.name }))
+
+    return { produk, petaStok, kategori, kosong: semuaProduk.length === 0 }
+  }, [cari, outletId, kategoriId])
 
   return {
     produk: hasil?.produk ?? [],
     petaStok: hasil?.petaStok ?? new Map(),
+    kategori: hasil?.kategori ?? [],
     kosong: hasil?.kosong ?? false,
     memuat: hasil === undefined,
   }

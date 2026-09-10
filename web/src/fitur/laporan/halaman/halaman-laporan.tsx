@@ -14,6 +14,7 @@ import { formatRupiah, persenSelisih } from '@/bersama/util/uang'
 import { tanggalISO } from '@/bersama/util/tanggal'
 import { cn } from '@/bersama/util/cn'
 import { BarChart3, CloudOff } from 'lucide-react'
+import { api, type Halaman } from '@/lib/api-client'
 import { laporanApi, type Pengelompokan } from '../api'
 import { BatangKanal, type BarisBatang } from '../komponen/batang-kanal'
 
@@ -62,6 +63,20 @@ export function HalamanLaporan() {
     enabled: online && bolehLihatUntung,
   })
 
+  // Nama kanal — laporan hanya membawa id-nya.
+  const kanal = useQuery({
+    queryKey: ['kanal-nama'],
+    queryFn: () =>
+      api.get<Halaman<{ id: string; name: string }>>('/channels', { query: { limit: 100 } }),
+    enabled: online && boleh(IZIN.channelManage, IZIN.channelOrderAccept),
+    retry: false,
+    staleTime: 5 * 60_000,
+  })
+  const petaKanal = useMemo(
+    () => new Map((kanal.data?.data ?? []).map((k) => [k.id, k.name])),
+    [kanal.data],
+  )
+
   // Pembanding: periode sebelumnya dengan panjang yang sama.
   const sebelumnya = useQuery({
     queryKey: ['laporan-sebelum', dari, sampai, tokoAktif],
@@ -70,6 +85,17 @@ export function HalamanLaporan() {
       return laporanApi.penjualan(d, s, 'day', tokoAktif)
     },
     enabled: online,
+  })
+
+  // Untung juga butuh pembanding — angka tanpa pembanding tidak memberi tahu
+  // apa pun (ui/01 §4), dan itu berlaku untuk angka terpenting di layar ini.
+  const untungSebelum = useQuery({
+    queryKey: ['laporan-untung-sebelum', dari, sampai, tokoAktif],
+    queryFn: () => {
+      const { dari: d, sampai: s } = periodeSebelum(dari, sampai)
+      return laporanApi.untung(d, s, tokoAktif)
+    },
+    enabled: online && bolehLihatUntung,
   })
 
   if (!online) {
@@ -98,7 +124,7 @@ export function HalamanLaporan() {
               onClick={() => setRentang(r)}
               aria-pressed={rentang === r}
               className={cn(
-                'h-10 rounded-full border px-3 text-label font-medium',
+                'h-12 rounded-full border px-4 text-label font-medium',
                 rentang === r
                   ? 'border-utama bg-sorot text-utama'
                   : 'border-garis bg-permukaan text-teks-sekunder hover:bg-permukaan-2',
@@ -133,7 +159,7 @@ export function HalamanLaporan() {
             }
             pembanding={
               bolehLihatUntung
-                ? undefined
+                ? untungSebelum.data?.totals.laba_bersih
                 : totalSebelum?.net_amount
             }
             labelPembanding={labelPembanding(rentang)}
@@ -186,11 +212,11 @@ export function HalamanLaporan() {
             <Kartu className="p-4">
               <BatangKanal
                 judul="Dari mana penjualannya?"
-                baris={barisKanal(untung.data!.by_channel)}
+                baris={barisKanal(untung.data!.by_channel, petaKanal)}
               />
               <Wawasan
                 baris={untung.data!.by_channel.map((c) => ({
-                  nama: namaKanal(c.channel_id),
+                  nama: namaKanal(c.channel_id, petaKanal),
                   omzet: c.omzet,
                   laba: c.laba_bersih,
                 }))}
@@ -219,7 +245,7 @@ export function HalamanLaporan() {
                     onClick={() => setKelompok(nilai)}
                     aria-pressed={kelompok === nilai}
                     className={cn(
-                      'h-9 rounded-full border px-3 text-keterangan font-medium',
+                      'h-12 rounded-full border px-4 text-label font-medium',
                       kelompok === nilai
                         ? 'border-utama bg-sorot text-utama'
                         : 'border-garis bg-permukaan text-teks-sekunder hover:bg-permukaan-2',
@@ -245,7 +271,7 @@ export function HalamanLaporan() {
               <BatangKanal
                 baris={penjualan.data!.rows.map((r) => ({
                   kunci: r.key,
-                  label: labelBaris(kelompok, r.key),
+                  label: labelBaris(kelompok, r.key, petaKanal),
                   nilai: r.net_amount,
                   keterangan: `${r.sales_count}×`,
                 }))}
@@ -311,7 +337,7 @@ function AngkaSorotan({
       >
         {formatRupiah(nilai)}
       </p>
-      {persen !== null && (
+      {persen !== null ? (
         <p
           className={cn(
             'mt-1 flex items-center gap-1 text-keterangan font-medium',
@@ -320,6 +346,12 @@ function AngkaSorotan({
         >
           <Panah className="h-4 w-4" aria-hidden />
           {Math.abs(persen)}% {labelPembanding}
+        </p>
+      ) : (
+        /* Kalau pembandingnya belum ada, KATAKAN. Angka telanjang tampak
+           seperti baris yang lupa dimuat (ui/01 §4). */
+        <p className="mt-1 text-keterangan text-teks-redup">
+          Belum ada data {labelPembanding.replace(/^dibanding /, '')} untuk dibandingkan
         </p>
       )}
     </Kartu>
@@ -404,12 +436,22 @@ function labelPembanding(r: Rentang): string {
   return r === 'hari-ini' ? 'dibanding kemarin' : 'dibanding periode sebelumnya'
 }
 
-function namaKanal(id: string): string {
-  return id ? `Kanal ${id.slice(0, 6)}` : 'Kasir langsung'
+/**
+ * Nama kanal untuk ditampilkan.
+ *
+ * Laporan hanya membawa `channel_id`, jadi namanya diambil dari daftar kanal.
+ * Sebelum peta itu tersedia, JANGAN tampilkan potongan id seperti
+ * "Kanal 01M24C" — bagi pemilik warung itu sama saja dengan tidak ada
+ * keterangan, dan melanggar aturan "bahasa orang, bukan bahasa sistem".
+ */
+function namaKanal(id: string, peta?: Map<string, string>): string {
+  if (!id) return 'Kasir langsung'
+  return peta?.get(id) ?? 'Kanal online'
 }
 
 function barisKanal(
   rows: { channel_id: string; omzet: number; laba_bersih: number }[],
+  peta: Map<string, string>,
 ): BarisBatang[] {
   const total = rows.reduce((j, r) => j + r.omzet, 0)
   return rows
@@ -417,13 +459,17 @@ function barisKanal(
     .sort((a, b) => b.omzet - a.omzet)
     .map((r) => ({
       kunci: r.channel_id || 'langsung',
-      label: namaKanal(r.channel_id),
+      label: namaKanal(r.channel_id, peta),
       nilai: r.omzet,
       keterangan: total > 0 ? `${Math.round((r.omzet / total) * 100)}%` : undefined,
     }))
 }
 
-function labelBaris(kelompok: Pengelompokan, kunci: string): string {
+function labelBaris(
+  kelompok: Pengelompokan,
+  kunci: string,
+  peta: Map<string, string>,
+): string {
   if (kelompok === 'payment') {
     const nama: Record<string, string> = {
       cash: 'Tunai',
@@ -435,6 +481,6 @@ function labelBaris(kelompok: Pengelompokan, kunci: string): string {
     }
     return nama[kunci] ?? kunci
   }
-  if (kelompok === 'channel') return namaKanal(kunci)
+  if (kelompok === 'channel') return namaKanal(kunci, peta)
   return kunci || '—'
 }

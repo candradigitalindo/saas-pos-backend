@@ -108,7 +108,7 @@ export function HalamanMaster() {
               setGalat(null)
             }}
             className={cn(
-              'h-10 flex-1 rounded-full border px-4 text-label font-medium',
+              'h-12 flex-1 rounded-full border px-4 text-label font-medium',
               tab === t
                 ? 'border-utama bg-sorot text-utama'
                 : 'border-garis bg-permukaan text-teks-sekunder hover:bg-permukaan-2',

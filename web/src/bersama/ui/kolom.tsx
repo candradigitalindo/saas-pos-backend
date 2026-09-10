@@ -56,7 +56,10 @@ export const Kolom = forwardRef<HTMLInputElement, PropKolom>(function Kolom(
           aria-invalid={!!galat}
           aria-describedby={cn(galat ? idGalat : undefined, bantuan ? idBantuan : undefined)}
           className={cn(
-            'min-w-0 flex-1 bg-transparent text-isi text-teks-utama outline-none',
+            // h-full: seluruh tinggi kotak jadi area ketuk. Tanpa ini kotaknya
+            // terlihat 48px tapi hanya ~24px di tengah yang benar-benar
+            // memfokuskan isian — jari yang mengenai tepinya tidak berbuat apa-apa.
+            'h-full min-w-0 flex-1 bg-transparent text-isi text-teks-utama outline-none',
             'placeholder:text-teks-redup',
             className,
           )}

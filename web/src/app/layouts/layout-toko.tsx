@@ -1,8 +1,10 @@
 import { NavLink, Outlet } from 'react-router-dom'
+import { Home } from 'lucide-react'
 import {
   IKON_LAINNYA,
   MENU_LAINNYA,
   MENU_UTAMA,
+  saringKelompok,
   saringMenu,
   type ItemMenu,
 } from '@/app/navigasi'
@@ -30,7 +32,7 @@ export function LayoutToko() {
 
   return (
     <div className="min-h-dvh bg-latar">
-      <SampingBesar utama={utama} lainnya={lainnya} />
+      <SampingBesar />
 
       <div className="lg:pl-64">
         <main className="mx-auto w-full max-w-[1280px] px-4 pb-24 pt-4 lg:pb-8">
@@ -83,17 +85,20 @@ function TautanBawah({ item }: { item: ItemMenu }) {
       {({ isActive }) => (
         <>
           <Ikon className="h-6 w-6" aria-hidden strokeWidth={isActive ? 2.4 : 2} />
-          {/* Ikon selalu ditemani teks — ikon sendirian tidak universal. */}
-          <span className="text-[11px] font-medium leading-none">{label}</span>
+          {/* Ikon selalu ditemani teks — ikon sendirian tidak universal.
+              Ukurannya 13px: itu batas terkecil yang masih terbaca menurut
+              ui/02, dan navigasi utama bukan tempat untuk melanggarnya. */}
+          <span className="text-keterangan font-medium leading-none">{label}</span>
         </>
       )}
     </NavLink>
   )
 }
 
-function SampingBesar({ utama, lainnya }: { utama: ItemMenu[]; lainnya: ItemMenu[] }) {
-  const { profil } = useSesi()
+function SampingBesar() {
+  const { profil, boleh } = useSesi()
   const sinkron = useSinkron()
+  const kelompok = saringKelompok(boleh)
 
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-garis bg-permukaan lg:flex">
@@ -107,27 +112,28 @@ function SampingBesar({ utama, lainnya }: { utama: ItemMenu[]; lainnya: ItemMenu
       </div>
 
       <nav aria-label="Navigasi samping" className="flex-1 overflow-y-auto p-2">
-        <ul className="flex flex-col gap-0.5">
-          {[...utama, ...lainnya].map((m) => (
-            <li key={m.ke}>
-              <NavLink
-                to={m.ke}
-                end={m.ke === '/'}
-                className={({ isActive }) =>
-                  cn(
-                    'flex h-12 items-center gap-3 rounded-kontrol px-3 text-label font-medium',
-                    isActive
-                      ? 'bg-sorot text-utama'
-                      : 'text-teks-sekunder hover:bg-permukaan-2',
-                  )
-                }
-              >
-                <m.ikon className="h-5 w-5 shrink-0" aria-hidden />
-                {m.label}
-              </NavLink>
-            </li>
-          ))}
+        <ul className="mb-1 flex flex-col gap-0.5">
+          <li>
+            <TautanSamping item={{ ke: '/', label: 'Beranda', ikon: Home }} />
+          </li>
         </ul>
+
+        {/* Dikelompokkan sesuai ui/04-PETA-LAYAR.md. Daftar rata 19 baris
+            memaksa orang memindai satu per satu setiap kali. */}
+        {kelompok.map((k) => (
+          <div key={k.judul} className="mb-1">
+            <h2 className="px-3 pb-1 pt-3 text-keterangan font-semibold uppercase tracking-wide text-teks-redup">
+              {k.judul}
+            </h2>
+            <ul className="flex flex-col gap-0.5">
+              {k.item.map((m) => (
+                <li key={m.ke}>
+                  <TautanSamping item={m} />
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
       </nav>
 
       <div className="border-t border-garis p-3">
@@ -145,5 +151,23 @@ function SampingBesar({ utama, lainnya }: { utama: ItemMenu[]; lainnya: ItemMenu
         <TombolKeluar />
       </div>
     </aside>
+  )
+}
+
+function TautanSamping({ item }: { item: ItemMenu }) {
+  return (
+    <NavLink
+      to={item.ke}
+      end={item.ke === '/'}
+      className={({ isActive }) =>
+        cn(
+          'flex h-12 items-center gap-3 rounded-kontrol px-3 text-label font-medium',
+          isActive ? 'bg-sorot text-utama' : 'text-teks-sekunder hover:bg-permukaan-2',
+        )
+      }
+    >
+      <item.ikon className="h-5 w-5 shrink-0" aria-hidden />
+      {item.label}
+    </NavLink>
   )
 }

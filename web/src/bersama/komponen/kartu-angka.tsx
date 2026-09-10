@@ -59,7 +59,12 @@ export function KartuAngka({
           {Math.abs(persen)}% {labelPembanding}
         </p>
       ) : (
-        keterangan && <p className="mt-1 text-keterangan text-teks-redup">{keterangan}</p>
+        /* Angka tanpa pembanding tidak memberi tahu apa pun (ui/01 §4). Kalau
+           pembandingnya memang belum ada, KATAKAN — jangan tinggalkan angka
+           telanjang yang tampak seperti baris yang lupa dimuat. */
+        <p className="mt-1 text-keterangan text-teks-redup">
+          {keterangan ?? (pembanding === undefined ? '' : `Belum ada data pembanding ${labelPembanding.replace(/^dibanding /, '')}`)}
+        </p>
       )}
     </Kartu>
   )

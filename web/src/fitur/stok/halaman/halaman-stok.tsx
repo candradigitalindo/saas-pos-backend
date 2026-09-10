@@ -10,7 +10,7 @@ import { KerangkaBaris } from '@/bersama/komponen/kerangka'
 import { useSesi } from '@/bersama/hooks/use-sesi'
 import { GalatAPI } from '@/lib/api-client'
 import { IZIN } from '@/lib/izin'
-import { formatQtySatuan } from '@/bersama/util/desimal'
+import { formatQtySatuan, formatSisaStok, stokPerluDicocokkan } from '@/bersama/util/desimal'
 import { cn } from '@/bersama/util/cn'
 import { stokApi } from '../api'
 
@@ -93,7 +93,7 @@ export function HalamanStok() {
                     {s.product_name}
                   </p>
                   <p className="text-keterangan tabular-nums text-teks-redup">
-                    {formatQtySatuan(s.qty, s.unit_name)}
+                    {formatSisaStok(s.qty, s.unit_name)}
                     {Number.parseFloat(s.min_stock) > 0 &&
                       ` · batas ${formatQtySatuan(s.min_stock, s.unit_name)}`}
                   </p>
@@ -101,7 +101,9 @@ export function HalamanStok() {
 
                 <div className="flex shrink-0 items-center gap-2">
                   {/* Ikon + teks + warna, bukan warna saja. */}
-                  {Number.parseFloat(s.qty) <= 0 ? (
+                  {stokPerluDicocokkan(s.qty) ? (
+                    <LencanaStatus nada="bahaya" anak="Perlu dicocokkan" />
+                  ) : Number.parseFloat(s.qty) <= 0 ? (
                     <LencanaStatus nada="bahaya" anak="Habis" />
                   ) : s.low ? (
                     <LencanaStatus nada="menunggu" anak="Hampir habis" />
@@ -136,7 +138,7 @@ function TombolSaring({
       onClick={onKlik}
       aria-pressed={aktif}
       className={cn(
-        'h-10 rounded-full border px-4 text-label font-medium',
+        'h-12 rounded-full border px-4 text-label font-medium',
         aktif
           ? 'border-utama bg-sorot text-utama'
           : 'border-garis bg-permukaan text-teks-sekunder hover:bg-permukaan-2',

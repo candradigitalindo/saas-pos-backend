@@ -66,7 +66,7 @@ export function LayoutMitra() {
                 }
               >
                 <m.ikon className="h-6 w-6" aria-hidden />
-                <span className="text-[11px] font-medium leading-none">{m.label}</span>
+                <span className="text-keterangan font-medium leading-none">{m.label}</span>
               </NavLink>
             </li>
           ))}

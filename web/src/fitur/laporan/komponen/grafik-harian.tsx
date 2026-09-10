@@ -20,9 +20,19 @@ import type { BarisLaporan } from '../api'
  * Berkas ini sengaja dipisah supaya Recharts hanya diunduh oleh orang yang
  * benar-benar membuka laporan.
  */
+const BULAN = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des']
+
+function labelHari(kunci: string): string {
+  const [, bl, tg] = kunci.split('-')
+  const b = BULAN[Number(bl) - 1]
+  return b ? `${Number(tg)} ${b}` : kunci
+}
+
 export function GrafikHarian({ rows }: { rows: BarisLaporan[] }) {
+  // "2026-09-10" → "10 Sep". Angka "10" sendirian tidak memberi tahu apa pun,
+  // apalagi saat rentangnya melintasi pergantian bulan.
   const data = rows.map((r) => ({
-    hari: r.key.slice(8),  // "2026-09-10" → "10"
+    hari: labelHari(r.key),
     tanggal: r.key,
     omzet: r.net_amount,
   }))
@@ -40,13 +50,17 @@ export function GrafikHarian({ rows }: { rows: BarisLaporan[] }) {
             dataKey="hari"
             tickLine={false}
             axisLine={false}
-            tick={{ fill: 'var(--warna-teks-redup)', fontSize: 12 }}
+            tick={{ fill: 'var(--warna-teks-redup)', fontSize: 13 }}
+            // Rentang 30 hari tidak muat 30 label; Recharts melewati sebagian
+            // sendiri alih-alih menumpuknya jadi bubur.
+            interval="preserveStartEnd"
+            minTickGap={24}
           />
           <YAxis
             tickLine={false}
             axisLine={false}
             width={64}
-            tick={{ fill: 'var(--warna-teks-redup)', fontSize: 12 }}
+            tick={{ fill: 'var(--warna-teks-redup)', fontSize: 13 }}
             tickFormatter={(n: number) =>
               n >= 1_000_000
                 ? `${Math.round(n / 100_000) / 10} jt`
@@ -61,7 +75,7 @@ export function GrafikHarian({ rows }: { rows: BarisLaporan[] }) {
               borderRadius: 12,
               color: 'var(--warna-teks-utama)',
             }}
-            labelFormatter={(_l, p) => p?.[0]?.payload?.tanggal ?? ''}
+            labelFormatter={(l, p) => p?.[0]?.payload?.tanggal ?? String(l)}
             formatter={(n) => [formatRupiah(Number(n) || 0), 'Uang masuk']}
           />
           <Bar

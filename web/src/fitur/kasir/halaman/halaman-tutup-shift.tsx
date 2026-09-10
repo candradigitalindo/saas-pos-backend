@@ -10,7 +10,7 @@ import { KerangkaBaris } from '@/bersama/komponen/kerangka'
 import { useToast } from '@/bersama/komponen/toast'
 import { GalatAPI } from '@/lib/api-client'
 import { formatRupiah } from '@/bersama/util/uang'
-import { formatJam } from '@/bersama/util/tanggal'
+import { formatJam, formatTanggal } from '@/bersama/util/tanggal'
 import { cn } from '@/bersama/util/cn'
 import { rincianShift, useShiftAktif, useTutupShift } from '../hooks'
 
@@ -78,7 +78,7 @@ export function HalamanTutupShift() {
       <header>
         <h1 className="text-judul font-bold text-teks-utama">Tutup Shift</h1>
         <p className="text-label text-teks-sekunder">
-          Dibuka {formatJam(shift.opened_at)} · {shift.business_date}
+          Dibuka {formatJam(shift.opened_at)} · {formatTanggal(shift.business_date)}
         </p>
       </header>
 

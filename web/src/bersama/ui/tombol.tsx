@@ -27,7 +27,14 @@ const gaya = cva(
         pencapaian: 'bg-jingga-400 text-teks-utama hover:brightness-95',
       },
       ukuran: {
-        padat: 'h-10 px-4 text-label',
+        // "Padat" 40px hanya berlaku untuk penunjuk halus (tetikus). Di
+        // perangkat sentuh ia naik ke 48px.
+        //
+        // Dua dokumen sempat bertabrakan di sini: ui/02 mencantumkan 40px
+        // sebagai tinggi tombol yang sah, sedangkan ui/01 §3 mewajibkan target
+        // sentuh minimal 48×48 px. Prinsip di ui/01 yang mengikat, jadi 40px
+        // dipertahankan HANYA di tempat yang pasti dipakai dengan tetikus.
+        padat: 'h-12 px-4 text-label pointer-fine:h-10',
         normal: 'h-12 px-5 text-isi',
         kasir: 'h-16 px-6 text-judul-kartu',
         ikon: 'h-12 w-12',

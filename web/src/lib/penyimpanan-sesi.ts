@@ -22,11 +22,28 @@ const KUNCI: Record<Realm, string> = {
 }
 
 /**
- * Access token ditahan di memori supaya tidak ikut terbaca skrip pihak ketiga;
- * refresh token menetap di localStorage supaya kasir tidak diminta masuk ulang
- * setiap membuka aplikasi.
+ * Access token ikut disimpan bersama refresh token, LENGKAP dengan waktu
+ * kedaluwarsanya.
+ *
+ * Rancangan awal menahan access token di memori saja demi keamanan. Setelah
+ * dijalankan sungguhan, dua hal terlihat:
+ *
+ *   1. Manfaat keamanannya nyaris nol. Refresh token — kredensial yang JAUH
+ *      lebih berkuasa, karena bisa mencetak access token baru berkali-kali —
+ *      memang harus menetap di localStorage supaya kasir tidak diminta masuk
+ *      ulang tiap pagi. Penyerang yang bisa membaca localStorage sudah
+ *      mendapatkan yang lebih besar; menyembunyikan yang kecil tidak menutup
+ *      apa pun.
+ *
+ *   2. Ongkosnya nyata. Memori hilang setiap halaman dimuat ulang, jadi SETIAP
+ *      muat ulang memaksa satu panggilan /auth/refresh. Endpoint itu dibatasi
+ *      ~0.2 permintaan/detik dengan burst 5 PER ALAMAT IP. Satu warung dengan
+ *      tablet kasir, HP pemilik, dan HP gudang berbagi satu IP — mereka saling
+ *      menghabiskan jatah dan akhirnya terlempar ke layar masuk bersamaan.
+ *
+ * Karena itu token disimpan, dan pembaruan hanya dilakukan saat benar-benar
+ * kedaluwarsa (atau saat server membalas 401).
  */
-const diMemori = new Map<Realm, string>()
 
 const pendengar = new Set<() => void>()
 
@@ -43,11 +60,13 @@ export function ambilSesi(realm: Realm): Sesi | null {
   const mentah = localStorage.getItem(KUNCI[realm])
   if (!mentah) return null
   try {
-    const tersimpan = JSON.parse(mentah) as Omit<Sesi, 'access_token'>
-    return {
-      ...tersimpan,
-      access_token: diMemori.get(realm) ?? '',
+    const sesi = JSON.parse(mentah) as Sesi
+    // Token yang sudah lewat waktunya dianggap tidak ada, supaya api-client
+    // memperbaruinya lebih dulu alih-alih mengirim permintaan yang pasti 401.
+    if (sesi.kedaluwarsa && sesi.kedaluwarsa <= Date.now()) {
+      return { ...sesi, access_token: '' }
     }
+    return sesi
   } catch {
     localStorage.removeItem(KUNCI[realm])
     return null
@@ -55,16 +74,11 @@ export function ambilSesi(realm: Realm): Sesi | null {
 }
 
 export function simpanSesi(realm: Realm, sesi: Sesi): void {
-  diMemori.set(realm, sesi.access_token)
-  localStorage.setItem(
-    KUNCI[realm],
-    JSON.stringify({ refresh_token: sesi.refresh_token, kedaluwarsa: sesi.kedaluwarsa }),
-  )
+  localStorage.setItem(KUNCI[realm], JSON.stringify(sesi))
   beritahu()
 }
 
 export function hapusSesi(realm: Realm): void {
-  diMemori.delete(realm)
   localStorage.removeItem(KUNCI[realm])
   beritahu()
 }

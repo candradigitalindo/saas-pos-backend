@@ -47,11 +47,9 @@ export function useShiftAktif() {
  * 100 ms; keduanya hanya mungkin bila sumbernya lokal. Mesin sinkronisasi yang
  * menyegarkan Dexie di belakang layar.
  */
-export function useKatalogKasir(cari: string) {
+export function useKatalogKasir(cari: string, kategoriId?: string) {
   const { tokoAktif } = useSesi()
-  const { produk, petaStok, kosong, memuat } = useKatalogLokal(cari, tokoAktif)
-
-  return { produk, petaStok, kosong, memuat }
+  return useKatalogLokal(cari, tokoAktif, kategoriId)
 }
 
 /**

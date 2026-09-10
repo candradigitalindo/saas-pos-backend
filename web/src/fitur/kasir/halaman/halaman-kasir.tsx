@@ -35,7 +35,9 @@ export function HalamanKasir() {
   const { shift, memuat: memuatShift } = useShiftAktif()
 
   const [cari, setCari] = useState('')
-  const { produk, petaStok, kosong, memuat } = useKatalogKasir(cari)
+  const [kategori, setKategori] = useState<string | undefined>(undefined)
+  const { produk, petaStok, kategori: daftarKategori, kosong, memuat } =
+    useKatalogKasir(cari, kategori)
   const keranjang = useKeranjang()
 
   const [bukaBayar, setBukaBayar] = useState(false)
@@ -118,6 +120,26 @@ export function HalamanKasir() {
         </Tombol>
       </header>
 
+      {/* Baris kategori (ui/05-ALUR-UTAMA.md §2). Muncul hanya bila memang ada
+          lebih dari satu kategori — satu tab "Semua" sendirian tidak menyaring
+          apa pun dan cuma memakan tinggi layar. */}
+      {daftarKategori.length > 1 && (
+        <div className="flex shrink-0 gap-2 overflow-x-auto border-b border-garis bg-permukaan px-4 pb-2">
+          <TabKategori aktif={!kategori} onKlik={() => setKategori(undefined)}>
+            Semua
+          </TabKategori>
+          {daftarKategori.map((k) => (
+            <TabKategori
+              key={k.id}
+              aktif={kategori === k.id}
+              onKlik={() => setKategori(k.id)}
+            >
+              {k.nama}
+            </TabKategori>
+          ))}
+        </div>
+      )}
+
       <div className="flex min-h-0 flex-1">
         <main className="flex min-w-0 flex-1 flex-col">
           <div className="flex-1 overflow-y-auto p-4">
@@ -143,7 +165,9 @@ export function HalamanKasir() {
                 aksi={
                   cari
                     ? { label: 'Hapus pencarian', onKlik: () => setCari('') }
-                    : undefined
+                    : kategori
+                      ? { label: 'Lihat semua kategori', onKlik: () => setKategori(undefined) }
+                      : undefined
                 }
               />
             ) : (
@@ -235,6 +259,32 @@ export function HalamanKasir() {
         />
       )}
     </div>
+  )
+}
+
+function TabKategori({
+  aktif,
+  onKlik,
+  children,
+}: {
+  aktif: boolean
+  onKlik: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onKlik}
+      aria-pressed={aktif}
+      className={cn(
+        'h-12 shrink-0 rounded-full border px-4 text-label font-medium',
+        aktif
+          ? 'border-utama bg-sorot text-utama'
+          : 'border-garis bg-permukaan text-teks-sekunder hover:bg-permukaan-2',
+      )}
+    >
+      {children}
+    </button>
   )
 }
 

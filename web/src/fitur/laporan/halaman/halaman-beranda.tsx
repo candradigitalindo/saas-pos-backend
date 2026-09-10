@@ -10,7 +10,7 @@ import { useSinkron } from '@/lib/offline/mesin'
 import { api } from '@/lib/api-client'
 import { IZIN } from '@/lib/izin'
 import { tanggalISO } from '@/bersama/util/tanggal'
-import { formatQtySatuan } from '@/bersama/util/desimal'
+import { formatSisaStok } from '@/bersama/util/desimal'
 import { cn } from '@/bersama/util/cn'
 import type { Halaman } from '@/lib/api-client'
 import type { SaldoStok } from '@/bersama/tipe/katalog'
@@ -155,7 +155,7 @@ export function HalamanBeranda() {
                   {s.product_name}
                 </span>
                 <span className="shrink-0 text-label tabular-nums text-jingga-700">
-                  sisa {formatQtySatuan(s.qty, s.unit_name)}
+                  {formatSisaStok(s.qty, s.unit_name)}
                 </span>
               </Link>
             ))}

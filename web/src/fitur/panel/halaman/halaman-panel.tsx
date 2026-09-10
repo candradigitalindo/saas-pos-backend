@@ -474,7 +474,7 @@ function PanelOutbox() {
             onClick={() => setSaring(nilai)}
             aria-pressed={saring === nilai}
             className={cn(
-              'h-10 rounded-full border px-4 text-label font-medium',
+              'h-12 rounded-full border px-4 text-label font-medium',
               saring === nilai
                 ? 'border-utama bg-sorot text-utama'
                 : 'border-garis bg-permukaan text-teks-sekunder hover:bg-permukaan-2',

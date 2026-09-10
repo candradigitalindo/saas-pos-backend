@@ -33,7 +33,7 @@ export function PanelKeranjang({
       <div className="flex-1 overflow-y-auto">
         {kosong ? (
           <p className="px-4 py-8 text-center text-isi text-teks-redup">
-            Pilih barang di sebelah kiri untuk mulai.
+            Pilih barang dulu untuk mulai.
           </p>
         ) : (
           <ul className="divide-y divide-garis">

@@ -271,7 +271,7 @@ function TombolSaring({
       onClick={onKlik}
       aria-pressed={aktif}
       className={cn(
-        'h-10 rounded-full border px-4 text-label font-medium',
+        'h-12 rounded-full border px-4 text-label font-medium',
         aktif
           ? 'border-utama bg-sorot text-utama'
           : 'border-garis bg-permukaan text-teks-sekunder hover:bg-permukaan-2',

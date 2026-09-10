@@ -68,7 +68,7 @@ warna harus terasa seperti panen dan pagi hari — bukan seperti laporan bank.
 | `latar` | `#FAFAF9` | Latar halaman | — |
 | `permukaan` | `#FFFFFF` | Kartu, panel |  — |
 | `garis` | `#E7E5E4` | Garis pemisah (dekoratif, bukan teks) | 1.20 — tidak untuk teks |
-| `teks-redup` | `#78716C` | Keterangan, placeholder | 4.59:1 ✅ |
+| `teks-redup` | `#6F6963` | Keterangan, placeholder | 5.19:1 ✅ |
 | `teks-sekunder` | `#57534E` | Label, sub-judul | 7.30:1 ✅ |
 | `teks-utama` | `#1C1917` | Isi utama, angka | 16.74:1 ✅ |
 
@@ -109,6 +109,30 @@ warna, melainkan palet tersendiri:
 | Permukaan | `#FFFFFF` | `#292524` |
 | Teks utama | `#1C1917` | `#FAFAF9` |
 | Hijau utama | `#047857` | `#34D399` (lebih terang agar tetap terbaca di latar gelap) |
+
+### Teks semantik di mode gelap
+
+Warna teks semantik **berganti** di mode gelap. Nilai versi terang dipilih untuk
+latar putih dan gagal total di atas `#292524`:
+
+| Peran | Terang | Kontras | Gelap | Kontras |
+|---|---|---|---|---|
+| Bahaya / rugi | `#B91C1C` | 6.47:1 | `#F87171` | 5.48:1 |
+| Peringatan | `#B45309` | 5.02:1 | `#FBBF24` | 9.09:1 |
+| Informasi | `#1D4ED8` | 6.70:1 | `#60A5FA` | 5.97:1 |
+| Berhasil / untung | `#047857` | 5.48:1 | `#34D399` | 7.89:1 |
+| Berhasil (pekat) | `#065F46` | 7.68:1 | `#6EE7B7` | 9.95:1 |
+
+> ⚠️ **Ini ditemukan dengan mengukur, bukan dengan melihat.** Versi pertama mode
+> gelap hanya mengganti latar, permukaan, teks utama, dan hijau — warna teks
+> semantik dibiarkan memakai nilai terang. Akibatnya lencana **"HABIS" merah
+> `#B91C1C` di atas `#292524` hanya 2,34:1** dan praktis tidak terbaca — persis
+> untuk kasir malam hari, satu-satunya alasan mode gelap ini ada. Seluruh nilai
+> di tabel sudah diukur ≥ 4,5:1 terhadap `permukaan` **dan** `permukaan-2`.
+>
+> `teks-redup` juga diturunkan dari `#78716C` ke `#6F6963`: nilai lama
+> diverifikasi terhadap `latar` (4,59:1) tapi jatuh ke **4,40:1** di atas
+> `permukaan-2` yang sedikit lebih gelap.
 
 Aturan: **jangan** memakai hitam murni `#000` — kontras ekstrem melelahkan mata
 saat dipakai berjam-jam.
@@ -160,6 +184,12 @@ Dibangun di atas **shadcn/ui** (Radix) — disalin ke repo sehingga bebas diubah
 | Teks | Tanpa latar | Aksi tersier |
 
 Tinggi: 40px (padat) · 48px (normal) · **64px (kasir)**.
+
+> ⚠️ **"Padat" 40px hanya untuk penunjuk halus (tetikus).** Angka ini sempat
+> bertabrakan dengan [01 §3](01-PRINSIP-DESAIN.md) yang mewajibkan target sentuh
+> minimal 48×48 px — dan prinsip di dokumen 01 yang mengikat. Penyelesaiannya:
+> tombol padat dirender 48px secara bawaan dan baru menyusut ke 40px pada
+> `pointer: fine`. Di HP dan tablet tidak ada tombol di bawah 48px.
 Saat memuat: label berganti "Menyimpan…" + tombol dinonaktifkan — **lebarnya
 tidak berubah** supaya tata letak tidak melompat.
 

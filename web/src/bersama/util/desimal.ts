@@ -34,3 +34,28 @@ export function formatQty(qty: string): string {
 export function formatQtySatuan(qty: string, satuan?: string): string {
   return satuan ? `${formatQty(qty)} ${satuan}` : formatQty(qty)
 }
+
+/**
+ * Sisa stok dalam bahasa orang, cukup pendek untuk satu baris daftar.
+ *
+ * Stok minus itu SAH di backend — penjualan tidak pernah diblokir, dan
+ * selisihnya ditandai untuk ditinjau. Tapi "sisa −2 pcs" tidak berarti apa-apa
+ * bagi pemilik warung: yang ia butuh tahu adalah barangnya HABIS.
+ *
+ * Keterangan "catatan perlu dicocokkan" sengaja TIDAK disatukan di sini —
+ * kalimatnya panjang dan di layar HP ia menggencet nama barang sampai tinggal
+ * "Air …". Pakai `stokPerluDicocokkan()` di layar yang memang punya ruang.
+ */
+export function formatSisaStok(qty: string, satuan?: string): string {
+  const n = new Decimal(qty || '0')
+  if (n.greaterThan(0)) return `sisa ${formatQtySatuan(qty, satuan)}`
+  return 'habis'
+}
+
+/**
+ * true bila catatan stok minus — artinya barang sempat terjual melebihi
+ * catatan, dan hitungan fisik perlu dijalankan.
+ */
+export function stokPerluDicocokkan(qty: string): boolean {
+  return new Decimal(qty || '0').lessThan(0)
+}

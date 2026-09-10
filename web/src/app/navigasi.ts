@@ -76,6 +76,85 @@ export const MENU_LAINNYA: ItemMenu[] = [
 
 export const IKON_LAINNYA = MoreHorizontal
 
+/**
+ * Pengelompokan untuk navigasi samping (ui/04-PETA-LAYAR.md).
+ *
+ * Daftar rata 19 baris membuat orang memindai satu per satu setiap kali.
+ * Dokumen menyebut kelompoknya secara eksplisit: Penjualan · Barang & Stok ·
+ * Pelanggan · CRM · Kanal · SDM · Pengaturan. Kelompok yang seluruh isinya
+ * tidak diizinkan tidak muncul sama sekali — judul kosong lebih membingungkan
+ * daripada tidak ada judul.
+ */
+export interface KelompokMenu {
+  judul: string
+  item: ItemMenu[]
+}
+
+export const KELOMPOK_SAMPING: KelompokMenu[] = [
+  {
+    judul: 'Penjualan',
+    item: [
+      { ke: '/kasir', label: 'Kasir', ikon: Receipt, izin: [IZIN.saleCreate] },
+      { ke: '/kasir/riwayat', label: 'Riwayat Penjualan', ikon: ReceiptText, izin: [IZIN.saleCreate] },
+      { ke: '/kasir/kas', label: 'Uang Masuk & Keluar', ikon: Wallet, izin: [IZIN.cashMovement] },
+      { ke: '/kanal', label: 'Kanal Online', ikon: Store, izin: [IZIN.channelManage, IZIN.channelOrderAccept] },
+    ],
+  },
+  {
+    judul: 'Barang & Stok',
+    item: [
+      { ke: '/stok', label: 'Stok', ikon: Boxes, izin: [IZIN.stockView] },
+      { ke: '/barang', label: 'Barang', ikon: ShoppingBag, izin: [IZIN.productView] },
+      { ke: '/barang/master', label: 'Kategori & Satuan', ikon: Tags, izin: [IZIN.productEdit] },
+      { ke: '/stok/opname', label: 'Hitung Fisik', ikon: ClipboardList, izin: [IZIN.stockOpname] },
+      { ke: '/stok/transfer', label: 'Kirim Antar Toko', ikon: Truck, izin: [IZIN.stockTransfer] },
+    ],
+  },
+  {
+    judul: 'Pelanggan',
+    item: [
+      { ke: '/pelanggan', label: 'Pelanggan', ikon: Users, izin: [IZIN.customerView] },
+      { ke: '/kasbon', label: 'Kasbon', ikon: NotebookPen, izin: [IZIN.receivableManage] },
+    ],
+  },
+  {
+    judul: 'Laporan',
+    item: [
+      { ke: '/laporan', label: 'Laporan', ikon: BarChart3, izin: [IZIN.reportView], butuhInternet: true },
+    ],
+  },
+  {
+    judul: 'CRM',
+    item: [
+      { ke: '/crm', label: 'Prospek', ikon: Building2, izin: [IZIN.crmLeadViewOwn, IZIN.crmLeadViewAll] },
+      { ke: '/crm/kunjungan', label: 'Kunjungan', ikon: MapPin, izin: [IZIN.crmVisitCheckin] },
+    ],
+  },
+  {
+    judul: 'SDM',
+    item: [
+      { ke: '/sdm', label: 'Karyawan', ikon: UserCog, izin: [IZIN.hrEmployeeView, IZIN.hrEmployeeEdit] },
+      { ke: '/sdm/gaji', label: 'Gaji', ikon: Wallet, izin: [IZIN.hrPayrollRun, IZIN.hrSalaryView] },
+    ],
+  },
+  {
+    judul: 'Pengaturan',
+    item: [
+      { ke: '/langganan', label: 'Langganan', ikon: CreditCard, izin: [IZIN.billingManage] },
+      { ke: '/pengaturan', label: 'Pengaturan', ikon: Settings, izin: [IZIN.outletManage, IZIN.userManage, IZIN.roleManage] },
+    ],
+  },
+]
+
+/** Menyaring kelompok; kelompok yang kosong setelah disaring dibuang. */
+export function saringKelompok(
+  boleh: (...kode: KodeIzin[]) => boolean,
+): KelompokMenu[] {
+  return KELOMPOK_SAMPING.map((k) => ({ ...k, item: saringMenu(k.item, boleh) })).filter(
+    (k) => k.item.length > 0,
+  )
+}
+
 /** Menyaring menu menurut izin yang benar-benar dimiliki pengguna. */
 export function saringMenu(
   menu: ItemMenu[],
