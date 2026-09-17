@@ -45,7 +45,7 @@ func CreateEmployee(ctx context.Context, in structs.EmployeeCreateRequest) (stru
 			return fmt.Errorf("%w: outlet tidak ditemukan", helpers.ErrValidation)
 		}
 		e := models.Employee{
-			OutletID: in.OutletID, EmployeeNo: nilBilaKosong(in.EmployeeNo), FullName: in.FullName,
+			OutletID: in.OutletID, EmployeeNo: nilIfEmpty(in.EmployeeNo), FullName: in.FullName,
 			Phone: in.Phone, Email: in.Email, Position: in.Position,
 			EmploymentStatus: orDefault(in.EmploymentStatus, "permanent"),
 			WageType:         in.WageType, BaseWage: in.BaseWage,
@@ -345,7 +345,7 @@ func DisburseAdvance(ctx context.Context, id string) (structs.AdvanceResponse, e
 
 func employeeToResponse(e models.Employee) structs.EmployeeResponse {
 	r := structs.EmployeeResponse{
-		ID: e.ID, OutletID: e.OutletID, EmployeeNo: deref(e.EmployeeNo), FullName: e.FullName,
+		ID: e.ID, OutletID: e.OutletID, EmployeeNo: ptrStr(e.EmployeeNo), FullName: e.FullName,
 		Phone: e.Phone, Position: e.Position, EmploymentStatus: e.EmploymentStatus,
 		WageType: e.WageType, BaseWage: e.BaseWage, PayrollPeriodType: e.PayrollPeriodType,
 		JoinedAt: e.JoinedAt.Format("2006-01-02"), IsActive: e.IsActive,
@@ -402,24 +402,3 @@ func advanceToResponse(a models.EmployeeAdvance) structs.AdvanceResponse {
 // EmployeeToResponse / AdvanceToResponse — untuk controller list.
 func EmployeeToResponse(e models.Employee) structs.EmployeeResponse      { return employeeToResponse(e) }
 func AdvanceToResponse(a models.EmployeeAdvance) structs.AdvanceResponse { return advanceToResponse(a) }
-
-// nilBilaKosong mengubah string kosong jadi NULL.
-//
-// Dipakai untuk kolom yang terkena partial unique index `WHERE ... IS NOT NULL`:
-// di sana "" bukan berarti "tidak ada", melainkan satu nilai yang cuma boleh
-// dipakai SATU baris. Tanpa ini, karyawan kedua yang didaftarkan tanpa nomor
-// akan ditolak karena dianggap bentrok dengan yang pertama.
-func nilBilaKosong(s string) *string {
-	if s == "" {
-		return nil
-	}
-	return &s
-}
-
-// deref mengembalikan isi pointer, atau "" bila NULL.
-func deref(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
-}
