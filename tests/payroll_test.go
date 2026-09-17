@@ -215,3 +215,56 @@ func TestPayrollIsolation(t *testing.T) {
 		t.Fatalf("tenant B melihat %d karyawan tenant A", n)
 	}
 }
+
+// TestMultipleEmployeesWithoutNumber — dua karyawan boleh didaftarkan tanpa
+// nomor karyawan.
+//
+// `employee_no` terkena partial unique index `WHERE employee_no IS NOT NULL`.
+// Ketika kolomnya bertipe string biasa, nomor yang dikosongkan tersimpan
+// sebagai "" — bukan NULL — sehingga ikut terjaring indeks itu dan karyawan
+// KEDUA ditolak: "nomor karyawan atau akun sudah terpakai". Pesannya
+// membingungkan karena pemilik memang tidak pernah mengisi nomor apa pun, dan
+// layar Karyawan di aplikasi tidak mengirimkannya sama sekali.
+//
+// Artinya modul SDM praktis mentok di karyawan pertama untuk setiap usaha baru.
+func TestMultipleEmployeesWithoutNumber(t *testing.T) {
+	requireDB(t)
+	f := registerTenant(t, "empnonum")
+
+	buat := func(nama string) string {
+		return call(t, "POST", "/api/v1/employees", f.token, map[string]any{
+			"outlet_id": f.outletID, "full_name": nama, "wage_type": "monthly",
+			"base_wage": 3000000, "joined_at": "2026-08-01",
+		}).mustCode(t, "buat karyawan "+nama, 201).data(t)["id"].(string)
+	}
+
+	a := buat("Budi Santoso")
+	b := buat("Ahmad Fauzi") // dulu gagal 409 di sini
+	c := buat("Siti Aminah")
+
+	if a == b || b == c || a == c {
+		t.Fatal("id karyawan tidak unik")
+	}
+
+	list := call(t, "GET", "/api/v1/employees?limit=100", f.token, nil).
+		mustOK(t, "daftar karyawan").data(t)["data"].([]any)
+	if len(list) != 3 {
+		t.Fatalf("karyawan tersimpan = %d, mau 3", len(list))
+	}
+	// Nomor yang dikosongkan tetap tampil sebagai kosong ke klien.
+	for _, r := range list {
+		if no, ada := r.(map[string]any)["employee_no"]; ada && no != nil && no != "" {
+			t.Fatalf("employee_no = %v, mau kosong", no)
+		}
+	}
+
+	// Nomor yang BENAR-BENAR diisi tetap wajib unik.
+	call(t, "POST", "/api/v1/employees", f.token, map[string]any{
+		"outlet_id": f.outletID, "full_name": "Dewi", "wage_type": "monthly",
+		"base_wage": 3000000, "joined_at": "2026-08-01", "employee_no": "K-001",
+	}).mustCode(t, "karyawan bernomor", 201)
+	call(t, "POST", "/api/v1/employees", f.token, map[string]any{
+		"outlet_id": f.outletID, "full_name": "Eka", "wage_type": "monthly",
+		"base_wage": 3000000, "joined_at": "2026-08-01", "employee_no": "K-001",
+	}).mustCode(t, "nomor ganda harus ditolak", 409)
+}

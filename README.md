@@ -67,6 +67,7 @@ Sebuah framework backend REST API berbasis Golang dan Gin, dengan struktur modul
 /cmd/partner-commissions # Pekerjaan bulanan: hitung komisi mitra → setujui → cairkan (Fase 12)
 /cmd/partner-admin   # CLI mitra (pelengkap panel internal)
 /cmd/platform-admin  # Bootstrap akun staf internal (admin pertama)
+/cmd/seed-demo       # Isi data contoh untuk menjelajah & peragaan (bukan production)
 /cmd/process-outbox  # Pekerja: kirim notifikasi yang mengantre (§5.14)
 /config              # Konfigurasi aplikasi (baca .env)
 /controllers         # Handler endpoint (tipis)
@@ -114,6 +115,14 @@ Makefile             # make help | build | test | lint | migrate-up | docker-bui
    go run main.go   # atau: air (hot reload)
    ```
    Cek: `curl localhost:8080/health` dan `curl localhost:8080/health/ready`.
+
+   Untuk menjelajahi aplikasi, isi data contoh — barang, stok, transaksi hari
+   ini, kasbon, karyawan (server harus sudah jalan):
+   ```sh
+   go run ./cmd/seed-demo
+   ```
+   Aman dijalankan berulang: master data yang sudah ada dipakai lagi, hanya
+   transaksi hari ini yang ditambah. Masuk sebagai `sari` / `rahasia123`.
 6. **Pekerjaan terjadwal** (cron/systemd timer — bukan bagian dari start aplikasi, semuanya idempoten):
    ```sh
    go run ./cmd/recognize-revenue                     # harian, awal bulan — akui pendapatan diterima di muka (§13.4)

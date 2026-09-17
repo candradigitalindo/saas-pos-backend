@@ -24,11 +24,15 @@ var (
 // Employee adalah karyawan tenant. `user_id` NULL untuk karyawan tanpa akun
 // aplikasi (mis. juru masak). Data pribadi tunduk UU PDP.
 type Employee struct {
-	ID                string     `json:"id" gorm:"primaryKey;type:char(26)"`
-	TenantID          string     `json:"tenant_id" gorm:"type:char(26);not null;index"`
-	UserID            *string    `json:"user_id" gorm:"type:char(26)"`
-	OutletID          string     `json:"outlet_id" gorm:"type:char(26);not null"`
-	EmployeeNo        string     `json:"employee_no"`
+	ID       string  `json:"id" gorm:"primaryKey;type:char(26)"`
+	TenantID string  `json:"tenant_id" gorm:"type:char(26);not null;index"`
+	UserID   *string `json:"user_id" gorm:"type:char(26)"`
+	OutletID string  `json:"outlet_id" gorm:"type:char(26);not null"`
+	// EmployeeNo *string: NULL bila kosong. Kolom ini terkena partial unique
+	// index `WHERE employee_no IS NOT NULL`, jadi "" TIDAK boleh dipakai sebagai
+	// "tidak ada" — karyawan kedua tanpa nomor akan bentrok dengan yang pertama.
+	// Pola yang sama dipakai SKU/Barcode di models/product.go.
+	EmployeeNo        *string    `json:"employee_no"`
 	FullName          string     `json:"full_name" gorm:"not null"`
 	Phone             string     `json:"phone"`
 	Email             string     `json:"email"`
