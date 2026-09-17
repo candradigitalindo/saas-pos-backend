@@ -3,12 +3,12 @@ package controllers
 import (
 	"errors"
 	"net/http"
-	"time"
 
 	"candra/backend-api/helpers"
 	"candra/backend-api/internal/reqctx"
 	"candra/backend-api/models"
 	"candra/backend-api/repositories"
+	"candra/backend-api/services"
 	"candra/backend-api/structs"
 
 	"github.com/gin-gonic/gin"
@@ -54,16 +54,16 @@ func AddReceivablePayment(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	collectedBy := reqctx.UserID(ctx)
+	// PaidAt dan BusinessDate sengaja TIDAK diisi di sini: business_date harus
+	// dihitung dari zona waktu outlet, dan itu urusan service.
 	pay := &models.ReceivablePayment{
 		ReceivableID: req.ReceivableID,
 		Amount:       req.Amount,
 		Method:       req.Method,
-		PaidAt:       time.Now().UTC(),
-		BusinessDate: time.Now().UTC(),
 		CollectedBy:  &collectedBy,
 		ProofURL:     req.ProofURL,
 	}
-	rec, err := repositories.AddReceivablePayment(ctx, pay)
+	rec, err := services.AddReceivablePayment(ctx, pay)
 	switch {
 	case errors.Is(err, repositories.ErrReceivableNotFound):
 		notFound(c, "Piutang tidak ditemukan")

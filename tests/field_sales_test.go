@@ -79,7 +79,16 @@ func TestFieldSalesRouteSyncNoDuplicates(t *testing.T) {
 	push(t, sales, ops...)
 
 	// Tetap 20 kunjungan, tanpa duplikat, semua sudah check-out.
-	bd := time.Now().UTC().Format("2006-01-02")
+	//
+	// Tanggalnya diambil dari server, bukan dihitung sendiri dari UTC: jalur
+	// sinkronisasi menulis ulang business_date memakai zona waktu outlet, jadi
+	// tanggal UTC bisa meleset satu hari antara tengah malam dan pagi.
+	semua := call(t, "GET", "/api/v1/visits?limit=100", sales, nil).
+		mustOK(t, "daftar kunjungan tanpa saringan").data(t)["data"].([]any)
+	if len(semua) == 0 {
+		t.Fatal("tidak ada kunjungan tersimpan")
+	}
+	bd := semua[0].(map[string]any)["business_date"].(string)
 	list := call(t, "GET", "/api/v1/visits?business_date="+bd+"&limit=100", sales, nil).
 		mustOK(t, "daftar kunjungan").data(t)
 	rows := list["data"].([]any)
@@ -223,16 +232,21 @@ func TestSalesTargetAchievement(t *testing.T) {
 	salesUserID := call(t, "GET", "/api/v1/me", sales, nil).mustOK(t, "me").data(t)["user"].(map[string]any)["id"].(string)
 
 	// Dua kunjungan selesai.
+	var bd string
 	for i := 0; i < 2; i++ {
 		cust := makeCustomer(t, sales, fmt.Sprintf("Toko T%d", i))
-		vID := call(t, "POST", "/api/v1/visits", sales, map[string]any{
+		v := call(t, "POST", "/api/v1/visits", sales, map[string]any{
 			"customer_id": cust, "checkin_at": time.Now().UTC().Format(time.RFC3339),
-		}).mustOK(t, "check-in").data(t)["id"].(string)
-		call(t, "POST", "/api/v1/visits/"+vID+"/checkout", sales, map[string]any{"result": "closed"}).
+		}).mustOK(t, "check-in").data(t)
+		bd = v["business_date"].(string)
+		call(t, "POST", "/api/v1/visits/"+v["id"].(string)+"/checkout", sales, map[string]any{"result": "closed"}).
 			mustOK(t, "check-out")
 	}
 
-	today := time.Now().UTC().Format("2006-01-02")
+	// Periode target memakai HARI USAHA dari server, bukan tanggal UTC yang
+	// dihitung sendiri: keduanya berbeda setiap hari antara tengah malam dan
+	// pagi di zona Indonesia, dan tes ini pernah gagal persis karena itu.
+	today := bd
 	call(t, "POST", "/api/v1/sales-targets", f.token, map[string]any{
 		"user_id": salesUserID, "period_start": today, "period_end": today,
 		"target_amount": 1000000, "target_visits": 10,
@@ -275,4 +289,69 @@ func TestFieldSalesIsolation(t *testing.T) {
 	if n := len(call(t, "GET", "/api/v1/visits", b.token, nil).mustOK(t, "visits B").data(t)["data"].([]any)); n != 0 {
 		t.Fatalf("tenant B melihat %d kunjungan tenant A", n)
 	}
+}
+
+// TestReceivablePaymentUsesOutletBusinessDate — setoran piutang harus memakai
+// hari usaha OUTLET, bukan tanggal UTC.
+//
+// Sebelumnya controller mengisi `business_date` dengan `time.Now().UTC()`. Di
+// Indonesia (UTC+7..+9) tanggal UTC tertinggal dari tanggal setempat setiap
+// hari antara tengah malam dan pagi, jadi setoran pukul 06.00 WIB tercatat
+// sebagai hari kemarin — dan komisi sales, yang dihitung dari business_date,
+// ikut hilang.
+//
+// Tes ini TIDAK bergantung pada jam berapa ia dijalankan: jam tutup buku outlet
+// digeser ke satu jam setelah waktu setempat sekarang, sehingga "sekarang"
+// dipastikan masih masuk hari usaha SEBELUMNYA. Dengan begitu tanggal UTC dan
+// hari usaha outlet dijamin berbeda, kapan pun tes ini jalan.
+func TestReceivablePaymentUsesOutletBusinessDate(t *testing.T) {
+	requireDB(t)
+	f := setupPOS(t, "recbizdate")
+
+	// Geser jam tutup buku ke 1 jam setelah waktu Jakarta sekarang.
+	jkt, err := time.LoadLocation("Asia/Jakarta")
+	if err != nil {
+		t.Fatalf("zona waktu: %v", err)
+	}
+	dayStart := time.Now().In(jkt).Add(time.Hour).Format("15:04")
+	call(t, "PUT", "/api/v1/outlets/"+f.outletID, f.token, map[string]any{
+		"timezone": "Asia/Jakarta", "business_day_start": dayStart,
+	}).mustOK(t, "geser jam tutup buku")
+
+	cust := call(t, "POST", "/api/v1/customers", f.token, map[string]any{
+		"name": "Toko Kasbon", "phone": "0812recbiz", "credit_limit": 1000000,
+	}).mustCode(t, "pelanggan", 201).data(t)["id"].(string)
+
+	// Penjualan kasbon: 2 × prodA (15000) = 30000, seluruhnya kredit.
+	sale := checkout(t, f.token, "RB-1", map[string]any{
+		"outlet_id":   f.outletID,
+		"customer_id": cust,
+		"items":       []map[string]any{{"product_id": f.prodA, "qty": "2"}},
+		"payments":    []map[string]any{{"method": "credit", "amount": 30000}},
+	}).mustCode(t, "jual kasbon", 201).data(t)
+	bd := sale["business_date"].(string)
+
+	// Hari usaha outlet memang BEDA dari tanggal UTC — kalau tidak, tes ini
+	// tidak membuktikan apa pun.
+	if utc := time.Now().UTC().Format("2006-01-02"); bd == utc {
+		t.Fatalf("persiapan gagal: business_date (%s) sama dengan tanggal UTC (%s)", bd, utc)
+	}
+
+	// Setor piutangnya.
+	recID := call(t, "GET", "/api/v1/receivables?customer_id="+cust, f.token, nil).
+		mustOK(t, "piutang").data(t)["data"].([]any)[0].(map[string]any)["id"].(string)
+	call(t, "POST", "/api/v1/receivable-payments", f.token, map[string]any{
+		"receivable_id": recID, "amount": 12000, "method": "cash",
+	}).mustCode(t, "setor piutang", 201)
+
+	// Komisi pada hari usaha penjualannya HARUS memuat setoran tadi. Bila
+	// business_date setoran memakai tanggal UTC, ia jatuh di luar rentang dan
+	// base_amount-nya jadi 0.
+	me := call(t, "GET", "/api/v1/me", f.token, nil).mustOK(t, "me").data(t)
+	uid := me["user"].(map[string]any)["id"].(string)
+
+	com := call(t, "POST", "/api/v1/commissions", f.token, map[string]any{
+		"user_id": uid, "period_start": bd, "period_end": bd, "rate": "0.1",
+	}).mustOK(t, "hitung komisi").data(t)
+	assertI64(t, com, "base_amount", 12000)
 }
