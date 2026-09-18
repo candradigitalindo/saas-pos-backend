@@ -87,6 +87,18 @@ func ListProducts(ctx context.Context, f ProductFilter, limit, offset int) ([]mo
 
 // FindProductInTenant memuat satu produk (dengan Unit & Category) milik tenant
 // konteks. tx opsional.
+// SetProductImageURL menyimpan alamat foto sebuah barang (kosong = tanpa foto).
+//
+// Memakai Update kolom tunggal, bukan Save model penuh: menyimpan seluruh
+// model berarti menulis ulang harga dan stok minimum dari salinan yang dibaca
+// sebelumnya, dan mengunggah foto tidak boleh diam-diam mengembalikan harga
+// yang baru saja diubah orang lain.
+func SetProductImageURL(ctx context.Context, id, alamat string) error {
+	return tenantDB(ctx, nil).Model(&models.Product{}).
+		Where("id = ? AND tenant_id = ?", id, currentTenantID(ctx)).
+		Update("image_url", alamat).Error
+}
+
 func FindProductInTenant(ctx context.Context, tx *gorm.DB, id string, out *models.Product) error {
 	err := scopeTenantOn(ctx, tenantDB(ctx, tx), "products").
 		Joins("Unit").

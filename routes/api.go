@@ -10,6 +10,7 @@ import (
 	"candra/backend-api/internal/ulid"
 	"candra/backend-api/middlewares"
 	"candra/backend-api/models"
+	"candra/backend-api/services"
 	"candra/backend-api/structs"
 
 	"github.com/gin-contrib/cors"
@@ -38,6 +39,16 @@ func SetupRouter() *gin.Engine {
 	r.HandleMethodNotAllowed = true
 	r.Use(middlewares.Recovery())
 	r.Use(middlewares.RequestObservability())
+
+	// Foto barang, disajikan apa adanya dari disk.
+	//
+	// TANPA autentikasi, dan itu disengaja: <img> tidak mengirim header
+	// Authorization, jadi foto berpagar token tidak akan pernah tampil di
+	// kasir. Pagarnya adalah nama berkas ULID yang dibuat server dan tidak
+	// bisa ditebak — bukan rahasia besar, tapi foto barang dagangan memang
+	// bukan rahasia. Yang TIDAK boleh terjadi adalah folder ini memuat apa
+	// pun selain gambar; itu dijaga di sisi unggahnya.
+	r.Static("/uploads", services.FolderUnggah())
 
 	// Trusted proxies: secara default TIDAK mempercayai proxy mana pun, sehingga
 	// c.ClientIP() memakai alamat koneksi asli dan X-Forwarded-For tidak bisa
@@ -288,6 +299,8 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	prod.POST("/import", middlewares.Require("product.import"), controllers.ImportProducts)
 	prod.PUT("/:id", middlewares.Require("product.edit"), controllers.UpdateProduct)
 	prod.DELETE("/:id", middlewares.Require("product.delete"), controllers.DeleteProduct)
+	prod.POST("/:id/image", middlewares.Require("product.edit"), controllers.UploadProductImage)
+	prod.DELETE("/:id/image", middlewares.Require("product.edit"), controllers.DeleteProductImage)
 
 	// Pelanggan.
 	cust := t.Group("/customers")

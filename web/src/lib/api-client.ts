@@ -88,6 +88,14 @@ interface OpsiMinta {
    * penerjemahan galat tidak perlu ditulis ulang di tempat kedua.
    */
   mentah?: { isi: BodyInit; tipe: string }
+  /**
+   * Kirim sebagai multipart (unggah berkas).
+   *
+   * Sengaja TERPISAH dari `mentah`: Content-Type multipart harus memuat
+   * boundary yang dibuat browser, jadi header itu justru TIDAK boleh diisi
+   * sendiri. Menyetelnya manual membuat server gagal mengurai berkasnya.
+   */
+  formulir?: FormData
 }
 
 export type Realm = 'tenant' | 'mitra' | 'platform'
@@ -205,7 +213,9 @@ async function kirim<T>(jalur: string, opsi: OpsiMinta, ulangi: boolean): Promis
   const realm = opsi.realm ?? 'tenant'
   const headers: Record<string, string> = { Accept: 'application/json' }
 
-  if (opsi.mentah) headers['Content-Type'] = opsi.mentah.tipe
+  if (opsi.formulir) {
+    // Content-Type sengaja dibiarkan kosong — lihat catatan pada `formulir`.
+  } else if (opsi.mentah) headers['Content-Type'] = opsi.mentah.tipe
   else if (opsi.badan !== undefined) headers['Content-Type'] = 'application/json'
   if (opsi.idempotencyKey) headers['Idempotency-Key'] = opsi.idempotencyKey
   if (!opsi.tanpaToken) {
@@ -218,11 +228,13 @@ async function kirim<T>(jalur: string, opsi: OpsiMinta, ulangi: boolean): Promis
     res = await fetch(susunURL(jalur, opsi.query), {
       method: opsi.metode ?? 'GET',
       headers,
-      body: opsi.mentah
-        ? opsi.mentah.isi
-        : opsi.badan === undefined
-          ? undefined
-          : JSON.stringify(opsi.badan),
+      body: opsi.formulir
+        ? opsi.formulir
+        : opsi.mentah
+          ? opsi.mentah.isi
+          : opsi.badan === undefined
+            ? undefined
+            : JSON.stringify(opsi.badan),
       signal: opsi.signal,
     })
   } catch (e) {
@@ -276,4 +288,11 @@ export const api = {
     tipe: string,
     opsi: Omit<OpsiMinta, 'metode' | 'badan' | 'mentah'> = {},
   ) => kirim<T>(jalur, { ...opsi, metode: 'POST', mentah: { isi, tipe } }, true),
+
+  /** POST unggahan berkas (multipart). Content-Type diurus browser. */
+  postBerkas: <T>(
+    jalur: string,
+    formulir: FormData,
+    opsi: Omit<OpsiMinta, 'metode' | 'badan' | 'mentah' | 'formulir'> = {},
+  ) => kirim<T>(jalur, { ...opsi, metode: 'POST', formulir }, true),
 }

@@ -58,6 +58,14 @@ export default defineConfig({
         target: process.env.VITE_API_PROXY ?? 'http://localhost:8080',
         changeOrigin: true,
       },
+      // Foto barang disajikan server Go dari disk, BUKAN lewat /api. Tanpa
+      // proksi ini, setiap foto hasil unggahan gagal dimuat saat pengembangan
+      // — dan gagalnya diam-diam, karena komponennya jatuh ke penanda huruf
+      // dan terlihat seperti barang yang memang belum difoto.
+      '/uploads': {
+        target: process.env.VITE_API_PROXY ?? 'http://localhost:8080',
+        changeOrigin: true,
+      },
     },
   },
 })

@@ -41,6 +41,13 @@ export const produkApi = {
 
   ubah: (id: string, input: Partial<InputProduk>) => api.put<Produk>(`/products/${id}`, input),
 
+  unggahFoto: (id: string, berkas: Blob) => {
+    const f = new FormData()
+    f.append('file', berkas, 'foto.jpg')
+    return api.postBerkas<{ image_url: string }>(`/products/${id}/image`, f)
+  },
+  hapusFoto: (id: string) => api.hapus<{ image_url: string }>(`/products/${id}/image`),
+
   hapus: (id: string) => api.hapus<null>(`/products/${id}`),
 
   /**

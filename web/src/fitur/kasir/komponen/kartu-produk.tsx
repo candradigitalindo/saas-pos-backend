@@ -1,6 +1,7 @@
 import type { Produk } from '@/bersama/tipe/katalog'
 import { formatRupiah } from '@/bersama/util/uang'
 import { formatQty, formatSisaStok } from '@/bersama/util/desimal'
+import { FotoBarang } from '@/bersama/komponen/foto-barang'
 import { cn } from '@/bersama/util/cn'
 
 /**
@@ -58,6 +59,12 @@ export function KartuProduk({
           {formatQty(diKeranjang)}
         </span>
       )}
+
+      <FotoBarang
+        nama={produk.name}
+        url={produk.image_url}
+        className={cn(habis && 'opacity-50')}
+      />
 
       <span
         className={cn(

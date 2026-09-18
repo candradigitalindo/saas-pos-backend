@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronUp, ScanLine } from 'lucide-react'
 import { Kartu } from '@/bersama/ui/kartu'
 import { Kolom, Pilihan } from '@/bersama/ui/kolom'
+import { PemilihFoto } from '@/bersama/komponen/pemilih-foto'
 import { KolomUang } from '@/bersama/ui/kolom-uang'
 import { Tombol } from '@/bersama/ui/tombol'
 import { KerangkaBaris } from '@/bersama/komponen/kerangka'
@@ -34,6 +35,13 @@ export function HalamanFormBarang() {
   const satuan = useSatuan()
   const kategori = useKategori()
   const sedangUbah = !!id
+
+  // Foto barang BARU tidak bisa langsung diunggah: endpointnya butuh id, dan
+  // id baru lahir setelah barangnya tersimpan. Jadi fotonya ditahan di sini
+  // lalu dikirim tepat setelah penyimpanan berhasil.
+  const [fotoTertunda, setFotoTertunda] = useState<Blob | null>(null)
+  const [fotoURL, setFotoURL] = useState<string | null>(null)
+  const [sedangUnggah, setSedangUnggah] = useState(false)
 
   const detail = useQuery({
     queryKey: ['produk', id],
@@ -72,6 +80,7 @@ export function HalamanFormBarang() {
       min_stock: p.min_stock === '0' ? '' : p.min_stock,
       track_stock: p.track_stock,
     })
+    setFotoURL(p.image_url || null)
   }, [detail.data])
 
   // Satuan pertama dipilih otomatis: pemilik warung tidak memikirkan "satuan"
@@ -96,7 +105,22 @@ export function HalamanFormBarang() {
       }
       return sedangUbah ? produkApi.ubah(id!, isi) : produkApi.buat(isi)
     },
-    onSuccess: (p) => {
+    onSuccess: async (p) => {
+      if (fotoTertunda) {
+        setSedangUnggah(true)
+        try {
+          await produkApi.unggahFoto(p.id, fotoTertunda)
+          setFotoTertunda(null)
+        } catch {
+          // Barangnya SUDAH tersimpan; fotonya yang gagal. Dikabarkan apa
+          // adanya, bukan dijadikan kegagalan seluruh penyimpanan — memaksa
+          // pengguna mengetik ulang semua kolom karena satu foto adalah
+          // hukuman yang tidak sepadan.
+          toast.tampilkan('Barang tersimpan, tapi fotonya gagal diunggah.', 'perhatian')
+        } finally {
+          setSedangUnggah(false)
+        }
+      }
       qc.invalidateQueries({ queryKey: ['produk'] })
       qc.invalidateQueries({ queryKey: ['katalog-produk'] })
       toast.berhasil(sedangUbah ? `${p.name} diperbarui.` : `${p.name} ditambahkan.`)
@@ -145,6 +169,37 @@ export function HalamanFormBarang() {
           className="flex flex-col gap-4"
           noValidate
         >
+          <PemilihFoto
+            nama={form.name}
+            url={fotoURL ?? (fotoTertunda ? URL.createObjectURL(fotoTertunda) : null)}
+            sedangUnggah={sedangUnggah}
+            onPilih={async (berkas) => {
+              if (!sedangUbah) { setFotoTertunda(berkas); return }
+              setSedangUnggah(true)
+              try {
+                const { image_url } = await produkApi.unggahFoto(id!, berkas)
+                setFotoURL(image_url)
+                qc.invalidateQueries({ queryKey: ['katalog-produk'] })
+                toast.berhasil('Foto tersimpan.')
+              } catch {
+                toast.tampilkan('Foto gagal diunggah. Coba lagi.', 'perhatian')
+              } finally {
+                setSedangUnggah(false)
+              }
+            }}
+            onHapus={async () => {
+              if (!sedangUbah) { setFotoTertunda(null); return }
+              setSedangUnggah(true)
+              try {
+                await produkApi.hapusFoto(id!)
+                setFotoURL(null)
+                qc.invalidateQueries({ queryKey: ['katalog-produk'] })
+              } finally {
+                setSedangUnggah(false)
+              }
+            }}
+          />
+
           <Kolom
             label="Nama barang"
             placeholder="Kopi Susu"

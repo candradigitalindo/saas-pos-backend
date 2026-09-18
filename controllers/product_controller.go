@@ -306,3 +306,44 @@ func decimalOrZero(s string) (decimal.Decimal, error) {
 	}
 	return decimal.NewFromString(s)
 }
+
+// UploadProductImage: POST /api/v1/products/:id/image
+//
+// Menerima satu foto (multipart, field "file") dan menyimpannya di server.
+// Jenis berkas ditentukan dari ISINYA, bukan dari nama atau Content-Type yang
+// dikirim klien — lihat services.SimpanFotoBarang.
+func UploadProductImage(c *gin.Context) {
+	berkas, err := c.FormFile("file")
+	if err != nil {
+		badRequest(c, "file", "Foto belum dipilih.")
+		return
+	}
+
+	f, err := berkas.Open()
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	defer f.Close()
+
+	alamat, err := services.SimpanFotoBarang(c.Request.Context(), c.Param("id"), f)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[gin.H]{
+		Success: true, Message: "Foto barang tersimpan",
+		Data: gin.H{"image_url": alamat},
+	})
+}
+
+// DeleteProductImage: DELETE /api/v1/products/:id/image
+func DeleteProductImage(c *gin.Context) {
+	if err := services.HapusFotoBarang(c.Request.Context(), c.Param("id")); err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[gin.H]{
+		Success: true, Message: "Foto barang dihapus", Data: gin.H{"image_url": ""},
+	})
+}
