@@ -43,6 +43,24 @@ export const kasirApi = {
   tutupShift: (id: string, counted_cash: number, note?: string) =>
     api.post<Shift>(`/shifts/${id}/close`, { counted_cash, note }),
 
+  /**
+   * Serah terima: tutup shift berjalan + buka yang baru, SATU transaksi.
+   *
+   * Bukan dua panggilan dari sini: ada batasan satu shift terbuka per outlet,
+   * jadi gagal di tengah meninggalkan kasir tanpa shift terbuka sama sekali.
+   */
+  serahTerimaShift: (
+    id: string,
+    uangDihitung: number,
+    modalDitinggal?: number,
+    catatan?: string,
+  ) =>
+    api.post<{ ditutup: Shift; dibuka: Shift }>(`/shifts/${id}/handover`, {
+      counted_cash: uangDihitung,
+      opening_cash: modalDitinggal,
+      note: catatan,
+    }),
+
   daftarShift: (outlet_id?: string, page = 1, limit = 20) =>
     api.get<Halaman<Shift>>('/shifts', { query: { outlet_id, page, limit } }),
 

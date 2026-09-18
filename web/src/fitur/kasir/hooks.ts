@@ -216,6 +216,24 @@ export function useTutupShift() {
   })
 }
 
+export function useSerahTerimaShift() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      id,
+      uangDihitung,
+      modalDitinggal,
+      catatan,
+    }: {
+      id: string
+      uangDihitung: number
+      modalDitinggal?: number
+      catatan?: string
+    }) => kasirApi.serahTerimaShift(id, uangDihitung, modalDitinggal, catatan),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['shift-aktif'] }),
+  })
+}
+
 export function useRiwayatTransaksi(filter: {
   outlet_id?: string
   business_date?: string

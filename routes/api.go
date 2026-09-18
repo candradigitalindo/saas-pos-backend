@@ -313,6 +313,12 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	// Shift & kas.
 	t.POST("/shifts/open", middlewares.Require("shift.open"), controllers.OpenShift)
 	t.POST("/shifts/:id/close", middlewares.Require("shift.close"), controllers.CloseShift)
+	// Serah terima: tutup + buka dalam satu transaksi. Izinnya shift.close DAN
+	// shift.open — orang yang boleh menyerahterimakan harus boleh melakukan
+	// keduanya, bukan hanya salah satunya.
+	t.POST("/shifts/:id/handover",
+		middlewares.Require("shift.close"), middlewares.Require("shift.open"),
+		controllers.HandoverShift)
 	t.GET("/shifts", middlewares.Require("shift.open", "shift.close"), controllers.ListShifts)
 	t.GET("/shifts/:id", middlewares.Require("shift.open", "shift.close"), controllers.GetShift)
 	t.POST("/cash-movements", middlewares.Require("cash.movement"), controllers.CreateCashMovement)

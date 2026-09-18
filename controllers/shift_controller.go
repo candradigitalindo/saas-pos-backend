@@ -30,6 +30,30 @@ func OpenShift(c *gin.Context) {
 }
 
 // CloseShift menutup shift dan mencatat selisih kas.
+// HandoverShift: POST /api/v1/shifts/:id/handover
+//
+// Menutup shift berjalan dan membuka shift baru dalam SATU transaksi — lihat
+// services.HandoverShift soal kenapa ini tidak boleh jadi dua panggilan.
+func HandoverShift(c *gin.Context) {
+	var req structs.ShiftHandoverRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		validationFailed(c, err)
+		return
+	}
+	lama, baru, err := services.HandoverShift(
+		c.Request.Context(), c.Param("id"), req.CountedCash, req.OpeningCash, req.Note)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[structs.ShiftHandoverResponse]{
+		Success: true, Message: "Shift diserahterimakan",
+		Data: structs.ShiftHandoverResponse{
+			Ditutup: shiftToResponse(*lama), Dibuka: shiftToResponse(*baru),
+		},
+	})
+}
+
 func CloseShift(c *gin.Context) {
 	var req structs.ShiftCloseRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

@@ -19,6 +19,7 @@ import { PenyediaSesiMitra, useSesiMitra } from '@/fitur/mitra/sesi-mitra'
  */
 const HalamanKasir = muat(() => import('@/fitur/kasir/halaman/halaman-kasir'), 'HalamanKasir')
 const HalamanTutupShift = muat(() => import('@/fitur/kasir/halaman/halaman-tutup-shift'), 'HalamanTutupShift')
+const HalamanGantiShift = muat(() => import('@/fitur/kasir/halaman/halaman-ganti-shift'), 'HalamanGantiShift')
 const HalamanRiwayat = muat(() => import('@/fitur/kasir/halaman/halaman-riwayat'), 'HalamanRiwayat')
 const HalamanKas = muat(() => import('@/fitur/kasir/halaman/halaman-kas'), 'HalamanKas')
 const HalamanPerluDiperiksa = muat(() => import('@/fitur/kasir/halaman/halaman-perlu-diperiksa'), 'HalamanPerluDiperiksa')
@@ -158,6 +159,18 @@ const router = createBrowserRouter([
           <ButuhIzin izin={[IZIN.shiftClose]}>
             <Tunggu>
               <HalamanTutupShift />
+            </Tunggu>
+          </ButuhIzin>
+        ),
+      },
+      {
+        // Serah terima butuh KEDUA izin: yang menyerahkan harus boleh menutup
+        // shift lama sekaligus membuka yang baru.
+        path: '/kasir/ganti-shift',
+        element: (
+          <ButuhIzin izin={[IZIN.shiftClose, IZIN.shiftOpen]}>
+            <Tunggu>
+              <HalamanGantiShift />
             </Tunggu>
           </ButuhIzin>
         ),

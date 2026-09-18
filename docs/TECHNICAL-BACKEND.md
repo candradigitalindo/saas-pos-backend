@@ -2159,6 +2159,13 @@ POST   /api/v1/sales/:id/refund        retur sebagian/penuh
 
 POST   /api/v1/shifts/open             buka kas
 POST   /api/v1/shifts/:id/close        tutup kas + hitung fisik + selisih
+POST   /api/v1/shifts/:id/handover           serah terima: tutup + buka, SATU transaksi
+       # Ada batasan satu shift terbuka per outlet, jadi urutannya wajib tutup
+       # dulu — dan bila urutan itu dijalankan klien, gagal di tengah
+       # meninggalkan kasir TANPA shift terbuka: uang laci sudah dibukukan tapi
+       # tidak ada tempat mencatat penjualan berikutnya.
+       # counted_cash wajib; opening_cash opsional (uang yang DITINGGAL di laci,
+       # sisanya dianggap disetor) dan tidak boleh melebihi counted_cash.
 POST   /api/v1/cash-movements          kas masuk/keluar non-penjualan
 
 GET    /api/v1/stocks?outlet_id=&low=true

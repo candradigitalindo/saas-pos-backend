@@ -79,6 +79,7 @@ Semakin sedikit pintu, semakin kecil peluang tersesat.
 | Retur barang | `POST /sales/:id/refund` | `sale.refund` |
 | Uang masuk/keluar laci | `POST /cash-movements` · `GET /cash-movements` | `cash.movement` |
 | Tutup shift | `POST /shifts/:id/close` | `shift.close` |
+| Ganti Shift (serah terima kasir) | `POST /shifts/:id/handover` | `shift.close` + `shift.open` |
 | Daftar & detail shift | `GET /shifts` · `GET /shifts/:id` | `shift.open` / `shift.close` |
 
 ---

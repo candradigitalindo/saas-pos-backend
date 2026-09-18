@@ -95,6 +95,106 @@ func CloseShift(ctx context.Context, shiftID string, countedCash int64, note str
 	return &out, nil
 }
 
+// HandoverShift menyerahkan kasir dari satu orang ke orang berikutnya: shift
+// berjalan ditutup dan shift baru dibuka, DALAM SATU TRANSAKSI.
+//
+// Kenapa satu endpoint, bukan dua panggilan dari klien. Ada batasan satu shift
+// terbuka per outlet, jadi "buka" akan selalu ditolak selama yang lama masih
+// terbuka — urutannya wajib tutup dulu. Dan kalau urutan itu dijalankan klien,
+// kegagalan di tengah meninggalkan kasir TANPA shift terbuka: uang laci sudah
+// dihitung dan dibukukan, tapi tidak ada tempat mencatat penjualan berikutnya,
+// dan kasir berikutnya menghadapi layar yang menolak melayani pembeli. Satu
+// transaksi membuat keadaan setengah jadi itu mustahil.
+//
+// `openingCash` boleh berbeda dari `countedCash`: lazimnya sebagian uang laci
+// disetor ke brankas saat pergantian, dan yang ditinggal hanya uang kembalian.
+// Bila tidak diisi, seluruh uang yang dihitung diteruskan ke shift berikutnya.
+//
+// Yang membuka shift baru adalah PENGGUNA YANG SEDANG MASUK — orang yang
+// berdiri di depan mesin saat ini, yang juga akan bertanggung jawab atas
+// lacinya mulai detik ini.
+func HandoverShift(
+	ctx context.Context,
+	shiftID string,
+	countedCash int64,
+	openingCash *int64,
+	note string,
+) (*models.Shift, *models.Shift, error) {
+	if countedCash < 0 {
+		return nil, nil, fmt.Errorf("%w: uang laci tidak boleh negatif", helpers.ErrValidation)
+	}
+	modalBaru := countedCash
+	if openingCash != nil {
+		if *openingCash < 0 {
+			return nil, nil, fmt.Errorf("%w: modal awal tidak boleh negatif", helpers.ErrValidation)
+		}
+		if *openingCash > countedCash {
+			return nil, nil, fmt.Errorf(
+				"%w: modal awal (%d) tidak boleh lebih besar dari uang laci yang dihitung (%d)",
+				helpers.ErrValidation, *openingCash, countedCash)
+		}
+		modalBaru = *openingCash
+	}
+
+	var lama, baru models.Shift
+	err := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
+		if err := repositories.FindShiftInTenant(ctx, tx, shiftID, &lama); err != nil {
+			return err
+		}
+		if lama.Status != "open" {
+			return fmt.Errorf("%w: shift sudah ditutup", helpers.ErrConflict)
+		}
+
+		var outlet models.Outlet
+		if err := repositories.FindOutletByID(ctx, tx, lama.OutletID, &outlet); err != nil {
+			return err
+		}
+
+		cashSales, cashIn, cashOut, err := repositories.ShiftCashTotals(ctx, tx, shiftID)
+		if err != nil {
+			return err
+		}
+		expected := lama.OpeningCash + cashSales + cashIn - cashOut
+		selisih := countedCash - expected
+		now := time.Now().UTC()
+		uid := reqctx.UserID(ctx)
+
+		lama.Status = "closed"
+		lama.ClosedBy = &uid
+		lama.ClosedAt = &now
+		lama.ExpectedCash = expected
+		lama.CountedCash = &countedCash
+		lama.Difference = &selisih
+		if note != "" {
+			lama.Note = note
+		}
+		if err := repositories.UpdateShift(ctx, tx, &lama); err != nil {
+			return err
+		}
+
+		// Hari usaha dihitung ulang dari zona outlet, bukan diwarisi dari shift
+		// lama: pergantian shift malam kerap melewati batas hari usaha, dan
+		// mewarisinya akan membukukan penjualan besok ke hari kemarin.
+		bizDate, err := timez.BusinessDate(now, outlet.Timezone, outlet.DayStartOffset())
+		if err != nil {
+			return err
+		}
+		baru = models.Shift{
+			OutletID:     lama.OutletID,
+			OpenedBy:     uid,
+			OpenedAt:     now,
+			BusinessDate: bizDate,
+			OpeningCash:  modalBaru,
+			Status:       "open",
+		}
+		return repositories.CreateShift(ctx, tx, &baru)
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	return &lama, &baru, nil
+}
+
 // CreateCashMovement mencatat kas masuk/keluar non-penjualan pada shift terbuka
 // outlet. shiftID opsional (kosong = shift terbuka outlet).
 func CreateCashMovement(ctx context.Context, outletID, shiftID, direction string, amount int64, reason string) (*models.CashMovement, error) {

@@ -53,6 +53,25 @@ type ShiftCloseRequest struct {
 	Note        string `json:"note" binding:"omitempty,max=255"`
 }
 
+// ShiftHandoverRequest: serah terima kasir ke orang berikutnya.
+type ShiftHandoverRequest struct {
+	CountedCash int64 `json:"counted_cash" binding:"gte=0"`
+	// OpeningCash: uang yang DITINGGAL di laci untuk shift berikutnya. Kosong
+	// berarti seluruh uang yang dihitung diteruskan. Pointer, bukan int64
+	// biasa: tanpa itu, "tidak diisi" dan "sengaja diisi nol" (seluruh uang
+	// disetor ke brankas) tidak bisa dibedakan.
+	OpeningCash *int64 `json:"opening_cash" binding:"omitempty,gte=0"`
+	Note        string `json:"note" binding:"omitempty,max=255"`
+}
+
+// ShiftHandoverResponse memuat KEDUA shift: yang ditutup dan yang dibuka.
+// Layar serah terima menampilkan selisih laci shift lama sekaligus modal awal
+// shift baru, dan keduanya lahir dari satu transaksi yang sama.
+type ShiftHandoverResponse struct {
+	Ditutup ShiftResponse `json:"ditutup"`
+	Dibuka  ShiftResponse `json:"dibuka"`
+}
+
 type ShiftResponse struct {
 	ID           string `json:"id"`
 	OutletID     string `json:"outlet_id"`
