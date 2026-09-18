@@ -38,7 +38,9 @@ export function HalamanPengaturan() {
       <h1 className="text-judul font-bold text-teks-utama">Pengaturan</h1>
 
       <Kartu className="flex items-center gap-3 p-4">
-        <Building2 className="h-6 w-6 shrink-0 text-teks-redup" aria-hidden />
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-kontrol bg-utama/10 text-utama">
+          <Building2 className="h-5 w-5" aria-hidden />
+        </span>
         <div className="min-w-0">
           <p className="truncate font-semibold text-teks-utama">
             {profil?.tenant.business_name}
@@ -54,16 +56,23 @@ export function HalamanPengaturan() {
           <Link
             key={m.ke}
             to={m.ke}
-            className="flex min-h-16 items-center gap-3 px-4 hover:bg-permukaan-2"
+            className="group flex min-h-16 items-center gap-3 px-4 transition-colors hover:bg-permukaan-2"
           >
-            <m.ikon className="h-5 w-5 shrink-0 text-teks-sekunder" aria-hidden />
+            {/* Keping ikon bertinta merek, sama seperti pintasan di beranda —
+                dua pola navigasi yang sama tidak boleh terlihat berbeda. */}
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-kontrol bg-utama/10 text-utama">
+              <m.ikon className="h-5 w-5" aria-hidden />
+            </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-isi text-teks-utama">{m.label}</span>
+              <span className="block text-isi font-medium text-teks-utama">{m.label}</span>
               <span className="block text-keterangan text-teks-redup">
                 {m.keterangan}
               </span>
             </span>
-            <ChevronRight className="h-5 w-5 shrink-0 text-teks-redup" aria-hidden />
+            <ChevronRight
+              className="h-5 w-5 shrink-0 text-teks-redup transition-transform group-hover:translate-x-0.5"
+              aria-hidden
+            />
           </Link>
         ))}
       </Kartu>

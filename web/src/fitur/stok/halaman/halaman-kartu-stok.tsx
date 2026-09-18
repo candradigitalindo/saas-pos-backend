@@ -1,6 +1,6 @@
 import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { History } from 'lucide-react'
+import { ArrowDownLeft, ArrowUpRight, History } from 'lucide-react'
 import { Kartu } from '@/bersama/ui/kartu'
 import { KeadaanGagal, KeadaanKosong } from '@/bersama/komponen/keadaan-kosong'
 import { KerangkaBaris } from '@/bersama/komponen/kerangka'
@@ -12,10 +12,34 @@ import { cn } from '@/bersama/util/cn'
 import type { Produk } from '@/bersama/tipe/katalog'
 import { stokApi } from '../api'
 
-/** Sebab pergerakan stok, dalam bahasa orang. */
-const SEBAB: Record<string, string> = {
+/**
+ * Sebab pergerakan stok, dalam bahasa orang (ui/01-PRINSIP-DESAIN.md §2).
+ *
+ * Daftarnya WAJIB sama persis dengan CHECK constraint `stock_ledger.kind` di
+ * database/migrations/000008_stock_ledger.up.sql. Tipe `JenisGerakan` di bawah
+ * membuat kunci yang hilang jadi galat kompilasi, bukan istilah sistem yang
+ * diam-diam bocor ke layar.
+ *
+ * Dua yang sempat lolos dan ditemukan dari layar sungguhan: `initial` tidak
+ * ada sama sekali sehingga tampil apa adanya, dan pembatalan transaksi ditulis
+ * dengan kunci `sale_void` padahal backend memakai `void` — sehingga kata
+ * "void", yang justru dilarang eksplisit di ui/01 §2, akan muncul di layar.
+ */
+type JenisGerakan =
+  | 'sale'
+  | 'void'
+  | 'refund'
+  | 'purchase'
+  | 'adjustment'
+  | 'transfer_in'
+  | 'transfer_out'
+  | 'opname'
+  | 'recipe'
+  | 'initial'
+
+const SEBAB: Record<JenisGerakan, string> = {
   sale: 'Terjual',
-  sale_void: 'Pembatalan transaksi',
+  void: 'Pembatalan transaksi',
   refund: 'Retur pembeli',
   purchase: 'Barang masuk',
   adjustment: 'Koreksi manual',
@@ -23,6 +47,7 @@ const SEBAB: Record<string, string> = {
   transfer_in: 'Kiriman masuk dari toko lain',
   transfer_out: 'Dikirim ke toko lain',
   recipe: 'Terpakai sebagai bahan',
+  initial: 'Stok awal',
 }
 
 /** Kartu stok: riwayat keluar-masuk satu barang. */
@@ -74,10 +99,27 @@ export function HalamanKartuStok() {
             const naik = !g.qty_delta.startsWith('-')
             return (
               <li key={g.id}>
-                <Kartu className="flex items-center justify-between gap-3 p-3">
-                  <div className="min-w-0">
-                    <p className="font-medium text-teks-utama">
-                      {SEBAB[g.kind] ?? g.kind}
+                <Kartu className="flex items-center gap-3 p-3">
+                  {/* Arah pergerakan ditandai IKON, bukan hanya warna angkanya.
+                      Satu dari dua belas laki-laki sulit membedakan merah-hijau,
+                      dan halaman ini justru dibaca saat stok terasa janggal —
+                      saat itu arah tiap baris harus terbaca sekilas. */}
+                  <span
+                    className={cn(
+                      'flex h-10 w-10 shrink-0 items-center justify-center rounded-kontrol',
+                      naik ? 'bg-utama/10 text-hijau-700' : 'bg-bahaya-teks/10 text-bahaya-teks',
+                    )}
+                  >
+                    {naik ? (
+                      <ArrowDownLeft className="h-5 w-5" aria-hidden />
+                    ) : (
+                      <ArrowUpRight className="h-5 w-5" aria-hidden />
+                    )}
+                  </span>
+
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium text-teks-utama">
+                      {SEBAB[g.kind as JenisGerakan] ?? 'Pergerakan lain'}
                     </p>
                     <p className="text-keterangan text-teks-redup">
                       {formatTanggalJam(g.occurred_at)}
