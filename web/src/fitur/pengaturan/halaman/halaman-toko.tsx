@@ -187,7 +187,7 @@ function DialogToko({ awal, onTutup }: { awal: Toko | null; onTutup: () => void 
           />
 
           {galat && (
-            <p className="rounded-kontrol border border-bahaya bg-red-50 px-3 py-2 text-label text-bahaya-teks">
+            <p className="rounded-kontrol border border-bahaya bg-bahaya-teks/10 px-3 py-2 text-label text-bahaya-teks">
               {galat}
             </p>
           )}

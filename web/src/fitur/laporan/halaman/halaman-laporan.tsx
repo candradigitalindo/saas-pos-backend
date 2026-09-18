@@ -354,7 +354,7 @@ function Wawasan({
   if (marginTerbaik - marginRamai < 0.1) return null
 
   return (
-    <p className="mt-3 flex items-start gap-2 rounded-kontrol bg-jingga-100 px-3 py-2 text-label text-jingga-700">
+    <p className="mt-3 flex items-start gap-2 rounded-kontrol bg-permukaan-2 px-3 py-2 text-label text-jingga-700">
       <Lightbulb className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
       {ramai.nama} paling ramai, tapi setelah dipotong biaya, untungnya paling
       tipis dibanding kanal lain.

@@ -43,7 +43,7 @@ export function HalamanPerluDiperiksa() {
       </header>
 
       {(menunggu?.length ?? 0) > 0 && (
-        <Kartu className="flex items-center justify-between gap-3 border-jingga-600 bg-jingga-100 p-4">
+        <Kartu className="flex items-center justify-between gap-3 border-jingga-600 bg-permukaan-2 p-4">
           <p className="text-label text-jingga-700">
             {menunggu?.length} transaksi sedang menunggu giliran dikirim. Ini
             berjalan sendiri begitu ada internet.

@@ -150,7 +150,7 @@ function PanelPeriode({ periode }: { periode: PeriodeGaji }) {
                 className={cn(
                   'flex h-8 w-8 items-center justify-center rounded-full text-label font-bold',
                   i < langkahKini
-                    ? 'bg-hijau-100 text-hijau-800'
+                    ? 'bg-hijau-800/15 text-hijau-800'
                     : i === langkahKini
                       ? 'bg-utama text-utama-teks'
                       : 'bg-permukaan-2 text-teks-redup',
@@ -185,7 +185,7 @@ function PanelPeriode({ periode }: { periode: PeriodeGaji }) {
       {boleh(IZIN.hrSalaryView) && daftarSlip.length > 0 && (
         <>
           {perluDiperiksa.length > 0 && (
-            <Kartu className="flex items-start gap-3 border-jingga-600 bg-jingga-100 p-4">
+            <Kartu className="flex items-start gap-3 border-jingga-600 bg-permukaan-2 p-4">
               <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-jingga-700" aria-hidden />
               <div>
                 <p className="font-medium text-jingga-700">
@@ -208,7 +208,7 @@ function PanelPeriode({ periode }: { periode: PeriodeGaji }) {
       )}
 
       {galat && (
-        <p className="rounded-kontrol border border-bahaya bg-red-50 px-3 py-2 text-label text-bahaya-teks">
+        <p className="rounded-kontrol border border-bahaya bg-bahaya-teks/10 px-3 py-2 text-label text-bahaya-teks">
           {galat}
         </p>
       )}
@@ -379,7 +379,7 @@ function BarisSlipGaji({ slip }: { slip: SlipGaji }) {
                 </dd>
               </div>
               {slip.carried_debt > 0 && (
-                <p className="mt-1 rounded-kontrol bg-jingga-100 px-2 py-1.5 text-keterangan text-jingga-700">
+                <p className="mt-1 rounded-kontrol bg-permukaan-2 px-2 py-1.5 text-keterangan text-jingga-700">
                   Sisa utang {formatRupiah(slip.carried_debt)} dibawa ke periode
                   berikutnya karena gaji periode ini tidak cukup menutupinya.
                 </p>
@@ -449,7 +449,7 @@ function DialogPeriodeBaru({ onTutup }: { onTutup: () => void }) {
         />
 
         {galat && (
-          <p className="rounded-kontrol border border-bahaya bg-red-50 px-3 py-2 text-label text-bahaya-teks">
+          <p className="rounded-kontrol border border-bahaya bg-bahaya-teks/10 px-3 py-2 text-label text-bahaya-teks">
             {galat}
           </p>
         )}

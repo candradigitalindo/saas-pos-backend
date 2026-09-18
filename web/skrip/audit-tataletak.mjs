@@ -11,6 +11,18 @@ const HALAMAN = [
   ['pengguna','/pengaturan/pengguna'], ['lainnya','/lainnya'],
 ]
 
+/**
+ * Halaman DETAIL, yang alamatnya baru diketahui setelah membuka daftarnya.
+ *
+ * Tanpa ini audit hanya memeriksa halaman daftar — dan kebocoran istilah
+ * sistem yang sebenarnya justru ditemukan di kartu stok, halaman detail yang
+ * tidak pernah dikunjungi.
+ */
+const DETAIL = [
+  ['kartu-stok', '/stok', 'a[href*="/stok/kartu/"]'],
+  ['form-barang', '/barang', 'a[href*="/barang/"]'],
+]
+
 const b = await chromium.launch({ channel: 'chrome' })
 const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true })
 const p = await ctx.newPage()
@@ -22,10 +34,25 @@ await p.getByRole('button', { name: 'Masuk' }).click()
 await p.waitForURL((u) => !u.pathname.includes('masuk'), { timeout: 15000 })
 
 const temuan = []
+
+/** Menemukan alamat halaman detail dari daftarnya. */
+async function jalurDetail(dariJalur, pemilih) {
+  await p.goto(BASE + dariJalur, { waitUntil: 'networkidle', timeout: 20000 })
+  await p.waitForTimeout(1200)
+  return p.evaluate((sel) => document.querySelector(sel)?.getAttribute('href') ?? null, pemilih)
+}
 let jumlahRefresh = 0
 p.on('request', (r) => { if (r.url().includes('/auth/refresh')) jumlahRefresh++ })
 
-for (const [nama, jalur] of HALAMAN) {
+// Alamat halaman detail diselesaikan dulu, lalu diaudit bersama sisanya.
+const SEMUA = [...HALAMAN]
+for (const [nama, dari, pemilih] of DETAIL) {
+  const jalur = await jalurDetail(dari, pemilih)
+  if (jalur) SEMUA.push([nama, jalur])
+  else console.error(`(lewat ${nama}: tidak ada tautan di ${dari})`)
+}
+
+for (const [nama, jalur] of SEMUA) {
   await p.goto(BASE + jalur, { waitUntil: 'networkidle', timeout: 20000 })
   await p.waitForTimeout(1200)
 
@@ -87,11 +114,25 @@ for (const [nama, jalur] of HALAMAN) {
     out.gesarMendatar = document.documentElement.scrollWidth > window.innerWidth + 2
 
     // 4. Istilah sistem bocor ke layar (ui/01 §2)
-    const larangan = /\b(tenant|payload|idempoten|void|reconcile|outlet_id|sync|gross profit|net amount|receivable|opname|stock)\b/i
+    //
+    // Dua aturan. Yang pertama daftar kata yang memang dilarang dokumen.
+    //
+    // Yang kedua lebih tajam dan tidak perlu dirawat: APA PUN yang berbentuk
+    // snake_case. Tidak ada kalimat Indonesia di layar ini yang memuat
+    // `transfer_in`, `on_hold`, atau `written_off` — bentuk itu hanya lahir
+    // dari nilai enum basis data yang lupa diterjemahkan. Daftar kata harus
+    // diperbarui tiap kali backend menambah enum; aturan bentuk tidak.
+    //
+    // Ini lahir dari kebocoran nyata: `initial` dan `void` tampil apa adanya di
+    // kartu stok. `void` bahkan SUDAH ada di daftar larangan — yang salah
+    // adalah halamannya tidak pernah dikunjungi audit ini.
+    const larangan = /\b(tenant|payload|idempoten|void|reconcile|sync|gross profit|net amount|receivable|opname)\b/i
+    const enumSnake = /\b[a-z]{2,}_[a-z]{2,}(_[a-z]{2,})?\b/
     const teks = document.body.innerText
     for (const baris of teks.split('\n')) {
       const t = baris.trim()
-      if (t && larangan.test(t)) out.istilahAsing.push(t.slice(0, 70))
+      if (!t) continue
+      if (larangan.test(t) || enumSnake.test(t)) out.istilahAsing.push(t.slice(0, 70))
     }
 
     // 5. ULID mentah tampil ke pengguna

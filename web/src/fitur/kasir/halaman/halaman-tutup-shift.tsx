@@ -120,7 +120,7 @@ export function HalamanTutupShift() {
           <Kartu
             className={cn(
               'p-4',
-              pas ? 'border-hijau-600 bg-hijau-50' : 'border-jingga-600 bg-jingga-100',
+              pas ? 'border-hijau-600 bg-hijau-700/10' : 'border-jingga-600 bg-permukaan-2',
             )}
           >
             <p
@@ -163,7 +163,7 @@ export function HalamanTutupShift() {
         )}
 
         {galat && (
-          <p className="rounded-kontrol border border-bahaya bg-red-50 px-3 py-2 text-label text-bahaya-teks">
+          <p className="rounded-kontrol border border-bahaya bg-bahaya-teks/10 px-3 py-2 text-label text-bahaya-teks">
             {galat}
           </p>
         )}

@@ -146,7 +146,7 @@ export function HalamanBarangMasuk() {
                         setBaris((l) => l.filter((x) => x.produk.id !== b.produk.id))
                       }
                       aria-label={`Hapus ${b.produk.name}`}
-                      className="-m-2 shrink-0 rounded-kontrol p-2 text-bahaya-teks hover:bg-red-50"
+                      className="-m-2 shrink-0 rounded-kontrol p-2 text-bahaya-teks hover:bg-bahaya-teks/10"
                     >
                       <Trash2 className="h-5 w-5" aria-hidden />
                     </button>
@@ -193,14 +193,14 @@ export function HalamanBarangMasuk() {
             </span>
           </div>
 
-          <p className="flex items-start gap-2 rounded-kontrol bg-blue-50 px-3 py-2 text-keterangan text-info-teks">
+          <p className="flex items-start gap-2 rounded-kontrol bg-info-teks/10 px-3 py-2 text-keterangan text-info-teks">
             <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
             Harga modal barang ini akan diperbarui otomatis mengikuti harga beli
             di atas. Itu yang dipakai menghitung untung Anda.
           </p>
 
           {galat && (
-            <p className="rounded-kontrol border border-bahaya bg-red-50 px-3 py-2 text-label text-bahaya-teks">
+            <p className="rounded-kontrol border border-bahaya bg-bahaya-teks/10 px-3 py-2 text-label text-bahaya-teks">
               {galat}
             </p>
           )}

@@ -46,10 +46,10 @@ const IKON: Record<NadaToast, typeof CheckCircle2> = {
 }
 
 const WARNA: Record<NadaToast, string> = {
-  berhasil: 'border-hijau-600 bg-hijau-50 text-hijau-800',
-  gagal: 'border-bahaya bg-red-50 text-bahaya-teks',
-  perhatian: 'border-jingga-600 bg-jingga-100 text-jingga-700',
-  info: 'border-info bg-blue-50 text-info-teks',
+  berhasil: 'border-hijau-600 bg-hijau-700/10 text-hijau-800',
+  gagal: 'border-bahaya bg-bahaya-teks/10 text-bahaya-teks',
+  perhatian: 'border-jingga-600 bg-permukaan-2 text-jingga-700',
+  info: 'border-info bg-info-teks/10 text-info-teks',
 }
 
 export function PenyediaToast({ children }: { children: ReactNode }) {

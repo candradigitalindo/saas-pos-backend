@@ -83,7 +83,7 @@ export function HalamanLangganan() {
       )}
 
       {tagihanTerbuka && (
-        <Kartu className="border-jingga-600 bg-jingga-100 p-4">
+        <Kartu className="border-jingga-600 bg-permukaan-2 p-4">
           <p className="font-semibold text-jingga-700">Ada tagihan yang belum dibayar</p>
           <p className="mt-1 text-angka font-extrabold tabular-nums text-teks-utama">
             {formatRupiah(tagihanTerbuka.total_amount - tagihanTerbuka.paid_amount)}
@@ -234,7 +234,7 @@ function KartuPaket({
       )}
 
       {galat && (
-        <p className="rounded-kontrol border border-bahaya bg-red-50 px-3 py-2 text-keterangan text-bahaya-teks">
+        <p className="rounded-kontrol border border-bahaya bg-bahaya-teks/10 px-3 py-2 text-keterangan text-bahaya-teks">
           {galat}
         </p>
       )}
@@ -321,7 +321,7 @@ function DialogBayar({
         </Pilihan>
 
         {galat && (
-          <p className="rounded-kontrol border border-bahaya bg-red-50 px-3 py-2 text-label text-bahaya-teks">
+          <p className="rounded-kontrol border border-bahaya bg-bahaya-teks/10 px-3 py-2 text-label text-bahaya-teks">
             {galat}
           </p>
         )}

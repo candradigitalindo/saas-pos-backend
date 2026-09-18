@@ -18,6 +18,11 @@
   /* ── Jingga Semangat — aksen, SELALU teks gelap di atasnya ──────────── */
   --color-jingga-100: #fef3c7;
   --color-jingga-400: #fbbf24;
+  /* Teks di atas Jingga Semangat SELALU gelap, di mode terang maupun gelap
+     (ui/02 — "Jingga tidak pernah memakai teks putih"). `teks-utama` tidak
+     bisa dipakai: ia berubah jadi putih di mode gelap, dan putih di atas
+     #FBBF24 hanya 1,8:1. */
+  --color-teks-di-jingga: #1c1917;
   --color-jingga-600: #d97706;
   --color-jingga-700: var(--warna-jingga-teks);
 
@@ -110,7 +115,11 @@
   /* Teks semantik untuk latar terang — nilai terverifikasi di ui/02. */
   --warna-bahaya-teks: #b91c1c; /* 6,47:1 */
   --warna-info-teks: #1d4ed8; /* 6,70:1 */
-  --warna-jingga-teks: #b45309; /* 5,02:1 */
+  /* 5,02:1 di atas putih — LULUS, tapi tipis. Akibatnya nyata: lencana
+     jingga di atas TINTA jingga (bahkan 10%) jatuh ke 4,35:1 dan gagal.
+     Jingga dipakai sebagai TEKS + GARIS TEPI di atas `permukaan-2` (7,86:1),
+     bukan di atas tintanya sendiri. */
+  --warna-jingga-teks: #b45309;
   --warna-hijau-teks: #047857; /* 5,48:1 */
   --warna-hijau-teks-pekat: #065f46; /* 7,68:1 */
     color-scheme: light;

@@ -34,7 +34,7 @@ const gaya = cva(
         teks: 'text-utama hover:bg-sorot disabled:opacity-50',
         /* Jingga Semangat: hanya untuk momen pencapaian, dan SELALU teks gelap. */
         pencapaian:
-          'bg-jingga-400 text-teks-utama hover:brightness-95 disabled:opacity-50',
+          'bg-jingga-400 text-teks-di-jingga hover:brightness-95 disabled:opacity-50',
       },
       ukuran: {
         // "Padat" 40px hanya berlaku untuk penunjuk halus (tetikus). Di

@@ -66,7 +66,7 @@ export function HalamanDashboardMitra() {
               : 'Belum pernah ada pencairan.'}
           </p>
           {(d?.commission_held ?? 0) > 0 && (
-            <p className="mt-2 rounded-kontrol bg-jingga-100 px-3 py-2 text-keterangan text-jingga-700">
+            <p className="mt-2 rounded-kontrol bg-permukaan-2 px-3 py-2 text-keterangan text-jingga-700">
               {formatRupiah(d!.commission_held)} masih menunggu diperiksa dan belum
               bisa dicairkan.
             </p>
@@ -124,7 +124,7 @@ export function HalamanDashboardMitra() {
         {/* Batas privasi ditulis PERMANEN, bukan disembunyikan. Ia melindungi
             merchant sekaligus menjawab lebih dulu pertanyaan mitra "kok datanya
             cuma segini?" (ui/04-PETA-LAYAR.md). */}
-        <p className="flex items-start gap-2 rounded-kontrol bg-blue-50 px-3 py-2 text-keterangan text-info-teks">
+        <p className="flex items-start gap-2 rounded-kontrol bg-info-teks/10 px-3 py-2 text-keterangan text-info-teks">
           <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
           Anda hanya dapat melihat status langganan merchant. Data penjualan,
           produk, dan pelanggan mereka bersifat rahasia.
@@ -222,7 +222,7 @@ function DialogProspek({ onTutup }: { onTutup: () => void }) {
           />
 
           {galat && (
-            <p className="rounded-kontrol border border-bahaya bg-red-50 px-3 py-2 text-label text-bahaya-teks">
+            <p className="rounded-kontrol border border-bahaya bg-bahaya-teks/10 px-3 py-2 text-label text-bahaya-teks">
               {galat}
             </p>
           )}

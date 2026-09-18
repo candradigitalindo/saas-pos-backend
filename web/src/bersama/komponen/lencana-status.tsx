@@ -11,11 +11,11 @@ import { cn } from '@/bersama/util/cn'
 export type NadaStatus = 'berhasil' | 'menunggu' | 'bahaya' | 'netral' | 'info'
 
 const NADA: Record<NadaStatus, { kelas: string; ikon: LucideIcon }> = {
-  berhasil: { kelas: 'bg-hijau-100 text-hijau-800', ikon: Check },
-  menunggu: { kelas: 'bg-jingga-100 text-jingga-700', ikon: Clock },
-  bahaya: { kelas: 'bg-red-100 text-bahaya-teks', ikon: Ban },
+  berhasil: { kelas: 'bg-hijau-800/15 text-hijau-800', ikon: Check },
+  menunggu: { kelas: 'bg-permukaan-2 text-jingga-700', ikon: Clock },
+  bahaya: { kelas: 'bg-bahaya-teks/15 text-bahaya-teks', ikon: Ban },
   netral: { kelas: 'bg-permukaan-2 text-teks-sekunder', ikon: CircleDot },
-  info: { kelas: 'bg-blue-100 text-info-teks', ikon: CloudOff },
+  info: { kelas: 'bg-info-teks/15 text-info-teks', ikon: CloudOff },
 }
 
 export function LencanaStatus({

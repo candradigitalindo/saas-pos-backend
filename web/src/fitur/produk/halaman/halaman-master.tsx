@@ -149,7 +149,10 @@ export function HalamanMaster() {
                 type="button"
                 onClick={() => hapus.mutate(x.id)}
                 aria-label={`Hapus ${x.name}`}
-                className="-mr-2 shrink-0 rounded-kontrol p-2 text-bahaya-teks hover:bg-red-50"
+                // 48px untuk jari, menyusut ke 40px pada penunjuk halus —
+                // aturan yang sama dengan tombol "padat" (ui/01 §3). Sebelumnya
+                // p-2 di sekeliling ikon 20px hanya menghasilkan 36px.
+                className="-mr-2 flex h-12 w-12 shrink-0 items-center justify-center rounded-kontrol text-bahaya-teks hover:bg-bahaya-teks/10 pointer-fine:h-10 pointer-fine:w-10"
               >
                 <Trash2 className="h-5 w-5" aria-hidden />
               </button>

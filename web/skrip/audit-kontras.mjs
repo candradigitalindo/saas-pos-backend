@@ -49,8 +49,124 @@ for (const mode of ['light','dark']) {
     if (!ok) gagal++
     console.log(`  ${ok ? 'LULUS' : 'GAGAL'} ${r.toFixed(2).padStart(6)}:1  ${nama}`)
   }
+
+  // ── Kontras yang BENAR-BENAR TERENDER ────────────────────────────────
+  //
+  // Diperiksa di BEBERAPA HALAMAN, bukan hanya layar masuk: penjaga yang cuma
+  // melihat satu layar tidak menjaga apa pun. Layar masuk sendiri hanya punya
+  // enam teks.
+  //
+  // Memeriksa pasangan token saja tidak cukup, dan itu terbukti mahal:
+  // pesan galat di 20-an layar memakai `bg-red-50` — warna palet Tailwind
+  // mentah yang TIDAK ikut berubah di mode gelap — sedangkan teksnya
+  // `text-bahaya-teks` yang ikut berubah. Hasilnya merah muda terang di atas
+  // merah muda terang, 2,53:1, praktis tidak terbaca. Semua pasangan token
+  // lulus saat itu; yang bocor justru kombinasi yang tidak pernah diuji.
+  //
+  // Di sini yang diukur adalah piksel sungguhan: warna teks terhadap latar
+  // efektif setelah komposisi, pada halaman nyata, di kedua mode.
+  await p.getByLabel('Nama pengguna').fill('sari')
+  await p.getByLabel('Kata sandi').fill('rahasia123')
+  await p.getByRole('button', { name: 'Masuk' }).click()
+  await p.waitForURL((u) => !u.pathname.includes('masuk'), { timeout: 15000 })
+  await p.waitForTimeout(1500)
+
+  const bacaTerender = () => p.evaluate(() => {
+    const c = document.createElement('canvas')
+    c.width = c.height = 1
+    const g = c.getContext('2d', { willReadFrequently: true })
+    // getImageData memberi byte sRGB sebenarnya; `fillStyle` sendiri tidak
+    // menormalkan oklch, dan Tailwind v4 memang memancarkan oklch.
+    // Menumpuk lapisan di atas putih opak. Tanpa dasar opak, lapisan
+    // separuh-tembus terbaca sebagai warna penuh karena getImageData
+    // mengembalikan RGB tak-terpremultiplikasi.
+    const piksel = (...warna) => {
+      g.clearRect(0, 0, 1, 1)
+      g.fillStyle = '#ffffff'
+      g.fillRect(0, 0, 1, 1)
+      for (const w of warna) { g.fillStyle = w; g.fillRect(0, 0, 1, 1) }
+      const d = g.getImageData(0, 0, 1, 1).data
+      return [d[0], d[1], d[2]]
+    }
+    // Alfa dibaca dari PIKSEL, bukan dari bentuk teks CSS-nya.
+    //
+    // Versi pertama menebak transparansi dengan mencocokkan "rgba(". Tailwind v4
+    // memancarkan `oklab(… / 0.15)` untuk tinta seperti `bg-jingga-700/15`, jadi
+    // pencocokan itu meleset: tinta 15% dianggap opak, dan lencana jingga
+    // dilaporkan sebagai teks jingga di atas latar jingga — 1,01:1. Aplikasinya
+    // sehat; alat ukurnya yang salah.
+    const alfa = (v) => {
+      g.clearRect(0, 0, 1, 1)
+      g.fillStyle = v
+      g.fillRect(0, 0, 1, 1)
+      return g.getImageData(0, 0, 1, 1).data[3]
+    }
+
+    // Mengembalikan null bila ada GRADIEN di tumpukan latarnya: warna di balik
+    // teks tidak bisa dihitung dari satu nilai saat latarnya background-image.
+    const dasar = getComputedStyle(document.body).backgroundColor || 'rgb(255,255,255)'
+    const tumpukanLatar = (el) => {
+      const keluar = []
+      for (let e = el; e; e = e.parentElement) {
+        const cs = getComputedStyle(e)
+        if (cs.backgroundImage && cs.backgroundImage !== 'none') return null
+        const bg = cs.backgroundColor
+        if (!bg) continue
+        const a = alfa(bg)
+        if (a === 0) continue
+        keluar.unshift(bg)
+        if (a === 255) return keluar
+      }
+      // Belum ketemu lapisan opak — pakai latar halaman sebagai dasarnya.
+      keluar.unshift(dasar)
+      return keluar
+    }
+
+    const hasil = []
+    for (const el of document.querySelectorAll('p,span,div,button,a,td,th,li,h1,h2,h3,label')) {
+      if (el.children.length > 0) continue
+      const teks = el.textContent?.trim()
+      if (!teks) continue
+      const cs = getComputedStyle(el)
+      if (cs.visibility === 'hidden' || cs.display === 'none' || +cs.opacity === 0) continue
+      const r = el.getBoundingClientRect()
+      if (r.width < 4 || r.height < 4) continue
+      const latar = tumpukanLatar(el)
+      if (!latar) { hasil.push({ teks: teks.slice(0, 40), takTerukur: true }); continue }
+      hasil.push({
+        teks: teks.slice(0, 40),
+        fg: piksel(cs.color),
+        bg: piksel(...latar),
+      })
+    }
+    return hasil
+  })
+
+  // rasio() yang sudah ada menerima hex; piksel datang sebagai [r,g,b].
+  const keHex = ([r, g, b]) =>
+    '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')
+
+  // Halaman dengan keadaan berwarna: galat, lencana, peringatan, kartu sorotan.
+  const terender = []
+  for (const jalur of ['/', '/laporan', '/kasir', '/stok', '/kasbon', '/pengaturan', '/sdm/gaji']) {
+    await p.goto('http://localhost:5173' + jalur, { waitUntil: 'networkidle' })
+    await p.waitForTimeout(1200)
+    terender.push(...(await bacaTerender()))
+  }
+
+  let takTerukur = 0
+  for (const t of terender) {
+    if (t.takTerukur) { takTerukur++; continue }
+    const r = rasio(keHex(t.fg), keHex(t.bg))
+    if (r < 4.5) {
+      gagal++
+      console.log(`  GAGAL ${r.toFixed(2).padStart(6)}:1  terender: "${t.teks}"`)
+    }
+  }
+  console.log(`  (${terender.length - takTerukur} teks terender diperiksa, ${takTerukur} di atas gradien — tak terukur)`)
+
   await ctx.close()
 }
 await b.close()
-console.log(`\n${gagal === 0 ? 'SEMUA PASANGAN LULUS 4.5:1' : gagal + ' pasangan GAGAL'}`)
+console.log(`\n${gagal === 0 ? 'SEMUA LULUS 4.5:1' : gagal + ' GAGAL'}`)
 process.exit(gagal === 0 ? 0 : 1)

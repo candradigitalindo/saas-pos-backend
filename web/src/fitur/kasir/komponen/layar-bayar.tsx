@@ -122,7 +122,7 @@ export function LayarBayar({
         )}
 
         {metode === 'credit' && (
-          <p className="rounded-kontrol border border-jingga-600 bg-jingga-100 px-3 py-2 text-label text-jingga-700">
+          <p className="rounded-kontrol border border-jingga-600 bg-permukaan-2 px-3 py-2 text-label text-jingga-700">
             Belanja ini dicatat sebagai utang pelanggan. Pastikan Anda tahu siapa
             pembelinya.
           </p>
@@ -136,7 +136,7 @@ export function LayarBayar({
           <div
             className={cn(
               'rounded-kartu border-2 px-4 py-3',
-              kurang > 0 ? 'border-jingga-600 bg-jingga-100' : 'border-utama bg-sorot',
+              kurang > 0 ? 'border-jingga-600 bg-permukaan-2' : 'border-utama bg-sorot',
             )}
           >
             <p className="text-label font-medium text-teks-sekunder">
@@ -159,7 +159,7 @@ export function LayarBayar({
         )}
 
         {galat && (
-          <p className="rounded-kontrol border border-bahaya bg-red-50 px-3 py-2 text-label text-bahaya-teks">
+          <p className="rounded-kontrol border border-bahaya bg-bahaya-teks/10 px-3 py-2 text-label text-bahaya-teks">
             {galat}
           </p>
         )}

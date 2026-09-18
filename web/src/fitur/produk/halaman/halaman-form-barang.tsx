@@ -129,7 +129,7 @@ export function HalamanFormBarang() {
       </h1>
 
       {belumAdaSatuan && (
-        <p className="rounded-kontrol border border-jingga-600 bg-jingga-100 px-3 py-2 text-label text-jingga-700">
+        <p className="rounded-kontrol border border-jingga-600 bg-permukaan-2 px-3 py-2 text-label text-jingga-700">
           Belum ada satuan (pcs, kg, botol). Buat dulu di Pengaturan &rsaquo; Satuan.
         </p>
       )}
@@ -279,7 +279,7 @@ export function HalamanFormBarang() {
           )}
 
           {galat && (
-            <p className="rounded-kontrol border border-bahaya bg-red-50 px-3 py-2 text-label text-bahaya-teks">
+            <p className="rounded-kontrol border border-bahaya bg-bahaya-teks/10 px-3 py-2 text-label text-bahaya-teks">
               {galat}
             </p>
           )}

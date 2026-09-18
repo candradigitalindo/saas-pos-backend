@@ -101,7 +101,7 @@ export function PemindaiBarcode({
                   className={cn(
                     'absolute bottom-3 right-3 flex h-12 w-12 items-center justify-center',
                     'rounded-full border border-white/40 backdrop-blur',
-                    senterMenyala ? 'bg-jingga-400 text-teks-utama' : 'bg-black/40 text-white',
+                    senterMenyala ? 'bg-jingga-400 text-teks-di-jingga' : 'bg-black/40 text-white',
                   )}
                 >
                   <Flashlight className="h-5 w-5" aria-hidden />
@@ -122,7 +122,7 @@ export function PemindaiBarcode({
         </div>
 
         {tidakDikenal && (
-          <p className="rounded-kontrol border border-jingga-600 bg-jingga-100 px-3 py-2 text-label text-jingga-700">
+          <p className="rounded-kontrol border border-jingga-600 bg-permukaan-2 px-3 py-2 text-label text-jingga-700">
             Barcode <strong className="tabular-nums">{tidakDikenal}</strong> belum
             terdaftar di barang Anda. Tambahkan barangnya dulu, lalu isi
             barcodenya di bagian &ldquo;Detail lainnya&rdquo;.

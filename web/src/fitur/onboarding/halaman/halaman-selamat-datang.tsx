@@ -77,7 +77,7 @@ function LangkahOnboarding({
       <span
         className={cn(
           'flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-label font-bold',
-          keadaan === 'selesai' && 'bg-hijau-100 text-hijau-800',
+          keadaan === 'selesai' && 'bg-hijau-800/15 text-hijau-800',
           keadaan === 'aktif' && 'bg-utama text-utama-teks',
           keadaan === 'terkunci' && 'bg-permukaan-2 text-teks-redup',
         )}

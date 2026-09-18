@@ -64,7 +64,7 @@ export function HalamanKanal() {
         )}
       </header>
 
-      <p className="flex items-start gap-2 rounded-kontrol bg-blue-50 px-3 py-2 text-keterangan text-info-teks">
+      <p className="flex items-start gap-2 rounded-kontrol bg-info-teks/10 px-3 py-2 text-keterangan text-info-teks">
         <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
         Pesanan dicatat manual atau diimpor dari laporan harian marketplace.
         Sambungan otomatis ke GoFood, Shopee, dan sejenisnya menunggu kerja sama
@@ -184,7 +184,7 @@ function KartuKanal({
             type="button"
             onClick={() => hapus.mutate()}
             aria-label={`Hapus kanal ${kanal.name}`}
-            className="-mr-1 rounded-kontrol p-2 text-bahaya-teks hover:bg-red-50"
+            className="-mr-1 rounded-kontrol p-2 text-bahaya-teks hover:bg-bahaya-teks/10"
           >
             <Trash2 className="h-5 w-5" aria-hidden />
           </button>
@@ -268,7 +268,7 @@ function DialogKanal({ onTutup }: { onTutup: () => void }) {
           />
 
           {galat && (
-            <p className="rounded-kontrol border border-bahaya bg-red-50 px-3 py-2 text-label text-bahaya-teks">
+            <p className="rounded-kontrol border border-bahaya bg-bahaya-teks/10 px-3 py-2 text-label text-bahaya-teks">
               {galat}
             </p>
           )}
@@ -394,7 +394,7 @@ function DialogPesanan({ kanal, onTutup }: { kanal: Kanal; onTutup: () => void }
                   type="button"
                   onClick={() => setBaris((l) => l.filter((_, j) => j !== i))}
                   aria-label={`Hapus ${b.produk.name}`}
-                  className="-m-2 shrink-0 rounded-kontrol p-2 text-bahaya-teks hover:bg-red-50"
+                  className="-m-2 shrink-0 rounded-kontrol p-2 text-bahaya-teks hover:bg-bahaya-teks/10"
                 >
                   <Trash2 className="h-5 w-5" aria-hidden />
                 </button>
@@ -410,7 +410,7 @@ function DialogPesanan({ kanal, onTutup }: { kanal: Kanal; onTutup: () => void }
           ))}
 
           {galat && (
-            <p className="rounded-kontrol border border-bahaya bg-red-50 px-3 py-2 text-label text-bahaya-teks">
+            <p className="rounded-kontrol border border-bahaya bg-bahaya-teks/10 px-3 py-2 text-label text-bahaya-teks">
               {galat}
             </p>
           )}

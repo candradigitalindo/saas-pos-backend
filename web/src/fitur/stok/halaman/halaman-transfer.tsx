@@ -142,7 +142,7 @@ export function HalamanTransfer() {
                     type="button"
                     onClick={() => setBaris((l) => l.filter((_, j) => j !== i))}
                     aria-label={`Hapus ${b.produk.name}`}
-                    className="-m-2 shrink-0 rounded-kontrol p-2 text-bahaya-teks hover:bg-red-50"
+                    className="-m-2 shrink-0 rounded-kontrol p-2 text-bahaya-teks hover:bg-bahaya-teks/10"
                   >
                     <Trash2 className="h-5 w-5" aria-hidden />
                   </button>
@@ -168,7 +168,7 @@ export function HalamanTransfer() {
         />
 
         {galat && (
-          <p className="rounded-kontrol border border-bahaya bg-red-50 px-3 py-2 text-label text-bahaya-teks">
+          <p className="rounded-kontrol border border-bahaya bg-bahaya-teks/10 px-3 py-2 text-label text-bahaya-teks">
             {galat}
           </p>
         )}

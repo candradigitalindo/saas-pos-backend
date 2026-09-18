@@ -112,7 +112,7 @@ export function HalamanBeranda() {
 
       {sinkron.perluDiperiksa > 0 && (
         <Link to="/kasir/belum-terkirim">
-          <Kartu className="flex items-center gap-3 border-jingga-600 bg-jingga-100 p-4">
+          <Kartu className="flex items-center gap-3 border-jingga-600 bg-permukaan-2 p-4">
             <TriangleAlert className="h-5 w-5 shrink-0 text-jingga-700" aria-hidden />
             <p className="flex-1 text-label font-medium text-jingga-700">
               {sinkron.perluDiperiksa} transaksi perlu diperiksa
@@ -242,7 +242,7 @@ export function HalamanBeranda() {
                     className={cn(
                       'shrink-0 text-label tabular-nums',
                       habis
-                        ? 'rounded-full bg-jingga-100 px-2 py-0.5 font-semibold text-jingga-700'
+                        ? 'rounded-full bg-permukaan-2 px-2 py-0.5 font-semibold text-jingga-700'
                         : 'text-teks-sekunder',
                     )}
                   >

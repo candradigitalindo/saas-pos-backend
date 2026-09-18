@@ -64,7 +64,7 @@ export function PanelKeranjang({
                     type="button"
                     onClick={() => hapus(b.produk.id)}
                     aria-label={`Hapus ${b.produk.name} dari keranjang`}
-                    className="ml-2 flex h-12 w-12 shrink-0 items-center justify-center rounded-kontrol text-bahaya-teks hover:bg-red-50"
+                    className="ml-2 flex h-12 w-12 shrink-0 items-center justify-center rounded-kontrol text-bahaya-teks hover:bg-bahaya-teks/10"
                   >
                     <Trash2 className="h-5 w-5" aria-hidden />
                   </button>

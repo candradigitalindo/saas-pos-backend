@@ -223,7 +223,7 @@ export function HalamanOpname() {
             <p
               className={cn(
                 'rounded-kontrol px-3 py-2 text-label font-medium',
-                'bg-jingga-100 text-jingga-700',
+                'bg-permukaan-2 text-jingga-700',
               )}
             >
               Selisih {selisih > 0 ? '+' : '−'}
@@ -319,7 +319,7 @@ export function HalamanOpname() {
       )}
 
       {galat && (
-        <p className="rounded-kontrol border border-bahaya bg-red-50 px-3 py-2 text-label text-bahaya-teks">
+        <p className="rounded-kontrol border border-bahaya bg-bahaya-teks/10 px-3 py-2 text-label text-bahaya-teks">
           {galat}
         </p>
       )}

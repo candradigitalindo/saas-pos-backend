@@ -143,7 +143,7 @@ function SampingBesar() {
         {sinkron.perluDiperiksa > 0 && (
           <NavLink
             to="/kasir/belum-terkirim"
-            className="mb-2 flex items-center gap-2 rounded-kontrol bg-jingga-100 px-3 py-2 text-keterangan font-medium text-jingga-700"
+            className="mb-2 flex items-center gap-2 rounded-kontrol bg-permukaan-2 px-3 py-2 text-keterangan font-medium text-jingga-700"
           >
             {sinkron.perluDiperiksa} transaksi perlu diperiksa
           </NavLink>
