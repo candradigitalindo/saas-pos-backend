@@ -79,6 +79,12 @@ export function PemilihFoto({
             ref={input}
             type="file"
             accept="image/jpeg,image/png,image/webp"
+            aria-label="Pilih foto barang"
+            // Dikeluarkan dari urutan tab: yang dioperasikan pengguna adalah
+            // tombol di sebelahnya, dan `sr-only` TIDAK mengeluarkan elemen
+            // dari fokus keyboard — tanpa ini, pengguna keyboard mendarat di
+            // kendali tak terlihat yang tak punya nama.
+            tabIndex={-1}
             className="sr-only"
             onChange={async (e) => {
               const berkas = e.target.files?.[0]
