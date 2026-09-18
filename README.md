@@ -85,6 +85,7 @@ Sebuah framework backend REST API berbasis Golang dan Gin, dengan struktur modul
 /structs             # Struct request/response
 /tests               # Uji integrasi (butuh PostgreSQL; skip otomatis bila tak ada)
 /deploy              # postgres-init.sql (role non-superuser untuk RLS)
+/wa-gateway          # Sidecar Node: jembatan ke WhatsApp lewat Baileys (opsional)
 /.github/workflows   # CI: build + vet + gofmt + test -race + docker build
 main.go              # Bootstrap aplikasi
 Dockerfile           # Build multi-tahap → distroless (server + semua cmd/)
@@ -206,6 +207,29 @@ koneksi DB; `GET /health` untuk liveness.
 `docker compose up --build` menyiapkan semuanya untuk **pengembangan lokal**
 (PostgreSQL + role non-superuser + migrate + server); `--profile jobs` menambah
 kontainer pekerjaan terjadwal.
+
+### 3b. Notifikasi WhatsApp (opsional)
+
+`process-outbox` mengirim notifikasi yang mengantre. Tanpa konfigurasi tambahan
+ia hanya **mencatat ke log** — alur outbox tetap utuh dan bisa diuji tanpa
+menautkan nomor WhatsApp sungguhan.
+
+Untuk benar-benar mengirim, jalankan sidecar di [`wa-gateway/`](wa-gateway/)
+(Node + [Baileys](https://baileys.wiki/)) lalu isi dua variabel:
+
+```bash
+WA_GATEWAY_URL=http://127.0.0.1:8090
+WA_GATEWAY_TOKEN=<rahasia bersama, openssl rand -hex 32>
+```
+
+Backend tidak bisa memanggil Baileys langsung: itu pustaka Node yang bicara
+WebSocket ke WhatsApp Web, bukan HTTP API. Sidecar-lah yang memegang sambungan.
+
+**Baileys tidak resmi.** Ia meniru WhatsApp Web, bisa rusak saat WhatsApp
+berubah, dan nomor yang berkelakuan seperti robot berisiko diblokir. Bila
+notifikasi tagihan tidak boleh gagal, WhatsApp Business API resmi lebih tenang —
+menukarnya cukup satu implementasi `Notifier` baru, inti aplikasi tidak berubah.
+Rinciannya di [`wa-gateway/README.md`](wa-gateway/README.md).
 
 ### 4. Rate limiter — memori vs Redis
 

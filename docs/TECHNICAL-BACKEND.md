@@ -2318,6 +2318,11 @@ rows := SELECT * FROM outbox_events
 
 - **Backoff bertahap:** `available_at = now() + (2^attempts) menit`, maksimal 6 jam.
 - **Dead letter:** setelah 10 percobaan → `status='dead'`, muncul di panel admin untuk ditinjau manusia.
+- **Kegagalan permanen langsung `dead`,** tanpa menunggu jatah percobaan habis: nomor tujuan
+  tidak terdaftar di WhatsApp, alamat cacat, template tidak ada. Mencoba ulang tidak mengubah
+  hasilnya, dan menundanya sepuluh kali hanya membuat operator baru tahu berjam-jam kemudian —
+  saat ia sudah lupa tagihan mana yang bermasalah. Pengirim menandainya dengan
+  `services.ErrNotifPermanen`.
 - **`FOR UPDATE SKIP LOCKED`** membuat beberapa pekerja bisa berjalan tanpa saling menunggu.
 
 ### Daftar pekerjaan terjadwal

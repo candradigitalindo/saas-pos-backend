@@ -1,0 +1,4 @@
+node_modules/
+# Kredensial WhatsApp. Isinya setara dengan akses penuh ke akun WhatsApp usaha
+# ini — tidak boleh masuk git, dan WAJIB ikut dicadangkan di luar git.
+auth/

@@ -102,5 +102,41 @@ services:
     profiles: ["jobs"]
     depends_on: { db: { condition: service_healthy } }
 
+  # Pengirim notifikasi (pola outbox §5.14). Inilah satu-satunya proses yang
+  # benar-benar mengirim WhatsApp; server web tidak pernah mengirim apa pun.
+  process-outbox:
+    build: .
+    entrypoint: ["/usr/local/bin/process-outbox"]
+    command: ["-loop", "-interval", "30s"]
+    env_file: [.env]
+    environment:
+      <<: *app-env
+      # Kosongkan WA_GATEWAY_URL di .env untuk tetap di mode catat saja.
+      WA_GATEWAY_URL: http://wa-gateway:8090
+    profiles: ["jobs"]
+    depends_on: { db: { condition: service_healthy } }
+
+  # Sidecar WhatsApp (Baileys). Lihat wa-gateway/README.md.
+  #
+  # Portnya SENGAJA tidak dipublikasikan ke host: siapa pun yang bisa menjangkau
+  # layanan ini bisa mengirim WhatsApp atas nama usaha Anda. Cukup dijangkau
+  # dari jaringan compose oleh process-outbox.
+  #
+  # QR penautan muncul di log:  docker compose logs -f wa-gateway
+  wa-gateway:
+    build: ./wa-gateway
+    env_file: [.env]
+    environment:
+      WA_GATEWAY_HOST: 0.0.0.0
+      WA_GATEWAY_PORT: "8090"
+      WA_AUTH_DIR: /app/auth
+    volumes:
+      # WAJIB persisten. Tanpa ini setiap restart meminta pindai QR ulang, dan
+      # notifikasi berhenti sampai ada manusia yang memegang ponselnya.
+      - wa-auth:/app/auth
+    profiles: ["jobs"]
+    restart: unless-stopped
+
 volumes:
   pgdata:
+  wa-auth:

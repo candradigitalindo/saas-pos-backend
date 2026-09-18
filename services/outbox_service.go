@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -36,6 +37,17 @@ type Notifier interface {
 	Saluran() string
 }
 
+// ErrNotifPermanen menandai kegagalan pengiriman yang TIDAK akan membaik bila
+// diulang: nomor tujuan tidak terdaftar di WhatsApp, alamat email cacat, dan
+// sejenisnya. Pengirim membungkusnya dengan %w agar antrean bisa membedakannya.
+//
+// Tanpa penanda ini setiap kegagalan diperlakukan sama: 10 percobaan dengan
+// penundaan bertambah, jadi kesalahan ketik satu digit pada nomor pelanggan
+// baru terlihat di antrean mati berjam-jam kemudian. Yang dibutuhkan operator
+// justru sebaliknya — tahu SEKARANG bahwa nomornya salah, selagi ia masih ingat
+// tagihan mana yang baru saja diterbitkan.
+var ErrNotifPermanen = errors.New("notifikasi gagal permanen")
+
 // NotifMessage adalah pesan siap kirim.
 type NotifMessage struct {
 	Ke      string // nomor HP atau alamat email
@@ -62,8 +74,14 @@ var notifiers = map[string]Notifier{
 	"email":    logNotifier{saluran: "email"},
 }
 
-// RegisterNotifier memasang pengirim sungguhan untuk sebuah saluran.
-func RegisterNotifier(n Notifier) { notifiers[n.Saluran()] = n }
+// RegisterNotifier memasang pengirim sungguhan untuk sebuah saluran, dan
+// mengembalikan pengirim yang digantikannya — supaya pemanggil bisa
+// memulihkannya (dipakai tes, dan berguna saat menukar penyedia sementara).
+func RegisterNotifier(n Notifier) Notifier {
+	sebelumnya := notifiers[n.Saluran()]
+	notifiers[n.Saluran()] = n
+	return sebelumnya
+}
 
 // ── Penulisan peristiwa ─────────────────────────────────────────────────
 
@@ -161,6 +179,11 @@ func kirimSatuPeristiwa(ctx context.Context, ev models.OutboxEvent) (status, las
 func klasifikasiOutbox(err error, berikutnya int) (string, string) {
 	if err == nil {
 		return "done", ""
+	}
+	// Kegagalan permanen tidak menunggu jatah percobaan habis — lihat
+	// ErrNotifPermanen di atas.
+	if errors.Is(err, ErrNotifPermanen) {
+		return "dead", err.Error()
 	}
 	if berikutnya >= repositories.MaxOutboxAttempts {
 		return "dead", err.Error()

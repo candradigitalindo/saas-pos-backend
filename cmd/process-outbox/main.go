@@ -43,6 +43,10 @@ func main() {
 	database.InitDatabase()
 	defer database.Close()
 
+	// Pengirim sungguhan dipasang DI SINI, bukan di main.go server: hanya pekerja
+	// ini yang mengirim notifikasi, jadi hanya ia yang perlu tahu soal penyedia.
+	services.PasangNotifierDariEnv()
+
 	if !*loop {
 		if err := sekaliJalan(context.Background()); err != nil {
 			fmt.Fprintf(os.Stderr, "process-outbox: %v\n", err)
