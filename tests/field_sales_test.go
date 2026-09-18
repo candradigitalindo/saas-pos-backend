@@ -300,22 +300,16 @@ func TestFieldSalesIsolation(t *testing.T) {
 // sebagai hari kemarin — dan komisi sales, yang dihitung dari business_date,
 // ikut hilang.
 //
-// Tes ini TIDAK bergantung pada jam berapa ia dijalankan: jam tutup buku outlet
-// digeser ke satu jam setelah waktu setempat sekarang, sehingga "sekarang"
-// dipastikan masih masuk hari usaha SEBELUMNYA. Dengan begitu tanggal UTC dan
-// hari usaha outlet dijamin berbeda, kapan pun tes ini jalan.
+// Tes ini tidak boleh bergantung pada jam berapa ia dijalankan — lihat
+// konfigurasiUjiHariUsaha, yang memilih zona & jam tutup buku sesuai jam saat
+// itu supaya hari usaha outlet DIJAMIN berbeda dari tanggal UTC.
 func TestReceivablePaymentUsesOutletBusinessDate(t *testing.T) {
 	requireDB(t)
 	f := setupPOS(t, "recbizdate")
 
-	// Geser jam tutup buku ke 1 jam setelah waktu Jakarta sekarang.
-	jkt, err := time.LoadLocation("Asia/Jakarta")
-	if err != nil {
-		t.Fatalf("zona waktu: %v", err)
-	}
-	dayStart := time.Now().In(jkt).Add(time.Hour).Format("15:04")
+	zona, dayStart := konfigurasiUjiHariUsaha(time.Now())
 	call(t, "PUT", "/api/v1/outlets/"+f.outletID, f.token, map[string]any{
-		"timezone": "Asia/Jakarta", "business_day_start": dayStart,
+		"timezone": zona, "business_day_start": dayStart,
 	}).mustOK(t, "geser jam tutup buku")
 
 	cust := call(t, "POST", "/api/v1/customers", f.token, map[string]any{
@@ -334,7 +328,9 @@ func TestReceivablePaymentUsesOutletBusinessDate(t *testing.T) {
 	// Hari usaha outlet memang BEDA dari tanggal UTC — kalau tidak, tes ini
 	// tidak membuktikan apa pun.
 	if utc := time.Now().UTC().Format("2006-01-02"); bd == utc {
-		t.Fatalf("persiapan gagal: business_date (%s) sama dengan tanggal UTC (%s)", bd, utc)
+		t.Fatalf("persiapan gagal: business_date (%s) sama dengan tanggal UTC (%s) "+
+			"dengan zona %s jam tutup buku %s — konfigurasiUjiHariUsaha salah pilih",
+			bd, utc, zona, dayStart)
 	}
 
 	// Setor piutangnya.

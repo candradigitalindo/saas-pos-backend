@@ -13,13 +13,13 @@ import (
 func TestBuildCheckoutInput(t *testing.T) {
 	// Contoh data dari request
 	req := structs.CheckoutRequest{
-		ID:            "01ARZ3NDEKTSV4RRFFQ69G5FAV", // ULID Contoh
-		OutletID:      "01ARZ3NDEKTSV4RRFFQ69G5FBW",
-		ShiftID:       "01ARZ3NDEKTSV4RRFFQ69G5FBX",
-		CustomerID:    "01ARZ3NDEKTSV4RRFFQ69G5FCY",
-		OrderType:     "dine_in",
-		OrderDiscount: 500,
-		Note:          "Pesanan Spesial",
+		ID:              "01ARZ3NDEKTSV4RRFFQ69G5FAV", // ULID Contoh
+		OutletID:        "01ARZ3NDEKTSV4RRFFQ69G5FBW",
+		ShiftID:         "01ARZ3NDEKTSV4RRFFQ69G5FBX",
+		CustomerID:      "01ARZ3NDEKTSV4RRFFQ69G5FCY",
+		OrderType:       "dine_in",
+		OrderDiscount:   500,
+		Note:            "Pesanan Spesial",
 		ClientCreatedAt: time.Now().UTC().Format(time.RFC3339),
 		Items: []structs.CheckoutItemRequest{
 			{
