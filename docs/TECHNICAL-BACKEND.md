@@ -2168,7 +2168,12 @@ POST   /api/v1/purchases               stok masuk
 POST   /api/v1/stock-opnames/:id/post  posting hasil hitung fisik
 
 GET    /api/v1/reports/dashboard?outlet_id=&date=      dari daily_sales_summaries
-GET    /api/v1/reports/sales?from=&to=&group_by=channel|cashier|payment
+GET    /api/v1/reports/sales?from=&to=&group_by=day|hour|channel|cashier|payment
+       # group_by=hour: jam dinding DI ZONA OUTLET (key "00".."23"), bukan UTC.
+       #   occurred_at disimpan UTC (§3.2) dan Indonesia di UTC+7..+9, jadi
+       #   dibaca mentah penjualan 07.00 WIB tercatat 00.00 dan grafik "jam
+       #   teramai" menunjuk tengah malam. Zona diambil per-outlet lewat join,
+       #   karena satu tenant boleh punya cabang di zona berbeda.
 GET    /api/v1/reports/profit?from=&to=
 GET    /api/v1/reports/export?type=&format=csv|xlsx|pdf
 

@@ -26,7 +26,8 @@ func ReportDashboard(c *gin.Context) {
 }
 
 // ReportSales: GET /api/v1/reports/sales?from=&to=&outlet_id=&group_by=
-// group_by: day (default) | channel | cashier | payment.
+// group_by: day (default) | hour | channel | cashier | payment.
+// hour mengelompokkan per jam dinding DI ZONA OUTLET (key "00".."23").
 func ReportSales(c *gin.Context) {
 	from, to := c.Query("from"), c.Query("to")
 	if from == "" || to == "" {

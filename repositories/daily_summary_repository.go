@@ -8,6 +8,7 @@ import (
 	"candra/backend-api/models"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // Repositori agregat laporan harian (§5.14). Dua jalur pemeliharaan:
@@ -225,6 +226,61 @@ func SalesByCashier(ctx context.Context, outletID, from, to string) ([]SummaryGr
 		COALESCE(SUM(s.total - s.cost_total), 0)  AS gross_profit`).
 		Group("u.name").
 		Order("net_amount DESC").
+		Scan(&rows).Error
+	return rows, err
+}
+
+// SalesByHour mengelompokkan penjualan 'completed' per JAM DINDING DI OUTLET,
+// untuk menjawab "jam berapa warung saya paling ramai".
+//
+// Jamnya WAJIB dihitung di zona waktu outlet, bukan UTC. Ini bukan kehalusan:
+// `occurred_at` disimpan UTC (§3.2), dan Indonesia berada di UTC+7..+9. Dibaca
+// mentah, penjualan pukul 07.00 WIB akan tercatat sebagai pukul 00.00 — dan
+// grafik "jam teramai" akan memberi tahu pemilik warung bahwa ia paling ramai
+// tengah malam. Kesalahan yang sama pernah terjadi pada `business_date` setoran
+// piutang; lihat services/receivable_service.go.
+//
+// Zona diambil dari OUTLET-nya masing-masing lewat join, bukan dari satu zona
+// tetap: satu tenant boleh punya cabang di Jakarta dan Jayapura sekaligus, dan
+// "pukul 8 pagi" di keduanya adalah dua saat yang berbeda. PostgreSQL yang
+// melakukan konversinya, sehingga pengelompokannya tetap satu query.
+//
+// `key` berupa dua digit "00".."23" supaya urut sebagai teks maupun angka.
+// Rentangnya disaring dengan `business_date`, bukan `occurred_at`, agar jam
+// larut milik hari usaha sebelumnya tetap ikut ke hari yang benar.
+func SalesByHour(ctx context.Context, outletID, from, to string) ([]SummaryGroupRow, error) {
+	tid := currentTenantID(ctx)
+	q := tenantDB(ctx, nil).
+		Table("sales s").
+		Joins("JOIN outlets o ON o.id = s.outlet_id AND o.tenant_id = ?", tid).
+		Where("s.tenant_id = ? AND s.business_date BETWEEN ? AND ? AND s.status = 'completed'", tid, from, to)
+	if outletID != "" {
+		q = q.Where("s.outlet_id = ?", outletID)
+	}
+	// Ekspresi jamnya dipakai dua kali — di SELECT dan di GROUP BY — jadi
+	// ditulis sekali di sini supaya keduanya tidak bisa berbeda diam-diam.
+	const ekspresiJam = `LPAD(EXTRACT(HOUR FROM s.occurred_at AT TIME ZONE o.timezone)::int::text, 2, '0')`
+
+	var rows []SummaryGroupRow
+	err := q.Select(ekspresiJam + ` AS key,
+		COUNT(*)                                  AS sales_count,
+		COALESCE(SUM(s.subtotal), 0)              AS gross_amount,
+		COALESCE(SUM(s.discount_amount), 0)       AS discount_amount,
+		COALESCE(SUM(s.tax_amount), 0)            AS tax_amount,
+		COALESCE(SUM(s.total), 0)                 AS net_amount,
+		COALESCE(SUM(s.cost_total), 0)            AS cost_amount,
+		0                                         AS fee_amount,
+		COALESCE(SUM(s.total - s.cost_total), 0)  AS gross_profit`).
+		// Klausa mentah, bukan Group("..."): GORM memperlakukan argumen Group
+		// sebagai NAMA KOLOM dan mengutipnya, sehingga ekspresi apa pun berubah
+		// jadi pengenal yang tidak ada — `GROUP BY "1"` ditolak PostgreSQL.
+		Clauses(clause.GroupBy{
+			Columns: []clause.Column{{Name: ekspresiJam, Raw: true}},
+		}).
+		// Urut menurut JAM, bukan menurut ramainya: ini dibaca sebagai grafik
+		// sepanjang hari, dan grafik yang sumbunya melompat-lompat tidak bisa
+		// dibaca. Mana yang teramai ditandai di tampilan.
+		Order("key").
 		Scan(&rows).Error
 	return rows, err
 }

@@ -119,7 +119,7 @@ Semakin sedikit pintu, semakin kecil peluang tersesat.
 | Layar | Endpoint | Izin |
 |---|---|---|
 | Ringkasan dashboard | `GET /reports/dashboard` | `report.view` |
-| Laporan penjualan (per hari/kanal/kasir/metode bayar) | `GET /reports/sales?group_by=` | `report.view` |
+| Laporan penjualan (per hari/jam/kanal/kasir/metode bayar) | `GET /reports/sales?group_by=` | `report.view` |
 | Laporan untung-rugi | `GET /reports/profit?from=&to=` | `report.profit` |
 | Unduh CSV | `GET /reports/export?type=` | `report.export` |
 | Hitung ulang ringkasan | `POST /reports/rebuild-summaries` | `report.view` |

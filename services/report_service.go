@@ -108,8 +108,8 @@ func DashboardReport(ctx context.Context, outletID, date string) (structs.Dashbo
 }
 
 // SalesReport mengembalikan laporan penjualan terkelompok pada rentang tanggal.
-// groupBy: "day" (default) & "channel" dari tabel ringkasan; "cashier" &
-// "payment" dari tabel sales/sale_payments.
+// groupBy: "day" (default) & "channel" dari tabel ringkasan; "cashier",
+// "payment" & "hour" dari tabel sales/sale_payments.
 func SalesReport(ctx context.Context, outletID, from, to, groupBy string) (structs.SalesReportResponse, error) {
 	var out structs.SalesReportResponse
 
@@ -132,8 +132,12 @@ func SalesReport(ctx context.Context, outletID, from, to, groupBy string) (struc
 		rows, err = repositories.SalesByCashier(ctx, outletID, fromStr, toStr)
 	case "payment":
 		rows, err = repositories.SalesByPaymentMethod(ctx, outletID, fromStr, toStr)
+	case "hour":
+		// Jam dinding di zona outlet — lihat catatan panjang di SalesByHour
+		// soal kenapa UTC akan menjawab pertanyaan yang salah.
+		rows, err = repositories.SalesByHour(ctx, outletID, fromStr, toStr)
 	default:
-		return out, fmt.Errorf("%w: group_by harus salah satu dari day, channel, cashier, payment", helpers.ErrValidation)
+		return out, fmt.Errorf("%w: group_by harus salah satu dari day, hour, channel, cashier, payment", helpers.ErrValidation)
 	}
 	if err != nil {
 		return out, err
