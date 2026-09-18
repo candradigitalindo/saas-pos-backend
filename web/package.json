@@ -12,7 +12,8 @@
     "lint": "tsc -b --noEmit",
     "tangkap-layar": "SHOT_DIR=${SHOT_DIR:-./tangkapan} node skrip/tangkap-layar.mjs",
     "periksa:tataletak": "node skrip/audit-tataletak.mjs",
-    "periksa:kontras": "node skrip/audit-kontras.mjs"
+    "periksa:kontras": "node skrip/audit-kontras.mjs",
+    "periksa:warna": "node skrip/sensus-warna.mjs"
   },
   "dependencies": {
     "@fontsource-variable/plus-jakarta-sans": "^5.1.0",

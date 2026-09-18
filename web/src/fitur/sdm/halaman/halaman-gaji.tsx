@@ -15,6 +15,8 @@ import { formatRupiah } from '@/bersama/util/uang'
 import { formatTanggal } from '@/bersama/util/tanggal'
 import { cn } from '@/bersama/util/cn'
 import { sdmApi, type PeriodeGaji, type SlipGaji } from '../api'
+import { KartuAngka } from '@/bersama/komponen/kartu-angka'
+import { Users } from 'lucide-react'
 
 /** Empat langkah tetap, sesuai urutan yang dipaksakan backend. */
 const LANGKAH = [
@@ -170,18 +172,12 @@ function PanelPeriode({ periode }: { periode: PeriodeGaji }) {
       </Kartu>
 
       {periode.status !== 'draft' && (
-        <Kartu className="p-4">
-          <p className="text-label font-medium text-teks-sekunder">
-            {daftarSlip.length || '—'} karyawan
-          </p>
-          <p className="mt-1 text-angka font-extrabold tabular-nums text-teks-utama">
-            {formatRupiah(periode.total_net)}
-          </p>
-          <p className="mt-1 text-keterangan text-teks-redup">
-            Gaji kotor {formatRupiah(periode.total_gross)} − potongan{' '}
-            {formatRupiah(periode.total_deduction)}
-          </p>
-        </Kartu>
+        <KartuAngka
+          ikon={Users}
+          label={`Gaji bersih · ${daftarSlip.length || '—'} karyawan`}
+          nilai={periode.total_net}
+          keterangan={`Gaji kotor ${formatRupiah(periode.total_gross)} − potongan ${formatRupiah(periode.total_deduction)}`}
+        />
       )}
 
       {/* hr.salary.view adalah izin paling sensitif — tanpa itu, nominalnya

@@ -18,6 +18,7 @@ import { cn } from '@/bersama/util/cn'
 import type { MetodeBayar, Transaksi } from '@/bersama/tipe/pos'
 import { KartuProduk } from '../komponen/kartu-produk'
 import { PanelKeranjang } from '../komponen/panel-keranjang'
+import { SegmenPilihan } from '@/bersama/ui/segmen'
 import { LayarBayar } from '../komponen/layar-bayar'
 import { Struk } from '../komponen/struk'
 import { itemUntukCheckout, useKeranjang } from '../keranjang'
@@ -104,8 +105,11 @@ export function HalamanKasir() {
 
   return (
     <div className="flex h-dvh flex-col bg-latar">
-      <header className="flex shrink-0 items-center gap-3 border-b border-garis bg-permukaan px-4 py-3">
-        <div className="relative flex-1">
+      {/* Di bawah 360px, tiga kendali plus kotak pencarian memang tidak muat
+          dalam satu baris — kotak pencariannya turun ke 69px dan placeholder-nya
+          terpotong. Di lebar itu saja kotaknya mengambil barisnya sendiri. */}
+      <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-garis bg-permukaan px-4 py-3">
+        <div className="relative flex-1 max-[359px]:basis-full">
           <Search
             className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-teks-redup"
             aria-hidden
@@ -114,9 +118,13 @@ export function HalamanKasir() {
             type="search"
             value={cari}
             onChange={(e) => setCari(e.target.value)}
-            placeholder="Cari barang…"
+            placeholder="Cari barang"
             aria-label="Cari barang"
-            className="h-12 w-full rounded-kontrol border border-garis bg-permukaan pl-10 pr-3 text-isi text-teks-utama placeholder:text-teks-redup"
+            className={cn(
+              'h-12 w-full rounded-kontrol border border-garis bg-permukaan pl-10 pr-3',
+              'text-isi text-teks-utama placeholder:text-teks-redup',
+              'focus:border-utama focus:outline-none focus:ring-2 focus:ring-utama/30',
+            )}
           />
         </div>
         {/* Tombol pindai hanya muncul bila perangkatnya memang punya kamera —
@@ -132,8 +140,15 @@ export function HalamanKasir() {
             <span className="hidden sm:inline">Pindai</span>
           </Tombol>
         )}
+        {/* Label memendek di HP. Diukur pada 390px: "Tutup Shift" utuh menyisakan
+            hanya ~93px untuk teks kotak pencarian, dan placeholder-nya terpotong
+            jadi "Cari baran". Kotak pencarian adalah cara utama menemukan barang
+            saat katalognya panjang, jadi ia yang diberi ruang. */}
         <Tombol jenis="kedua" ukuran="normal" asChild>
-          <Link to="/kasir/tutup-shift">Tutup Shift</Link>
+          <Link to="/kasir/tutup-shift" aria-label="Tutup shift">
+            <span className="sm:hidden">Shift</span>
+            <span className="hidden sm:inline">Tutup Shift</span>
+          </Link>
         </Tombol>
       </header>
 
@@ -141,19 +156,16 @@ export function HalamanKasir() {
           lebih dari satu kategori — satu tab "Semua" sendirian tidak menyaring
           apa pun dan cuma memakan tinggi layar. */}
       {daftarKategori.length > 1 && (
-        <div className="flex shrink-0 gap-2 overflow-x-auto border-b border-garis bg-permukaan px-4 pb-2">
-          <TabKategori aktif={!kategori} onKlik={() => setKategori(undefined)}>
-            Semua
-          </TabKategori>
-          {daftarKategori.map((k) => (
-            <TabKategori
-              key={k.id}
-              aktif={kategori === k.id}
-              onKlik={() => setKategori(k.id)}
-            >
-              {k.nama}
-            </TabKategori>
-          ))}
+        <div className="shrink-0 border-b border-garis bg-permukaan px-4 pb-3">
+          <SegmenPilihan
+            label="Kategori barang"
+            nilai={kategori ?? 'semua'}
+            onPilih={(v) => setKategori(v === 'semua' ? undefined : v)}
+            pilihan={[
+              ['semua', 'Semua'] as const,
+              ...daftarKategori.map((k) => [k.id, k.nama] as const),
+            ]}
+          />
         </div>
       )}
 
@@ -196,8 +208,16 @@ export function HalamanKasir() {
                     stok={petaStok.get(p.id)}
                     diKeranjang={keranjang.qtyDari(p.id)}
                     onPilih={(x) => {
+                      // TIDAK ada toast di sini, sengaja. Ketukannya sudah
+                      // dijawab tiga kali dan seketika: lencana jumlah muncul
+                      // di kartunya, barisnya masuk daftar keranjang, dan
+                      // totalnya berubah. Toast tambahan hanya mengulang yang
+                      // sudah terlihat — dan karena kasir menekan barang
+                      // bertubi-tubi, toastnya menumpuk sampai menutupi layar
+                      // beserta tombol bayar di baliknya. Bandingkan dengan
+                      // jalur pindai di bawah: di sana dialog kamera menutupi
+                      // layar, jadi toast memang satu-satunya umpan balik.
                       keranjang.tambah(x)
-                      toast.tampilkan(`${x.name} ditambahkan`, 'berhasil')
                     }}
                   />
                 ))}
@@ -268,6 +288,8 @@ export function HalamanKasir() {
           const p = await produkDariBarcode(kode)
           if (!p) return false
           keranjang.tambah(p)
+          // Dipertahankan: dialog kamera sedang menutupi keranjang & lencana,
+          // jadi tanpa ini pemindaian tidak terjawab sama sekali (ui/01 §5).
           toast.tampilkan(`${p.name} ditambahkan`, 'berhasil')
           return true
         }}
@@ -292,32 +314,6 @@ export function HalamanKasir() {
         />
       )}
     </div>
-  )
-}
-
-function TabKategori({
-  aktif,
-  onKlik,
-  children,
-}: {
-  aktif: boolean
-  onKlik: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onKlik}
-      aria-pressed={aktif}
-      className={cn(
-        'h-12 shrink-0 rounded-full border px-4 text-label font-medium',
-        aktif
-          ? 'border-utama bg-sorot text-utama'
-          : 'border-garis bg-permukaan text-teks-sekunder hover:bg-permukaan-2',
-      )}
-    >
-      {children}
-    </button>
   )
 }
 

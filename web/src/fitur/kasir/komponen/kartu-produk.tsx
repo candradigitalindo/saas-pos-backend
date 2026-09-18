@@ -9,6 +9,11 @@ import { cn } from '@/bersama/util/cn'
  * Barang HABIS tetap terlihat, hanya tidak bisa ditekan. Kalau disembunyikan,
  * kasir mengira barangnya hilang dari sistem lalu menelepon pemilik
  * (ui/05-ALUR-UTAMA.md §2).
+ *
+ * Susunannya: nama di atas, HARGA sebagai isi utama di bawah. Harga yang
+ * dibaca berulang-ulang sepanjang hari, bukan namanya — nama dipakai untuk
+ * menemukan, harga untuk memastikan. Karena itu harga diberi ukuran lebih besar
+ * daripada nama, bukan sebaliknya.
  */
 export function KartuProduk({
   produk,
@@ -31,35 +36,55 @@ export function KartuProduk({
       onClick={() => onPilih(produk)}
       aria-label={`${produk.name}, ${formatRupiah(produk.sell_price)}${habis ? ', habis' : ''}`}
       className={cn(
-        'relative flex min-h-30 flex-col justify-between gap-1 rounded-kartu border p-3 text-left',
-        'transition-colors duration-150 ease-out',
+        'group relative flex min-h-30 flex-col justify-between gap-2 rounded-kartu border p-3 text-left',
+        'transition-[background-color,border-color,box-shadow,transform] duration-150 ease-out',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-utama focus-visible:ring-offset-2',
         habis
-          ? 'cursor-not-allowed border-garis bg-permukaan-2 opacity-60'
+          ? 'cursor-not-allowed border-garis bg-permukaan-2'
           : adaDiKeranjang
-            ? 'border-utama bg-sorot'
-            : 'border-garis bg-permukaan hover:bg-permukaan-2',
+            ? 'border-utama bg-sorot shadow-kartu'
+            : 'border-garis bg-permukaan shadow-kartu hover:border-utama/40 hover:shadow-melayang',
+        // Umpan balik tekan: kartu menyusut sedikit. Di layar kasir yang
+        // ditekan bertubi-tubi, ini yang memberi tahu "ketukan tadi masuk"
+        // tanpa perlu menunggu toast.
+        !habis && 'active:scale-[0.98] motion-reduce:active:scale-100',
       )}
     >
       {adaDiKeranjang && (
         <span
-          className="absolute -right-2 -top-2 flex h-7 min-w-7 items-center justify-center rounded-full bg-utama px-1.5 text-keterangan font-bold text-utama-teks"
+          className="absolute -right-2 -top-2 flex h-7 min-w-7 items-center justify-center rounded-full bg-utama px-1.5 text-keterangan font-bold text-utama-teks shadow-kartu"
           aria-hidden
         >
           {formatQty(diKeranjang)}
         </span>
       )}
 
-      <span className="line-clamp-2 text-label font-semibold text-teks-utama">
+      <span
+        className={cn(
+          'line-clamp-2 text-label font-medium',
+          habis ? 'text-teks-redup' : 'text-teks-sekunder',
+        )}
+      >
         {produk.name}
       </span>
 
-      <span className="flex flex-col">
-        <span className="text-isi font-bold tabular-nums text-teks-utama">
+      <span className="flex flex-col gap-1">
+        <span
+          className={cn(
+            'text-judul-kartu font-extrabold tabular-nums',
+            habis ? 'text-teks-redup' : 'text-teks-utama',
+          )}
+        >
           {formatRupiah(produk.sell_price)}
         </span>
-        {/* Warna saja tidak cukup: keadaan habis ditulis dengan kata. */}
+
+        {/* Warna saja tidak cukup: keadaan habis ditulis dengan kata, dan
+            diberi lencana supaya terbaca sebagai status — bukan sebagai teks
+            merah yang mudah tertukar dengan galat. */}
         {habis ? (
-          <span className="text-keterangan font-semibold text-bahaya-teks">HABIS</span>
+          <span className="w-fit rounded-full bg-permukaan px-2 py-0.5 text-keterangan font-semibold text-bahaya-teks">
+            Habis
+          </span>
         ) : (
           produk.track_stock &&
           stok !== undefined && (

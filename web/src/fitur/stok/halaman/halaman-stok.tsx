@@ -11,8 +11,8 @@ import { useSesi } from '@/bersama/hooks/use-sesi'
 import { GalatAPI } from '@/lib/api-client'
 import { IZIN } from '@/lib/izin'
 import { formatQtySatuan, formatSisaStok, stokPerluDicocokkan } from '@/bersama/util/desimal'
-import { cn } from '@/bersama/util/cn'
 import { stokApi } from '../api'
+import { SegmenPilihan } from '@/bersama/ui/segmen'
 
 /** Saldo stok per toko, dengan penyaring "hampir habis". */
 export function HalamanStok() {
@@ -52,14 +52,15 @@ export function HalamanStok() {
         </div>
       </header>
 
-      <div className="flex gap-2">
-        <TombolSaring aktif={!hanyaMenipis} onKlik={() => setHanyaMenipis(false)}>
-          Semua barang
-        </TombolSaring>
-        <TombolSaring aktif={hanyaMenipis} onKlik={() => setHanyaMenipis(true)}>
-          Hampir habis
-        </TombolSaring>
-      </div>
+      <SegmenPilihan
+        label="Saring stok"
+        nilai={hanyaMenipis ? 'menipis' : 'semua'}
+        onPilih={(v) => setHanyaMenipis(v === 'menipis')}
+        pilihan={[
+          ['semua', 'Semua barang'],
+          ['menipis', 'Hampir habis'],
+        ]}
+      />
 
       {q.isLoading ? (
         <KerangkaBaris jumlah={5} />
@@ -123,28 +124,3 @@ export function HalamanStok() {
   )
 }
 
-function TombolSaring({
-  aktif,
-  onKlik,
-  children,
-}: {
-  aktif: boolean
-  onKlik: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onKlik}
-      aria-pressed={aktif}
-      className={cn(
-        'h-12 rounded-full border px-4 text-label font-medium',
-        aktif
-          ? 'border-utama bg-sorot text-utama'
-          : 'border-garis bg-permukaan text-teks-sekunder hover:bg-permukaan-2',
-      )}
-    >
-      {children}
-    </button>
-  )
-}

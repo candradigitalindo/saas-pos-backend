@@ -13,18 +13,28 @@ import { cn } from '@/bersama/util/cn'
  */
 const gaya = cva(
   'inline-flex items-center justify-center gap-2 rounded-kontrol font-semibold ' +
-    'transition-colors duration-150 ease-out disabled:pointer-events-none ' +
-    'disabled:opacity-50 select-none',
+    'transition-colors duration-150 ease-out disabled:pointer-events-none select-none ' +
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-utama ' +
+    'focus-visible:ring-offset-2 focus-visible:ring-offset-latar',
   {
     variants: {
       jenis: {
-        utama: 'bg-utama text-utama-teks hover:bg-hijau-800 active:bg-hijau-800',
+        // Nonaktif TIDAK memakai hijau yang diredupkan. Hijau pekat pada 50%
+        // opasitas di atas latar terang menjadi hijau keruh yang terbaca sebagai
+        // "rusak", bukan "belum bisa ditekan" — paling kentara pada tombol BAYAR
+        // saat keranjang masih kosong, tombol terbesar di layar tersibuk.
+        // Permukaan netral menyampaikan "belum aktif" tanpa mengotori warna merek.
+        utama:
+          'bg-utama text-utama-teks hover:bg-hijau-800 active:bg-hijau-800 ' +
+          'disabled:bg-permukaan-2 disabled:text-teks-redup',
         kedua:
-          'border border-garis bg-permukaan text-teks-utama hover:bg-permukaan-2',
-        bahaya: 'bg-bahaya text-white hover:brightness-95',
-        teks: 'text-utama hover:bg-sorot',
+          'border border-garis bg-permukaan text-teks-utama hover:bg-permukaan-2 ' +
+          'disabled:opacity-50',
+        bahaya: 'bg-bahaya text-white hover:brightness-95 disabled:opacity-50',
+        teks: 'text-utama hover:bg-sorot disabled:opacity-50',
         /* Jingga Semangat: hanya untuk momen pencapaian, dan SELALU teks gelap. */
-        pencapaian: 'bg-jingga-400 text-teks-utama hover:brightness-95',
+        pencapaian:
+          'bg-jingga-400 text-teks-utama hover:brightness-95 disabled:opacity-50',
       },
       ukuran: {
         // "Padat" 40px hanya berlaku untuk penunjuk halus (tetikus). Di

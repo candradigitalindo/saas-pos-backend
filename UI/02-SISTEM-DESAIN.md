@@ -193,6 +193,12 @@ Tinggi: 40px (padat) · 48px (normal) · **64px (kasir)**.
 Saat memuat: label berganti "Menyimpan…" + tombol dinonaktifkan — **lebarnya
 tidak berubah** supaya tata letak tidak melompat.
 
+> **Tombol utama yang nonaktif memakai permukaan NETRAL, bukan hijau yang
+> diredupkan.** Hijau pekat pada 50% opasitas di atas latar terang menjadi hijau
+> keruh yang terbaca sebagai "rusak", bukan "belum bisa ditekan" — paling
+> kentara pada tombol BAYAR saat keranjang kosong, tombol terbesar di layar
+> tersibuk. Varian lain tetap memakai opasitas.
+
 ### Kolom isian
 
 ```
@@ -222,6 +228,125 @@ Harga Jual                          ← keadaan salah
 │ ▲ 12% dibanding kemarin          │  ← hijau + ikon panah (bukan warna saja)
 └──────────────────────────────────┘
 ```
+
+### Kartu sorotan — satu per layar
+
+Satu angka terpenting, di atas latar berwarna penuh.
+
+```
+┌────────────────────────────────────────────────────┐
+│ ▓▓▓ permukaan-sorotan ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ │
+│ UANG MASUK HARI INI                     Laporan ›  │ ← huruf besar berjarak
+│ Rp 324.000                               ▁▃▂▅▁█▆   │ ← 40px/800 · grafik kanan
+│ ( ↓ 67% dibanding kemarin )                        │ ← lencana BERGARIS
+│ ──────────────────────────────────────────────     │
+│ Transaksi              Rata-rata belanja           │ ← angka pendukung
+│ 9                      Rp 36.000                   │
+└────────────────────────────────────────────────────┘
+```
+
+**Kenapa ada.** Beranda versi pertama menaruh semua angka di kartu putih yang
+seragam. Diukur dengan `npm run periksa:warna`, liputan Hijau Tumbuh di beranda
+ternyata **0,0% di HP** dan 1,3% di desktop: 95–99% layar putih dan abu-abu.
+Akibatnya dua, dan keduanya merugikan:
+
+1. Aplikasinya tidak terasa punya identitas — warna utama yang dipilih
+   susah-payah di dokumen ini praktis tidak pernah terlihat.
+2. Satu-satunya warna kuat di layar justru kabar buruk: merah "turun 67%" dan
+   jingga "habis" lima baris. Pemilik warung yang hari itu menerima Rp 324.000
+   disambut layar yang terasa seperti peringatan.
+
+Setelah kartu sorotan dipakai, liputannya **16–33%** di semua lebar 320–1440px.
+
+**Kerajinan yang membuatnya terasa layak jual, bukan sekadar berwarna:**
+
+| Unsur | Aturan | Kenapa |
+|---|---|---|
+| Permukaan | `.permukaan-sorotan` — gradien `hijau-800` → `utama`, 135° | Kedalaman tanpa pasangan warna baru: kedua ujungnya sudah diverifikasi |
+| Bayangan | `melayang`, bukan `kartu` | Satu-satunya elemen yang boleh terasa terangkat |
+| Label | Huruf besar, `tracking-wider`, 13px | Ia penanda, bukan kalimat — supaya tidak bersaing dengan angkanya |
+| Lencana tren | **Bergaris**, `border-current/30`, isian transparan | Garis tidak mengubah warna di baliknya, jadi rasio teks tetap utuh |
+| Grafik | Di kanan angka, lebar dibatasi ~176px | Dibiarkan selebar kartu, tujuh batang di atas 1000px jadi balok 140px yang terbaca sebagai hiasan |
+| Grafik di HP | Turun ke bawah angka, maks 200px | Disandingkan, ia menyisakan <210px dan "Rp 324.000" pecah dua baris |
+
+**Kartu angka pendamping** memakai kelengkapan yang sama tingkatnya lebih rendah:
+keping ikon `bg-utama/10` (tinta 10% — cukup terbaca, terlalu tipis untuk
+menggeser kontras), dan perubahan sebagai **lencana berisi `permukaan-2`** dengan
+teks semantik. Pasangan itu bukan pilihan bebas: `bahaya-teks`, `hijau-700`, dan
+`jingga-700` di atas `permukaan-2` justru pasangan yang sudah diukur di audit
+kontras. Teks merah telanjang di beberapa kartu sekaligus membuat halaman
+terbaca seperti peringatan; lencana memberinya batas sehingga terbaca sebagai
+keterangan.
+
+**Aturan:**
+
+- **Satu per layar.** Kalau dua angka sama-sama disorot, tidak ada yang tersorot.
+- Memakai pasangan token `utama` / `utama-teks` apa adanya — keduanya sudah
+  dirancang berpasangan dan membalik sendiri di mode gelap (`#047857` + putih →
+  `#34D399` + `#1C1917`). Jangan membuat token baru untuk ini.
+- **Arah perubahan ditandai panah, bukan warna.** Merah "turun" mustahil dibuat
+  terbaca di atas hijau penuh — dan tidak perlu: yang jadi berita adalah angka
+  di atasnya, bukan alarmnya.
+- Angka pendamping di layar yang sama memakai **24px** (`ringkas`), bukan 40px.
+  Perbedaan ukuran itulah yang membentuk susunannya.
+
+Grafik mungilnya digambar dengan elemen biasa berbasis flex, bukan Recharts: beranda adalah
+layar pertama tiap pagi dan tidak boleh menunggu bundel grafik. Versi SVG-nya
+sempat dicoba, tapi `preserveAspectRatio="none"` yang membuatnya bisa melar juga
+melarkan sudut membulat batangnya jadi elips picak. Ia **menyembunyikan
+diri bila kurang dari dua hari berisi** — satu batang di antara garis tipis
+terlihat seperti komponen rusak, dan warung yang baru mulai justru persis ada di
+keadaan itu.
+
+### Kartu barang di kasir
+
+```
+┌──────────────────────┐(1)  ← lencana jumlah, muncul saat ada di keranjang
+│ Gula Pasir 1kg       │     ← NAMA: 14px, teks-sekunder
+│                      │
+│ Rp 16.000            │     ← HARGA: 18px/800, teks-utama
+│ sisa 4 pcs           │
+└──────────────────────┘
+```
+
+**Harga lebih besar daripada nama.** Nama dipakai untuk MENEMUKAN barang, harga
+untuk MEMASTIKAN — dan yang dibaca berulang-ulang sepanjang hari adalah harganya.
+
+- Barang habis tetap terlihat, hanya tidak bisa ditekan. Disembunyikan, kasir
+  mengira barangnya lenyap dari sistem lalu menelepon pemilik.
+- "Habis" ditulis sebagai **lencana**, bukan teks merah telanjang: teks merah di
+  dalam kartu mudah tertukar dengan pesan galat.
+- Ditekan → kartu menyusut `scale-[0.98]`, dihormati `motion-reduce`. Di layar
+  yang diketuk bertubi-tubi, inilah yang mengabarkan "ketukan tadi masuk".
+- **Tidak ada toast saat barang masuk keranjang.** Ketukannya sudah dijawab tiga
+  kali dan seketika — lencana jumlah, baris di keranjang, dan totalnya berubah.
+  Toast tambahan hanya mengulang yang sudah terlihat, dan karena kasir menekan
+  bertubi-tubi ia menumpuk sampai menutupi tombol bayar di baliknya. Pengecualian:
+  jalur PINDAI tetap bertoast, karena di sana dialog kamera menutupi keranjang
+  dan lencananya.
+
+### Kontrol segmen
+
+Sekelompok pilihan saling-tolak dalam SATU wadah.
+
+```
+┌─────────────────────────────────────────────────┐
+│ ( Hari ini )  7 hari   30 hari   Bulan ini   …  │ ← wadah permukaan-2
+└─────────────────────────────────────────────────┘
+      ▲ terpilih: keping `permukaan` + shadow-kartu + teks `utama`
+```
+
+- **Wadah `permukaan-2`, terpilih naik sebagai keping `permukaan`.** Pilihan
+  mengambang satu-satu dengan garis tepi masing-masing terbaca sebagai lima
+  tombol yang kebetulan berdekatan; wadah membuatnya terbaca sebagai satu
+  kendali dengan satu nilai — dan itu memang yang terjadi.
+- **Menggeser mendatar, TIDAK membungkus.** Pilihan yang membungkus ke baris
+  kedua membuat tinggi halaman melompat saat labelnya berubah, dan di HP
+  mendorong isi halaman turun tanpa alasan yang terlihat.
+- Tinggi **48px, menyusut ke 40px pada `pointer: fine`** — aturan yang sama
+  dengan tombol varian "padat" ([01 §3](01-PRINSIP-DESAIN.md)).
+- `teks-sekunder` dan `utama` di atas `permukaan-2` adalah pasangan yang sudah
+  diukur di audit kontras; jangan menggantinya tanpa mengukur ulang.
 
 ### Daftar: tabel di layar lebar, kartu di layar kecil
 
@@ -259,8 +384,18 @@ Secukupnya, dan selalu punya alasan.
 
 - Transisi: **150–200ms**, `ease-out`.
 - Dialog masuk dari bawah di HP (mengikuti kebiasaan aplikasi ponsel), memudar di desktop.
+  Terpasang sebagai `.gerak-dialog` / `.gerak-lapis` di `tokens.css`, memakai
+  `data-state` dari Radix. Di layar besar SENGAJA hanya memudar tanpa geser:
+  dialognya dipusatkan dengan `translate(-50%, -50%)`, jadi keyframe yang ikut
+  menyentuh `transform` membatalkan pemusatan itu dan dialognya melompat ke
+  pojok saat animasi mulai.
 - **Wajib menghormati `prefers-reduced-motion`** — matikan animasi bila pengguna memintanya.
 - Tidak ada animasi pada angka uang yang sedang berubah: uang harus terbaca, bukan bergerak.
+- **Toast mengambang DI ATAS bilah bawah, tidak menimpanya** (`--sela-bilah-bawah`).
+  Diukur di layar kasir: notifikasi "barang ditambahkan" menutupi tombol bayar
+  selama lima detik — menyembunyikan persis hal yang ingin ditekan pengguna
+  berikutnya, dan mengabarkan hal yang sudah terlihat dari lencana di kartu
+  barangnya.
 
 ---
 

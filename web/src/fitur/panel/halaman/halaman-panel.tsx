@@ -20,6 +20,7 @@ import { GalatAPI } from '@/lib/api-client'
 import { formatTanggalJam, tanggalISO } from '@/bersama/util/tanggal'
 import { cn } from '@/bersama/util/cn'
 import { KEMAMPUAN, panelApi, type AdminPanel } from '../api'
+import { SegmenPilihan } from '@/bersama/ui/segmen'
 
 /**
  * Panel internal penyedia SaaS.
@@ -460,30 +461,16 @@ function PanelOutbox() {
         tempat lain yang menampilkannya.
       </p>
 
-      <div className="flex gap-2">
-        {(
-          [
-            ['dead', 'Gagal total'],
-            ['pending', 'Menunggu'],
-            ['', 'Semua'],
-          ] as const
-        ).map(([nilai, label]) => (
-          <button
-            key={label}
-            type="button"
-            onClick={() => setSaring(nilai)}
-            aria-pressed={saring === nilai}
-            className={cn(
-              'h-12 rounded-full border px-4 text-label font-medium',
-              saring === nilai
-                ? 'border-utama bg-sorot text-utama'
-                : 'border-garis bg-permukaan text-teks-sekunder hover:bg-permukaan-2',
-            )}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <SegmenPilihan
+        label="Saring antrean notifikasi"
+        nilai={saring}
+        onPilih={setSaring}
+        pilihan={[
+          ['dead', 'Gagal total'],
+          ['pending', 'Menunggu'],
+          ['', 'Semua'],
+        ]}
+      />
 
       {outbox.isLoading ? (
         <KerangkaBaris jumlah={4} />

@@ -80,6 +80,21 @@
   --spacing-kasir: 64px; /* tombol utama layar kasir */
 }
 
+/* Tinggi bilah yang menempel di bawah layar (navigasi bawah, bilah keranjang
+   kasir). Toast mengambang DI ATAS-nya, bukan menimpanya: notifikasi "barang
+   ditambahkan" yang menutupi tombol bayar justru menyembunyikan hal yang ingin
+   ditekan pengguna berikutnya. Layar yang memasang bilah tambahan menaikkan
+   nilai ini; bawaannya nol. */
+:root {
+  --sela-bilah-bawah: 0px;
+}
+@media (max-width: 63.99rem) {
+  :root {
+    /* Navigasi bawah hanya ada di bawah lg. */
+    --sela-bilah-bawah: 68px;
+  }
+}
+
 /* Palet terang (bawaan). */
 :root {
   --warna-latar: #fafaf9;
@@ -191,6 +206,88 @@
       animation-duration: 0.01ms !important;
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  /**
+   * Permukaan sorotan: hijau berlapis untuk kartu angka utama.
+   *
+   * Kedua ujung gradiennya adalah token yang rasio kontrasnya SUDAH diverifikasi
+   * terhadap `utama-teks` — pekat 7,68:1 dan utama 5,48:1 di mode terang,
+   * 9,95:1 dan 7,89:1 di mode gelap. Jadi kedalaman ini didapat tanpa
+   * memunculkan satu pun pasangan warna baru yang perlu diukur ulang.
+   *
+   * Arahnya 135deg (kiri-atas ke kanan-bawah): sisi tergelap berada di belakang
+   * label, sisi terterang di belakang grafik — bukan sebaliknya.
+   */
+  .permukaan-sorotan {
+    background-image: linear-gradient(
+      135deg,
+      var(--warna-hijau-teks-pekat) 0%,
+      var(--warna-utama) 100%
+    );
+  }
+}
+
+@layer components {
+  /**
+   * Gerak dialog — nilai-nilainya dari ui/02-SISTEM-DESAIN.md §Gerak:
+   * 150–200ms, ease-out, naik dari bawah di HP, memudar di layar besar.
+   *
+   * Di layar besar SENGAJA hanya memudar, tanpa geser. Dialognya dipusatkan
+   * dengan `translate(-50%, -50%)`, jadi keyframe yang ikut menyentuh
+   * `transform` akan membatalkan pemusatan itu dan dialognya melompat ke pojok
+   * saat animasi mulai.
+   */
+  @keyframes pudar-masuk {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes pudar-keluar {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+  @keyframes lembar-naik {
+    from { opacity: 0; transform: translateY(100%); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes lembar-turun {
+    from { opacity: 1; transform: translateY(0); }
+    to { opacity: 0; transform: translateY(100%); }
+  }
+
+  .gerak-lapis {
+    animation: pudar-masuk 180ms ease-out;
+  }
+  .gerak-lapis[data-state='closed'] {
+    animation: pudar-keluar 150ms ease-out;
+  }
+
+  .gerak-dialog {
+    animation: lembar-naik 180ms ease-out;
+  }
+  .gerak-dialog[data-state='closed'] {
+    animation: lembar-turun 150ms ease-out;
+  }
+  @media (min-width: 40rem) {
+    .gerak-dialog {
+      animation: pudar-masuk 180ms ease-out;
+    }
+    .gerak-dialog[data-state='closed'] {
+      animation: pudar-keluar 150ms ease-out;
+    }
+  }
+
+  /* Wajib dihormati (ui/02 §Gerak). Tanpa animasi, Radix melepas dialognya
+     seketika — itu memang yang diminta pengguna yang menyalakan setelan ini. */
+  @media (prefers-reduced-motion: reduce) {
+    .gerak-lapis,
+    .gerak-lapis[data-state='closed'],
+    .gerak-dialog,
+    .gerak-dialog[data-state='closed'] {
+      animation: none;
     }
   }
 }

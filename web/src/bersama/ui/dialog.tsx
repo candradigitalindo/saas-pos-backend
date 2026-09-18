@@ -23,10 +23,10 @@ export function IsiDialog({
 }: D.DialogContentProps & { judul: string; keterangan?: string }) {
   return (
     <D.Portal>
-      <D.Overlay className="fixed inset-0 z-40 bg-black/40 duration-150" />
+      <D.Overlay className="gerak-lapis fixed inset-0 z-40 bg-black/40" />
       <D.Content
         className={cn(
-          'fixed z-50 flex flex-col gap-3 bg-permukaan shadow-dialog',
+          'gerak-dialog fixed z-50 flex flex-col gap-3 bg-permukaan shadow-dialog',
           // HP: lembar dari bawah.
           'inset-x-0 bottom-0 max-h-[90dvh] overflow-y-auto rounded-t-dialog p-5',
           // Layar besar: kotak di tengah.

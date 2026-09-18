@@ -85,7 +85,7 @@ export function PenyediaToast({ children }: { children: ReactNode }) {
     <KonteksToast.Provider value={nilai}>
       {children}
       <div
-        className="pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex flex-col items-center gap-2 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
+        className="pointer-events-none fixed inset-x-0 bottom-[var(--sela-bilah-bawah)] z-[60] flex flex-col items-center gap-2 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
         role="status"
         aria-live="polite"
       >

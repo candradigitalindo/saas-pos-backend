@@ -54,7 +54,7 @@ export interface LaporanUntung {
   totals: BarisUntung
 }
 
-export type Pengelompokan = 'day' | 'channel' | 'cashier' | 'payment'
+export type Pengelompokan = 'day' | 'hour' | 'channel' | 'cashier' | 'payment'
 
 export const laporanApi = {
   dashboard: (outlet_id?: string, date?: string) =>

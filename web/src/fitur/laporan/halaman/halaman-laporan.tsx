@@ -1,6 +1,6 @@
 import { lazy, Suspense, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, Download, Lightbulb, Minus } from 'lucide-react'
+import { Download, Lightbulb } from 'lucide-react'
 import { Kartu } from '@/bersama/ui/kartu'
 import { Tombol } from '@/bersama/ui/tombol'
 import { KeadaanGagal, KeadaanKosong } from '@/bersama/komponen/keadaan-kosong'
@@ -10,26 +10,31 @@ import { useSesi } from '@/bersama/hooks/use-sesi'
 import { useOnline } from '@/bersama/hooks/use-online'
 import { GalatAPI } from '@/lib/api-client'
 import { IZIN } from '@/lib/izin'
-import { formatRupiah, persenSelisih } from '@/bersama/util/uang'
+import { formatRupiah } from '@/bersama/util/uang'
 import { tanggalISO } from '@/bersama/util/tanggal'
 import { cn } from '@/bersama/util/cn'
-import { BarChart3, CloudOff } from 'lucide-react'
+import { BarChart3, CloudOff, ReceiptText, TicketPercent, Wallet } from 'lucide-react'
 import { api, type Halaman } from '@/lib/api-client'
 import { laporanApi, type Pengelompokan } from '../api'
 import { BatangKanal, type BarisBatang } from '../komponen/batang-kanal'
+import { GrafikJam } from '../komponen/grafik-jam'
+import { KartuSorotan } from '@/bersama/komponen/kartu-sorotan'
+import { KartuAngka } from '@/bersama/komponen/kartu-angka'
+import { SegmenPilihan } from '@/bersama/ui/segmen'
 
 // Recharts hanya diunduh oleh yang benar-benar membuka laporan.
 const GrafikHarian = lazy(async () => ({
   default: (await import('../komponen/grafik-harian')).GrafikHarian,
 }))
 
-type Rentang = 'hari-ini' | '7-hari' | '30-hari' | 'bulan-ini'
+type Rentang = 'hari-ini' | '7-hari' | '30-hari' | 'bulan-ini' | 'pilih'
 
 const RENTANG: Record<Rentang, string> = {
   'hari-ini': 'Hari ini',
   '7-hari': '7 hari terakhir',
   '30-hari': '30 hari terakhir',
   'bulan-ini': 'Bulan ini',
+  pilih: 'Pilih tanggal',
 }
 
 /**
@@ -46,7 +51,15 @@ export function HalamanLaporan() {
   const [rentang, setRentang] = useState<Rentang>('hari-ini')
   const [kelompok, setKelompok] = useState<Pengelompokan>('day')
 
-  const { dari, sampai } = useMemo(() => hitungRentang(rentang), [rentang])
+  // Tanggal pilihan sendiri. Bawaannya HARI INI supaya menekan "Pilih tanggal"
+  // tidak pernah menghasilkan layar kosong yang membingungkan.
+  const [dariPilih, setDariPilih] = useState(() => tanggalISO())
+  const [sampaiPilih, setSampaiPilih] = useState(() => tanggalISO())
+
+  const { dari, sampai } = useMemo(
+    () => hitungRentang(rentang, dariPilih, sampaiPilih),
+    [rentang, dariPilih, sampaiPilih],
+  )
   const bolehLihatUntung = boleh(IZIN.reportProfit)
 
   const penjualan = useQuery({
@@ -116,25 +129,20 @@ export function HalamanLaporan() {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-judul font-bold text-teks-utama">Laporan</h1>
 
-        <div className="flex flex-wrap gap-2">
-          {(Object.keys(RENTANG) as Rentang[]).map((r) => (
-            <button
-              key={r}
-              type="button"
-              onClick={() => setRentang(r)}
-              aria-pressed={rentang === r}
-              className={cn(
-                'h-12 rounded-full border px-4 text-label font-medium',
-                rentang === r
-                  ? 'border-utama bg-sorot text-utama'
-                  : 'border-garis bg-permukaan text-teks-sekunder hover:bg-permukaan-2',
-              )}
-            >
-              {RENTANG[r]}
-            </button>
-          ))}
-        </div>
+        <SegmenPilihan
+          label="Rentang tanggal"
+          nilai={rentang}
+          onPilih={setRentang}
+          pilihan={(Object.keys(RENTANG) as Rentang[]).map((r) => [r, RENTANG[r]] as const)}
+        />
       </header>
+
+      {rentang === 'pilih' && (
+        <Kartu className="flex flex-wrap items-end gap-3 p-4">
+          <KolomTanggal label="Dari tanggal" nilai={dariPilih} onUbah={setDariPilih} />
+          <KolomTanggal label="Sampai tanggal" nilai={sampaiPilih} onUbah={setSampaiPilih} />
+        </Kartu>
+      )}
 
       {penjualan.isLoading ? (
         <KerangkaKartuAngka />
@@ -150,21 +158,27 @@ export function HalamanLaporan() {
       ) : (
         <>
           {/* Angka pertama yang dilihat: untung bila berhak, omzet bila tidak. */}
-          <AngkaSorotan
-            label={bolehLihatUntung ? 'Untung bersih' : 'Uang masuk'}
-            nilai={
-              bolehLihatUntung
-                ? (untung.data?.totals.laba_bersih ?? 0)
-                : (totalSekarang?.net_amount ?? 0)
-            }
-            pembanding={
-              bolehLihatUntung
-                ? untungSebelum.data?.totals.laba_bersih
-                : totalSebelum?.net_amount
-            }
-            labelPembanding={labelPembanding(rentang)}
-            memuat={bolehLihatUntung && untung.isLoading}
-          />
+          {(() => {
+            const nilaiSorot = bolehLihatUntung
+              ? (untung.data?.totals.laba_bersih ?? 0)
+              : (totalSekarang?.net_amount ?? 0)
+            const bandingSorot = bolehLihatUntung
+              ? untungSebelum.data?.totals.laba_bersih
+              : totalSebelum?.net_amount
+
+            if (bolehLihatUntung && untung.isLoading) return <KerangkaKartuAngka />
+
+            return (
+              <KartuSorotan
+                label={bolehLihatUntung ? 'Untung bersih' : 'Uang masuk'}
+                nilai={nilaiSorot}
+                pembanding={bandingSorot}
+                labelPembanding={labelPembanding(rentang)}
+                // Rugi tidak duduk di atas kartu perayaan — lihat KartuSorotan.
+                nada={nilaiSorot < 0 ? 'bahaya' : 'utama'}
+              />
+            )
+          })()}
 
           {/* Rumusnya terbuka: pemilik melihat dari mana angkanya. */}
           {bolehLihatUntung && untung.data && (
@@ -188,22 +202,33 @@ export function HalamanLaporan() {
             </Kartu>
           )}
 
-          <div className="grid gap-3 sm:grid-cols-3">
-            <KartuKecil
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <KartuAngka
+              ringkas
+              ikon={ReceiptText}
               label="Jumlah transaksi"
-              nilai={(totalSekarang?.sales_count ?? 0).toLocaleString('id-ID')}
+              nilai={totalSekarang?.sales_count ?? 0}
+              uang={false}
+              keterangan="Transaksi selesai di periode ini"
             />
-            <KartuKecil
+            <KartuAngka
+              ringkas
+              ikon={Wallet}
               label="Rata-rata belanja"
-              nilai={formatRupiah(
+              nilai={
                 totalSekarang && totalSekarang.sales_count > 0
                   ? Math.trunc(totalSekarang.net_amount / totalSekarang.sales_count)
-                  : 0,
-              )}
+                  : 0
+              }
+              keterangan="Uang masuk dibagi jumlah transaksi"
             />
-            <KartuKecil
+            <KartuAngka
+              ringkas
+              ikon={TicketPercent}
+              className="col-span-2 sm:col-span-1"
               label="Diskon diberikan"
-              nilai={formatRupiah(totalSekarang?.discount_amount ?? 0)}
+              nilai={totalSekarang?.discount_amount ?? 0}
+              keterangan="Potongan harga di periode ini"
             />
           </div>
 
@@ -230,31 +255,20 @@ export function HalamanLaporan() {
               <h2 className="text-judul-kartu font-semibold text-teks-utama">
                 Rincian
               </h2>
-              <div className="flex flex-wrap gap-2">
-                {(
+              <SegmenPilihan
+                label="Rincian menurut"
+                nilai={kelompok}
+                onPilih={setKelompok}
+                pilihan={
                   [
                     ['day', 'Per hari'],
+                    ['hour', 'Jam ramai'],
                     ['payment', 'Cara bayar'],
                     ['cashier', 'Kasir'],
                     ['channel', 'Kanal'],
-                  ] as [Pengelompokan, string][]
-                ).map(([nilai, label]) => (
-                  <button
-                    key={nilai}
-                    type="button"
-                    onClick={() => setKelompok(nilai)}
-                    aria-pressed={kelompok === nilai}
-                    className={cn(
-                      'h-12 rounded-full border px-4 text-label font-medium',
-                      kelompok === nilai
-                        ? 'border-utama bg-sorot text-utama'
-                        : 'border-garis bg-permukaan text-teks-sekunder hover:bg-permukaan-2',
-                    )}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+                  ] as const
+                }
+              />
             </div>
 
             {(penjualan.data?.rows.length ?? 0) === 0 ? (
@@ -267,6 +281,8 @@ export function HalamanLaporan() {
               <Suspense fallback={<Kerangka className="h-56 w-full" />}>
                 <GrafikHarian rows={penjualan.data!.rows} />
               </Suspense>
+            ) : kelompok === 'hour' ? (
+              <GrafikJam rows={penjualan.data!.rows} />
             ) : (
               <BatangKanal
                 baris={penjualan.data!.rows.map((r) => ({
@@ -303,69 +319,6 @@ export function HalamanLaporan() {
         </>
       )}
     </div>
-  )
-}
-
-function AngkaSorotan({
-  label,
-  nilai,
-  pembanding,
-  labelPembanding,
-  memuat,
-}: {
-  label: string
-  nilai: number
-  pembanding?: number
-  labelPembanding: string
-  memuat?: boolean
-}) {
-  if (memuat) return <KerangkaKartuAngka />
-
-  const persen = pembanding === undefined ? null : persenSelisih(nilai, pembanding)
-  const naik = persen !== null && persen > 0
-  const turun = persen !== null && persen < 0
-  const Panah = naik ? ArrowUp : turun ? ArrowDown : Minus
-
-  return (
-    <Kartu className="p-4">
-      <p className="text-label font-medium text-teks-sekunder">{label}</p>
-      <p
-        className={cn(
-          'mt-1 text-angka font-extrabold tabular-nums',
-          nilai < 0 ? 'text-bahaya-teks' : 'text-teks-utama',
-        )}
-      >
-        {formatRupiah(nilai)}
-      </p>
-      {persen !== null ? (
-        <p
-          className={cn(
-            'mt-1 flex items-center gap-1 text-keterangan font-medium',
-            persen === 0 ? 'text-teks-redup' : naik ? 'text-hijau-700' : 'text-bahaya-teks',
-          )}
-        >
-          <Panah className="h-4 w-4" aria-hidden />
-          {Math.abs(persen)}% {labelPembanding}
-        </p>
-      ) : (
-        /* Kalau pembandingnya belum ada, KATAKAN. Angka telanjang tampak
-           seperti baris yang lupa dimuat (ui/01 §4). */
-        <p className="mt-1 text-keterangan text-teks-redup">
-          Belum ada data {labelPembanding.replace(/^dibanding /, '')} untuk dibandingkan
-        </p>
-      )}
-    </Kartu>
-  )
-}
-
-function KartuKecil({ label, nilai }: { label: string; nilai: string }) {
-  return (
-    <Kartu className="p-4">
-      <p className="text-keterangan text-teks-sekunder">{label}</p>
-      <p className="mt-1 text-judul-kartu font-bold tabular-nums text-teks-utama">
-        {nilai}
-      </p>
-    </Kartu>
   )
 }
 
@@ -411,9 +364,20 @@ function Wawasan({
 
 // ── Bantuan ────────────────────────────────────────────────────────────────
 
-function hitungRentang(r: Rentang): { dari: string; sampai: string } {
+function hitungRentang(
+  r: Rentang,
+  dariPilih: string,
+  sampaiPilih: string,
+): { dari: string; sampai: string } {
   const kini = new Date()
   const sampai = tanggalISO(kini)
+  if (r === 'pilih') {
+    // Dibalik bila terbalik, bukan ditolak: orang sering mengisi kolom kedua
+    // lebih dulu, dan menolak isian yang maksudnya jelas cuma menghalangi.
+    return dariPilih <= sampaiPilih
+      ? { dari: dariPilih, sampai: sampaiPilih }
+      : { dari: sampaiPilih, sampai: dariPilih }
+  }
   if (r === 'hari-ini') return { dari: sampai, sampai }
   if (r === 'bulan-ini') {
     return { dari: `${sampai.slice(0, 7)}-01`, sampai }
@@ -434,6 +398,34 @@ function periodeSebelum(dari: string, sampai: string): { dari: string; sampai: s
 
 function labelPembanding(r: Rentang): string {
   return r === 'hari-ini' ? 'dibanding kemarin' : 'dibanding periode sebelumnya'
+}
+
+/** Kolom tanggal: label di atas, bukan placeholder (ui/02 — Kolom isian). */
+function KolomTanggal({
+  label,
+  nilai,
+  onUbah,
+}: {
+  label: string
+  nilai: string
+  onUbah: (v: string) => void
+}) {
+  return (
+    <label className="flex flex-1 flex-col gap-1">
+      <span className="text-keterangan font-medium text-teks-sekunder">{label}</span>
+      <input
+        type="date"
+        value={nilai}
+        max={tanggalISO()}
+        onChange={(e) => onUbah(e.target.value)}
+        className={cn(
+          'h-12 w-full rounded-kontrol border border-garis bg-permukaan px-3',
+          'text-isi tabular-nums text-teks-utama',
+          'focus:border-utama focus:outline-none focus:ring-2 focus:ring-utama/30',
+        )}
+      />
+    </label>
+  )
 }
 
 /**

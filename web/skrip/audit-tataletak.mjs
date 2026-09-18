@@ -34,13 +34,44 @@ for (const [nama, jalur] of HALAMAN) {
                   kontrasRendah: [], istilahAsing: [], idMentah: [] }
 
     // 1. Target sentuh minimal 48px (ui/01 §3)
-    for (const el of document.querySelectorAll('button, a[href], input, select, [role="button"]')) {
+    //
+    // Yang diukur adalah kotak yang BENAR-BENAR bisa disentuh, bukan selalu
+    // elemennya sendiri. Sebuah <input> di dalam pembungkus ber-`h-12` melaporkan
+    // 46px karena border 1px atas-bawah memakan kotak isinya — padahal menekan
+    // di mana pun pada 48px itu tetap memfokuskan input tersebut. Versi
+    // sebelumnya melaporkannya sebagai pelanggaran di empat halaman, dan itu
+    // positif palsu yang membuat audit ini lama-lama diabaikan.
+    const kotakSentuh = (el) => {
       const r = el.getBoundingClientRect()
+      if (el.tagName !== 'INPUT') return r
+
+      // a) Input di dalam <label>: labelnya yang disentuh. Checkbox 20×20 di
+      //    dalam baris <label> setinggi 56px bukan target 20px — menekan di
+      //    mana pun pada barisnya tetap mencentangnya.
+      const label = el.closest('label')
+      if (label) {
+        const rl = label.getBoundingClientRect()
+        if (rl.height >= r.height) return rl
+      }
+
+      // b) Input di dalam pembungkus rapat: pembungkusnya yang disentuh. Input
+      //    di dalam kotak ber-`h-12` melaporkan 46px karena border 1px
+      //    atas-bawah memakan kotak isinya, padahal targetnya tetap 48px.
+      let n = el.parentElement
+      for (let i = 0; i < 2 && n; i++, n = n.parentElement) {
+        const rn = n.getBoundingClientRect()
+        if (rn.height >= r.height && rn.height - r.height <= 8) return rn
+      }
+      return r
+    }
+
+    for (const el of document.querySelectorAll('button, a[href], input, select, [role="button"]')) {
+      const r = kotakSentuh(el)
       if (r.width === 0 || r.height === 0) continue
       const s = getComputedStyle(el)
       if (s.display === 'none' || s.visibility === 'hidden') continue
       if (r.height < 48) {
-        if (el.tagName !== 'INPUT' || !el.closest('label')) out.targetKecil.push({ t: (el.textContent || el.getAttribute('aria-label') || el.tagName).trim().slice(0,40), h: Math.round(r.height) })
+        out.targetKecil.push({ t: (el.textContent || el.getAttribute('aria-label') || el.tagName).trim().slice(0,40), h: Math.round(r.height) })
       }
     }
 

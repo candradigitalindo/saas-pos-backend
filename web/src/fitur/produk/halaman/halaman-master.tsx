@@ -8,8 +8,8 @@ import { KerangkaBaris } from '@/bersama/komponen/kerangka'
 import { useToast } from '@/bersama/komponen/toast'
 import { useKategori, usePemasok, useSatuan } from '@/bersama/hooks/use-katalog'
 import { GalatAPI } from '@/lib/api-client'
-import { cn } from '@/bersama/util/cn'
 import { produkApi } from '../api'
+import { SegmenPilihan } from '@/bersama/ui/segmen'
 
 type Tab = 'kategori' | 'satuan' | 'pemasok'
 
@@ -95,29 +95,20 @@ export function HalamanMaster() {
     <div className="mx-auto flex w-full max-w-lg flex-col gap-4">
       <h1 className="text-judul font-bold text-teks-utama">Kategori, Satuan & Pemasok</h1>
 
-      <div className="flex gap-2" role="tablist">
-        {(Object.keys(JUDUL) as Tab[]).map((t) => (
-          <button
-            key={t}
-            type="button"
-            role="tab"
-            aria-selected={tab === t}
-            onClick={() => {
-              setTab(t)
-              setNama('')
-              setGalat(null)
-            }}
-            className={cn(
-              'h-12 flex-1 rounded-full border px-4 text-label font-medium',
-              tab === t
-                ? 'border-utama bg-sorot text-utama'
-                : 'border-garis bg-permukaan text-teks-sekunder hover:bg-permukaan-2',
-            )}
-          >
-            {JUDUL[t].label}
-          </button>
-        ))}
-      </div>
+      {/* `aria-pressed` pada satu grup, bukan role="tab". Markup sebelumnya
+          memakai role="tablist"/"tab" tanpa `tabpanel` maupun `aria-controls`
+          pasangannya — ARIA setengah jadi yang menjanjikan ke pembaca layar
+          sesuatu yang tidak ada di halaman. */}
+      <SegmenPilihan
+        label="Jenis data induk"
+        nilai={tab}
+        onPilih={(t) => {
+          setTab(t)
+          setNama('')
+          setGalat(null)
+        }}
+        pilihan={(Object.keys(JUDUL) as Tab[]).map((t) => [t, JUDUL[t].label] as const)}
+      />
 
       <Kartu className="p-4">
         <form

@@ -15,6 +15,9 @@ import { formatRupiah } from '@/bersama/util/uang'
 import { formatTanggal } from '@/bersama/util/tanggal'
 import { cn } from '@/bersama/util/cn'
 import { pelangganApi, type Kasbon } from '../api'
+import { SegmenPilihan } from '@/bersama/ui/segmen'
+import { KartuAngka } from '@/bersama/komponen/kartu-angka'
+import { HandCoins } from 'lucide-react'
 
 /**
  * Kasbon — utang pelanggan.
@@ -53,27 +56,23 @@ export function HalamanKasbon() {
       <h1 className="text-judul font-bold text-teks-utama">Kasbon</h1>
 
       {daftar.length > 0 && (
-        <Kartu className="p-4">
-          <p className="text-label font-medium text-teks-sekunder">
-            Total belum dibayar
-          </p>
-          <p className="mt-1 text-angka font-extrabold tabular-nums text-teks-utama">
-            {formatRupiah(totalTunggakan)}
-          </p>
-          <p className="mt-1 text-keterangan text-teks-redup">
-            dari {daftar.length} kasbon
-          </p>
-        </Kartu>
+        <KartuAngka
+          ikon={HandCoins}
+          label="Total belum dibayar"
+          nilai={totalTunggakan}
+          keterangan={`dari ${daftar.length} kasbon`}
+        />
       )}
 
-      <div className="flex gap-2">
-        <TombolSaring aktif={hanyaBelumLunas} onKlik={() => setHanyaBelumLunas(true)}>
-          Belum lunas
-        </TombolSaring>
-        <TombolSaring aktif={!hanyaBelumLunas} onKlik={() => setHanyaBelumLunas(false)}>
-          Semua
-        </TombolSaring>
-      </div>
+      <SegmenPilihan
+        label="Saring kasbon"
+        nilai={hanyaBelumLunas ? 'belum' : 'semua'}
+        onPilih={(v) => setHanyaBelumLunas(v === 'belum')}
+        pilihan={[
+          ['belum', 'Belum lunas'],
+          ['semua', 'Semua'],
+        ]}
+      />
 
       {kasbon.isLoading ? (
         <KerangkaBaris jumlah={4} />
@@ -256,28 +255,3 @@ function DialogSetoran({
   )
 }
 
-function TombolSaring({
-  aktif,
-  onKlik,
-  children,
-}: {
-  aktif: boolean
-  onKlik: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onKlik}
-      aria-pressed={aktif}
-      className={cn(
-        'h-12 rounded-full border px-4 text-label font-medium',
-        aktif
-          ? 'border-utama bg-sorot text-utama'
-          : 'border-garis bg-permukaan text-teks-sekunder hover:bg-permukaan-2',
-      )}
-    >
-      {children}
-    </button>
-  )
-}
