@@ -96,7 +96,7 @@ Semakin sedikit pintu, semakin kecil peluang tersesat.
 | Kategori, satuan, pemasok | `GET\|POST\|PUT\|DELETE /categories[/:id]` · `/units[/:id]` · `/suppliers[/:id]` | `product.view` / `product.edit` |
 | Saldo stok | `GET /stocks?outlet_id=` | `stock.view` |
 | Kartu stok (riwayat keluar-masuk) | `GET /stock-movements?product_id=` | `stock.view` |
-| Koreksi stok | `POST /stock-adjustments` | `stock.adjust` |
+| Koreksi stok | `POST /stock-adjustments` + `Idempotency-Key` | `stock.adjust` |
 | Barang masuk (pembelian) | `POST /purchases` + `Idempotency-Key` · `GET /purchases` · `GET /purchases/:id` | `stock.adjust` / `stock.view` |
 | Hitung fisik (opname) | `POST /stock-opnames` → `POST /stock-opnames/:id/items` → `POST /stock-opnames/:id/post` · `GET /stock-opnames[/:id]` | `stock.opname` / `stock.view` |
 | Kirim barang antar toko | `POST /stock-transfers` → `POST /stock-transfers/:id/send` → `POST /stock-transfers/:id/receive` · `GET /stock-transfers[/:id]` | `stock.transfer` / `stock.view` |
@@ -111,7 +111,7 @@ Semakin sedikit pintu, semakin kecil peluang tersesat.
 | Daftar & detail pelanggan | `GET /customers` · `GET /customers/:id` | `customer.view` |
 | Tambah / ubah / hapus | `POST\|PUT\|DELETE /customers[/:id]` | `customer.edit` |
 | Daftar kasbon | `GET /receivables` · `GET /receivables/:id` | `receivable.manage` |
-| Terima setoran kasbon | `POST /receivable-payments` | `receivable.manage` |
+| Terima setoran kasbon | `POST /receivable-payments` + `Idempotency-Key` | `receivable.manage` |
 
 ---
 
@@ -123,7 +123,7 @@ Semakin sedikit pintu, semakin kecil peluang tersesat.
 | Laporan penjualan (per hari/jam/kanal/kasir/metode bayar) | `GET /reports/sales?group_by=` | `report.view` |
 | Laporan untung-rugi | `GET /reports/profit?from=&to=` | `report.profit` |
 | Unduh CSV | `GET /reports/export?type=` | `report.export` |
-| Hitung ulang ringkasan | `POST /reports/rebuild-summaries` | `report.view` |
+| Hitung ulang ringkasan | `POST /reports/rebuild-summaries` | `report.view` **dan** `outlet.manage` |
 
 > `report.profit` dipisah dari `report.view` — pemilik sering ingin kasir melihat
 > omzet tapi **tidak** melihat margin. UI harus menghormati ini: kalau tidak
@@ -214,8 +214,8 @@ Semakin sedikit pintu, semakin kecil peluang tersesat.
 
 | Layar | Endpoint | Izin |
 |---|---|---|
-| Toko / cabang | `GET\|POST\|PUT\|DELETE /outlets[/:id]` | `outlet.manage` |
-| Pengguna | `GET\|POST\|PUT\|DELETE /users[/:id]` | `user.manage` |
+| Toko / cabang | `GET\|POST\|PUT\|DELETE /outlets[/:id]` | `outlet.manage` (daftar `GET /outlets` juga `stock.transfer`, untuk memilih cabang tujuan kiriman) |
+| Pengguna | `GET\|POST\|PUT\|DELETE /users[/:id]` — `outlet_ids` untuk membatasi cabang | `user.manage` |
 | Peran & hak akses | `GET\|POST /roles` · `GET\|PUT\|DELETE /roles/:id` · `PUT /roles/:id/permissions` | `role.manage` |
 | Katalog izin (untuk layar peran) | `GET /permissions` | `role.manage` |
 
@@ -237,6 +237,29 @@ UI harus menampilkan itu dengan jujur dan aman:
   > mengatur hak akses di usaha Anda.
 - Saat memilih peran untuk pengguna, tampilkan **pratinjau izin gabungan**
   supaya pemilik paham akibat merangkap peran.
+
+### Akses cabang
+
+Kasir, pembukaan shift, kas laci, void/retur, dan seluruh gerakan stok
+**ditolak (403)** di cabang yang bukan milik penggunanya. Aturannya:
+
+- Pemegang `outlet.manage` bekerja di **semua** cabang; `GET /me` mengembalikan
+  seluruh cabang aktif untuknya, termasuk yang baru dibuat.
+- Staf lain hanya di cabang pada `outlet_ids`-nya (`user_outlets`). Staf baru
+  yang dibuat tanpa `outlet_ids` otomatis mendapat semua cabang aktif — usaha
+  satu cabang tidak perlu melihat pilihan ini sama sekali.
+- Form pengguna baru menanyakan cabang bila usahanya punya **lebih dari satu**
+  cabang aktif. Minimal satu harus dicentang.
+- Toko aktif di web selalu dipilih dari `outlet_ids` di `/me`; jangan pernah
+  menawarkan cabang di luar daftar itu. `/me` juga membawa `outlets[]`
+  (rincian cabang: pajak, biaya layanan, zona) — sumber total kasir.
+- **Membaca** juga dibatasi: daftar penjualan, shift, kas, stok, kartu stok,
+  pembelian, opname, transfer, laporan, dan `sync/pull` hanya memuat cabang
+  staf itu (filter `outlet_id` cabang lain → hasil kosong); detail dokumen
+  cabang lain → 404, seperti data CRM milik sales lain.
+- Profil `/me` terakhir dan shift aktif disimpan di perangkat
+  (`lib/offline/ingatan.ts`) supaya kasir yang dibuka ulang TANPA sinyal tetap
+  masuk ke layar jualan, bukan ke layar masuk.
 
 ---
 
@@ -309,6 +332,6 @@ Jangan dirancang di UI sampai backendnya tersedia:
 | Fitur | Status backend |
 |---|---|
 | Adaptor API kanal per-provider (GoFood, Shopee, dll.) | **Terkunci pihak luar.** Menunggu kemitraan; blueprint F.9 melarang menjanjikannya sebelum disetujui. Sekarang lewat entri manual / CSV / webhook generik |
-| Pengiriman WhatsApp/email sungguhan | Alur outbox sudah utuh & teruji; pengirim bawaan baru mencatat ke log. Tinggal menukar satu implementasi `Notifier` saat penyedia dipilih |
+| Pengiriman email sungguhan | Alur outbox sudah utuh & teruji. WhatsApp **sudah** terkirim sungguhan lewat sidecar `wa-gateway/` (bila `WA_GATEWAY_URL` diisi); email masih mencatat ke log sampai penyedianya dipilih |
 | Deteksi kejanggalan mitra (merchant fiktif, pendaftaran beruntun) | Blueprint G.5 P1 — belum dibangun |
 | Laporan biaya akuisisi per mitra & wilayah | Blueprint G.5 P1 — belum dibangun |

@@ -257,8 +257,8 @@ Semua endpoint bisnis di bawah prefiks `/api/v1`.
 | `POST /api/v1/auth/login` | publik | → access + refresh token |
 | `POST /api/v1/auth/refresh` | publik | Tukar refresh token (rotasi + deteksi reuse) |
 | `POST /api/v1/auth/logout` | token | Cabut refresh token |
-| `GET  /api/v1/me` | token | Profil: user, tenant, permission, outlet |
-| `GET/POST/PUT/DELETE /api/v1/outlets[/:id]` | `outlet.manage` | CRUD outlet |
+| `GET  /api/v1/me` | token | Profil: user, tenant, permission, `outlet_ids` + `outlets` (rincian cabang: pajak, biaya layanan — dipakai total kasir) |
+| `GET/POST/PUT/DELETE /api/v1/outlets[/:id]` | `outlet.manage` | CRUD outlet. `GET /outlets` juga untuk `stock.transfer` (memilih cabang tujuan) |
 | `GET/POST/PUT/DELETE /api/v1/categories[/:id]` | `product.view` / `product.edit` | CRUD kategori (maks 2 tingkat) |
 | `GET/POST/PUT/DELETE /api/v1/units[/:id]` | `product.view` / `product.edit` | CRUD satuan |
 | `GET/POST/PUT/DELETE /api/v1/suppliers[/:id]` | `product.view` / `product.edit` | CRUD supplier |
@@ -275,9 +275,9 @@ Semua endpoint bisnis di bawah prefiks `/api/v1`.
 | `GET  /api/v1/reports/sales?from=&to=&group_by=` | `report.view` | Laporan penjualan; `group_by` = day\|channel\|cashier\|payment |
 | `GET  /api/v1/reports/profit?from=&to=` | `report.profit` | Laba bersih per kanal (§13.5) |
 | `GET  /api/v1/reports/export?type=&format=csv` | `report.export` | Ekspor CSV (`type` = sales\|profit\|dashboard) |
-| `POST /api/v1/reports/rebuild-summaries?from=&to=&outlet_id=` | `report.view` | Bangun ulang `daily_sales_summaries` dari `sales` |
-| `POST /api/v1/sync/push` | `sale.create` | Batch penjualan offline; hasil per operasi (applied/duplicate/rejected) |
-| `GET  /api/v1/sync/pull?since=&outlet_id=&limit=` | `sale.create` | Master data + stok + batu nisan sejak kursor `sync_version` |
+| `POST /api/v1/reports/rebuild-summaries?from=&to=&outlet_id=` | `report.view` + `outlet.manage` | Bangun ulang `daily_sales_summaries` dari `sales` |
+| `POST /api/v1/sync/push` | `sale.create` atau `crm.visit.checkin` | Batch operasi offline; hasil per operasi (applied/duplicate/rejected). Izin diperiksa lagi **per operasi**: `sale.create` untuk `op: sale.create`, `crm.visit.checkin` untuk `op: visit.upsert` |
+| `GET  /api/v1/sync/pull?since=&outlet_id=&limit=` | `sale.create` atau `crm.visit.checkin` | Master data + stok + batu nisan sejak kursor `sync_version` |
 | `GET  /api/v1/plans` | token | Katalog paket + harga per masa langganan |
 | `GET/POST /api/v1/subscription` | `billing.manage` | Status langganan / mulai (trial) |
 | `POST /api/v1/subscription/invoices` · `GET` | `billing.manage` | Terbitkan / daftar tagihan langganan |
@@ -293,7 +293,7 @@ Semua endpoint bisnis di bawah prefiks `/api/v1`.
 | `POST /api/v1/invoice-payments` (header `Idempotency-Key`) | `invoice.issue` | Pembayaran parsial; lunas → penjualan di `sales` |
 | `GET/POST /api/v1/visit-plans[/:id]` | `crm.visit.checkin` | Rencana kunjungan harian + kunjungan `pending` per toko |
 | `GET/POST /api/v1/visits[/:id]` · `.../checkout` | `crm.visit.checkin` | Check-in (GPS+foto) & check-out; idempoten per id klien |
-| `POST /api/v1/sync/push` `op: visit.upsert` | `sale.create` | Sinkron kunjungan offline (tanpa duplikat) |
+| `POST /api/v1/sync/push` `op: visit.upsert` | `crm.visit.checkin` | Sinkron kunjungan offline (tanpa duplikat) |
 | `GET/POST /api/v1/sales-targets` | `crm.commission.view` | Target sales + pencapaian (kunjungan & tertagih) |
 | `GET/POST /api/v1/commissions` · `.../approve` · `.../pay` | `crm.commission.view` | Hitung komisi dari nilai tertagih → setujui → bayar |
 | `GET/POST/PUT/DELETE /api/v1/channels[/:id]` | `channel.manage` | Kanal per outlet + tarif komisi |
@@ -317,14 +317,14 @@ Semua endpoint bisnis di bawah prefiks `/api/v1`.
 | `POST/GET /api/v1/cash-movements` | `cash.movement` | Kas masuk/keluar |
 | `GET  /api/v1/stocks?outlet_id=&low=` | `stock.view` | Saldo stok |
 | `GET  /api/v1/stock-movements?product_id=` | `stock.view` | Kartu stok |
-| `POST /api/v1/stock-adjustments` | `stock.adjust` | Saldo awal / koreksi stok |
+| `POST /api/v1/stock-adjustments` | `stock.adjust` | Saldo awal / koreksi stok. Wajib `Idempotency-Key` |
 | `POST /api/v1/stock-reconcile?outlet_id=` | `stock.opname` | Hitung ulang cache stok dari buku besar |
 | `POST /api/v1/purchases` (header `Idempotency-Key`) | `stock.adjust` | Terima barang (stok masuk) |
 | `POST /api/v1/stock-opnames` · `/:id/items` · `/:id/post` | `stock.opname` | Hitung fisik → posting selisih |
 | `POST /api/v1/stock-transfers` · `/:id/send` · `/:id/receive` | `stock.transfer` | Transfer antar outlet |
 | `GET/PUT /api/v1/products/:id/recipe` | `product.view` / `product.edit` | Resep menu F&B |
-| `GET  /api/v1/receivables` · `POST /api/v1/receivable-payments` | `receivable.manage` | Piutang & pelunasan |
-| `GET/POST/PUT/DELETE /api/v1/users[/:id]` | `user.manage` | CRUD user staf |
+| `GET  /api/v1/receivables` · `POST /api/v1/receivable-payments` | `receivable.manage` | Piutang & pelunasan. Setoran wajib `Idempotency-Key` |
+| `GET/POST/PUT/DELETE /api/v1/users[/:id]` | `user.manage` | CRUD user staf. `outlet_ids` membatasi cabang tempat staf boleh bekerja (tidak dikirim saat membuat = semua cabang aktif). Ganti password / nonaktifkan / hapus mencabut seluruh sesinya |
 | `GET/POST/PUT/DELETE /api/v1/roles[/:id]` | `role.manage` | CRUD peran |
 | `PUT  /api/v1/roles/:id/permissions` | `role.manage` | Ganti pemetaan permission peran |
 | `GET  /api/v1/permissions` | `role.manage` | Katalog permission |

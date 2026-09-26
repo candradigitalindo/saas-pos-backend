@@ -828,6 +828,10 @@ CREATE TABLE stock_opname_items (
   counted_qty NUMERIC(14,3) NOT NULL,
   diff_qty NUMERIC(14,3) NOT NULL,
   UNIQUE (tenant_id, id),
+  -- Satu baris per barang per opname; hitung ulang MENIMPA. NULLS NOT DISTINCT
+  -- wajib (PostgreSQL ≥ 15): tanpa itu variant_id NULL tak pernah bentrok dan
+  -- tiap koreksi hitungan menambah baris yang ikut diposting (migrasi 000037).
+  UNIQUE NULLS NOT DISTINCT (tenant_id, opname_id, product_id, variant_id),
   FOREIGN KEY (tenant_id, opname_id)  REFERENCES stock_opnames (tenant_id, id) ON DELETE CASCADE,
   FOREIGN KEY (tenant_id, product_id) REFERENCES products      (tenant_id, id) ON DELETE RESTRICT
 );
@@ -2125,7 +2129,8 @@ disiapkan, sedangkan detailnya masuk log bersama request ID.
 
 Wajib pada semua endpoint yang menciptakan uang atau memindahkan stok:
 `POST /sales`, `POST /sales/:id/refund`, `POST /stock-adjustments`, `POST /purchases`,
-`POST /invoice-payments`, `POST /subscription-payments`.
+`POST /receivable-payments`, `POST /invoice-payments`, `POST /subscription-payments`.
+(Retur idempoten lewat `return_of_sale_id` — satu retur per penjualan.)
 
 ```
 Idempotency-Key: 01J9Z8Y7X6W5V4U3T2S1R0Q9P8
@@ -2227,7 +2232,23 @@ tenantScoped.POST("/sales", middlewares.Require("sale.create"), controllers.Crea
 ```
 
 `middlewares.Require(codes ...string)` memeriksa permission efektif user. Untuk sumber daya per outlet,
-tambahkan `middlewares.RequireOutletAccess()` yang memeriksa `user_outlets`.
+akses diperiksa terhadap `user_outlets` — pemegang `outlet.manage` bebas di semua outlet.
+
+Pemeriksaan outlet dilakukan **di layanan** (`services.ensureOutletAccess`), bukan di middleware:
+kebanyakan pintu tulis membawa `outlet_id` di badan JSON (checkout, buka shift, kas), sebagian hanya
+lewat id dokumen (void, tutup shift, posting opname), dan `/sync/push` membawa banyak operasi dalam satu
+permintaan. Hanya layanan yang tahu outlet mana yang sebenarnya disentuh. Pintu yang dijaga: checkout
+(termasuk lewat sync), buka/tutup/serah-terima shift, kas laci, void & retur, penyesuaian stok,
+pembelian, opname, dan transfer (outlet asal saat membuat & mengirim, outlet tujuan saat menerima).
+
+Staf yang dibuat tanpa `outlet_ids` otomatis mendapat semua outlet aktif (migrasi `000036` memberi staf
+lama perlakuan yang sama).
+
+Batas yang sama berlaku untuk **membaca**. `TenantScope` memuat daftar outlet user tanpa
+`outlet.manage` ke context (`reqctx.OutletScope`); repositori daftar & laporan menyaringnya lewat
+`scopeOutlet`/`whereOutlet` (penjualan, shift, kas, stok, kartu stok, pembelian, opname, transfer —
+asal atau tujuan —, ringkasan & laporan, `sync/pull`), dan endpoint detail membalas 404 untuk dokumen
+cabang lain (`repositories.OutletVisible`), sama seperti lapis 3 CRM.
 
 ### PIN kasir
 
