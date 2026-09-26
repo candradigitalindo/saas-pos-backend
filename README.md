@@ -157,8 +157,15 @@ TEST_DB_NAME=saas_pos_test TEST_DB_USER=<role> go test ./tests/ -v
 > Jangan arahkan ke database berisi data.
 
 Atau lewat `make`: `make test` (butuh PostgreSQL) · `make test-unit` (tanpa DB) ·
-`make lint` (vet + cek format). CI (`.github/workflows/ci.yml`) menjalankan
-`make ci` di setiap push/PR dengan PostgreSQL 16 + role non-superuser.
+`make lint` (vet + cek format). CI (`.github/workflows/ci.yml`) berjalan pada
+setiap pull request dan push ke `main`, dengan tiga job:
+
+- `test` — gofmt, vet, build, dan seluruh tes Go `-race` pada PostgreSQL 16 +
+  role non-superuser;
+- `web` — `npm ci`, periksa tipe, vitest, dan build produksi PWA di `web/`.
+  Job ini juga menjaga sisi web kontrak total kasir
+  (`web/src/fitur/kasir/kasus-total.json`); sisi server-nya di job `test`;
+- `docker` — membangun image runtime.
 
 ---
 

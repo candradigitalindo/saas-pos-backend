@@ -69,6 +69,41 @@ jobs:
       - name: Test (race)
         run: go test ./... -race -count=1
 
+  # Frontend (web/). Wajib ikut CI, bukan hanya backend: total kasir dijaga
+  # kontrak DUA sisi — web/src/fitur/kasir/kasus-total.json diuji
+  # services/total_kasir_test.go di job `test` DAN total.test.ts di sini.
+  # Tanpa job ini, mengubah rumus total di web tidak akan pernah ketahuan
+  # sebelum struk dan pembayaran QRIS/kasbon berselisih serupiah.
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    env:
+      # Playwright hanya untuk skrip audit tampilan (periksa:*) yang butuh
+      # aplikasi hidup — tidak dijalankan di CI, jadi peramban tak perlu diunduh.
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Pasang dependensi
+        run: npm ci
+
+      - name: Periksa tipe (tsc)
+        run: npm run lint
+
+      - name: Tes (vitest)
+        run: npm test
+
+      - name: Build produksi (PWA)
+        run: npm run build
+
   docker:
     runs-on: ubuntu-latest
     needs: test
