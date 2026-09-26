@@ -182,14 +182,14 @@ const qty: string = item.qty;                 // "1.5"
   membulatkan **per baris** (setengah ke atas) lalu menjumlahkan; aturan lain
   di frontend membuat total beda beberapa rupiah dari struk — dan itu
   menghancurkan kepercayaan.
-- **Satu pengecualian yang dijaga kontrak: total kasir** (`fitur/kasir/total.ts`).
+- **Satu pengecualian yang dijaga kontrak: total kasir** (`bersama/util/total.ts`).
   Untuk QRIS dan kasbon, total itulah yang DIBAYAR PAS, dan saat offline tidak
   ada server yang bisa ditanya — jadi kasir menghitung subtotal, pajak
   (inklusif/eksklusif), biaya layanan, dan diskon **persis** seperti
   `services.priceCheckout`, memakai pengaturan cabang dari `GET /me`
   (`outlets[]`). Kesamaannya dijaga satu berkas kasus
-  (`fitur/kasir/kasus-total.json`) yang diuji DUA sisi:
-  `services/total_kasir_test.go` dan `fitur/kasir/total.test.ts`. Mengubah
+  (`bersama/util/kasus-total.json`) yang diuji DUA sisi:
+  `services/total_kasir_test.go` dan `bersama/util/total.test.ts`. Mengubah
   rumus di satu sisi tanpa sisi lain membuat salah satu tes gagal.
 - Di luar itu frontend menghitung **hanya untuk pratinjau**, dan angka yang
   dicetak di struk **selalu diambil dari balasan server**.

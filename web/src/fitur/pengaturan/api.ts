@@ -8,6 +8,13 @@ export interface InputToko {
   phone?: string
   timezone?: string
   business_day_start?: string
+  tax_enabled?: boolean
+  /** PECAHAN desimal string: "0.11" = 11%. */
+  tax_rate?: string
+  /** true = harga di etalase sudah termasuk pajak. */
+  tax_inclusive?: boolean
+  /** PECAHAN desimal string: "0.05" = 5%. */
+  service_charge_rate?: string
 }
 
 export interface InputPengguna {

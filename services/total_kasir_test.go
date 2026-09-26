@@ -19,7 +19,7 @@ import (
 // persis dengan priceCheckout.
 //
 // Kasusnya tinggal di SATU berkas yang diuji dua sisi: tes ini memastikan
-// server menghasilkan angka `harapan`, dan web/src/fitur/kasir/total.test.ts
+// server menghasilkan angka `harapan`, dan web/src/bersama/util/total.test.ts
 // memastikan klien menghasilkan angka yang sama. Mengubah rumus di satu sisi
 // tanpa sisi lain membuat salah satu tes gagal.
 //
@@ -29,7 +29,7 @@ import (
 //
 // dan periksa angka yang ditulis sebelum di-commit.
 
-const berkasKasusTotal = "../web/src/fitur/kasir/kasus-total.json"
+const berkasKasusTotal = "../web/src/bersama/util/kasus-total.json"
 
 type kasusTotal struct {
 	Nama   string `json:"nama"`

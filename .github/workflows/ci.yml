@@ -70,7 +70,7 @@ jobs:
         run: go test ./... -race -count=1
 
   # Frontend (web/). Wajib ikut CI, bukan hanya backend: total kasir dijaga
-  # kontrak DUA sisi — web/src/fitur/kasir/kasus-total.json diuji
+  # kontrak DUA sisi — web/src/bersama/util/kasus-total.json diuji
   # services/total_kasir_test.go di job `test` DAN total.test.ts di sini.
   # Tanpa job ini, mengubah rumus total di web tidak akan pernah ketahuan
   # sebelum struk dan pembayaran QRIS/kasbon berselisih serupiah.

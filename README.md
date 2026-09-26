@@ -164,7 +164,7 @@ setiap pull request dan push ke `main`, dengan tiga job:
   role non-superuser;
 - `web` — `npm ci`, periksa tipe, vitest, dan build produksi PWA di `web/`.
   Job ini juga menjaga sisi web kontrak total kasir
-  (`web/src/fitur/kasir/kasus-total.json`); sisi server-nya di job `test`;
+  (`web/src/bersama/util/kasus-total.json`); sisi server-nya di job `test`;
 - `docker` — membangun image runtime.
 
 ---
@@ -265,7 +265,7 @@ Semua endpoint bisnis di bawah prefiks `/api/v1`.
 | `POST /api/v1/auth/refresh` | publik | Tukar refresh token (rotasi + deteksi reuse) |
 | `POST /api/v1/auth/logout` | token | Cabut refresh token |
 | `GET  /api/v1/me` | token | Profil: user, tenant, permission, `outlet_ids` + `outlets` (rincian cabang: pajak, biaya layanan — dipakai total kasir) |
-| `GET/POST/PUT/DELETE /api/v1/outlets[/:id]` | `outlet.manage` | CRUD outlet. `GET /outlets` juga untuk `stock.transfer` (memilih cabang tujuan) |
+| `GET/POST/PUT/DELETE /api/v1/outlets[/:id]` | `outlet.manage` | CRUD outlet. `tax_rate` & `service_charge_rate` = pecahan desimal string, 0 ≤ tarif < 1, maks. 4 desimal (`"0.11"` = 11%). `GET /outlets` juga untuk `stock.transfer` (memilih cabang tujuan) |
 | `GET/POST/PUT/DELETE /api/v1/categories[/:id]` | `product.view` / `product.edit` | CRUD kategori (maks 2 tingkat) |
 | `GET/POST/PUT/DELETE /api/v1/units[/:id]` | `product.view` / `product.edit` | CRUD satuan |
 | `GET/POST/PUT/DELETE /api/v1/suppliers[/:id]` | `product.view` / `product.edit` | CRUD supplier |

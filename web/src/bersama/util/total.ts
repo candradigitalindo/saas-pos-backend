@@ -1,5 +1,7 @@
 /**
  * Total belanja, dihitung PERSIS seperti server (services.priceCheckout).
+ * Dipakai kasir (keranjang, struk offline) dan contoh hitungan di pengaturan
+ * pajak toko — karena itu tinggal di bersama/, bukan di fitur/kasir.
  *
  * Kenapa klien menghitung sendiri, padahal "angka final selalu dari server":
  * saat offline tidak ada server yang bisa ditanya, dan untuk QRIS/kasbon total

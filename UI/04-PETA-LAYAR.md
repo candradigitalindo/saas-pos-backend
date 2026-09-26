@@ -214,7 +214,7 @@ Semakin sedikit pintu, semakin kecil peluang tersesat.
 
 | Layar | Endpoint | Izin |
 |---|---|---|
-| Toko / cabang | `GET\|POST\|PUT\|DELETE /outlets[/:id]` | `outlet.manage` (daftar `GET /outlets` juga `stock.transfer`, untuk memilih cabang tujuan kiriman) |
+| Toko / cabang — termasuk pajak & biaya layanan per cabang | `GET\|POST\|PUT\|DELETE /outlets[/:id]` | `outlet.manage` (daftar `GET /outlets` juga `stock.transfer`, untuk memilih cabang tujuan kiriman) |
 | Pengguna | `GET\|POST\|PUT\|DELETE /users[/:id]` — `outlet_ids` untuk membatasi cabang | `user.manage` |
 | Peran & hak akses | `GET\|POST /roles` · `GET\|PUT\|DELETE /roles/:id` · `PUT /roles/:id/permissions` | `role.manage` |
 | Katalog izin (untuk layar peran) | `GET /permissions` | `role.manage` |
@@ -237,6 +237,16 @@ UI harus menampilkan itu dengan jujur dan aman:
   > mengatur hak akses di usaha Anda.
 - Saat memilih peran untuk pengguna, tampilkan **pratinjau izin gabungan**
   supaya pemilik paham akibat merangkap peran.
+
+### Pajak & biaya layanan
+
+Diatur per cabang di dialog Toko. Pemilik mengetik **persen** (boleh berkoma,
+`7,5`); web mengubahnya ke pecahan (`0.075`) dengan decimal.js, dan server
+menolak tarif negatif, ≥ 100%, atau lebih dari 4 desimal pecahan (400).
+Dialog menampilkan **contoh hitungan dalam rupiah** memakai kalkulator yang
+sama dengan kasir, sebelum disimpan. Kasir memuat ulang tarif setiap membuka
+layar bayar, jadi perubahan dari HP pemilik langsung berlaku di tablet kasir
+yang terbuka seharian.
 
 ### Akses cabang
 

@@ -11,7 +11,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import type { Produk } from '@/bersama/tipe/katalog'
 import { bandingQty, kurangQty, qtyKosong, tambahQty } from '@/bersama/util/desimal'
-import { hitungTotal, type AturanHarga, type RincianTotal } from './total'
+import { hitungTotal, type AturanHarga, type RincianTotal } from '@/bersama/util/total'
 
 export interface BarisKeranjang {
   produk: Produk

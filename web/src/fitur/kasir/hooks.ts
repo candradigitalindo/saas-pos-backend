@@ -8,7 +8,7 @@ import { kurangiStokLokal, produkLokal, useKatalogLokal } from '@/lib/offline/ka
 import { pratinjauBaris } from '@/bersama/util/uang'
 import type { ItemTransaksi, Shift, Transaksi } from '@/bersama/tipe/pos'
 import { kasirApi, type InputCheckout } from './api'
-import { hitungTotal, type AturanHarga, type BarisHitung } from './total'
+import { hitungTotal, type AturanHarga, type BarisHitung } from '@/bersama/util/total'
 
 /**
  * Shift yang sedang terbuka di toko aktif.

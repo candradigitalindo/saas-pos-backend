@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { PackageX, ScanLine, Search, ShoppingCart, X } from 'lucide-react'
 import { Tombol } from '@/bersama/ui/tombol'
 import { KeadaanKosong } from '@/bersama/komponen/keadaan-kosong'
@@ -34,6 +35,7 @@ import { HalamanBukaShift } from './halaman-buka-shift'
  */
 export function HalamanKasir() {
   const { tokoAktif, rincianToko } = useSesi()
+  const qc = useQueryClient()
   const toast = useToast()
   const sinkron = useSinkron()
   const { shift, memuat: memuatShift } = useShiftAktif()
@@ -66,6 +68,12 @@ export function HalamanKasir() {
   if (!shift) return <HalamanBukaShift />
 
   function bukaLayarBayar() {
+    // Tarif pajak & biaya layanan bisa diubah pemilik kapan saja dari HP-nya,
+    // sementara tablet kasir terbuka seharian tanpa pernah memuat ulang
+    // profil. Total di layar bayar — yang dibayar PAS untuk QRIS/kasbon —
+    // harus memakai tarif terbaru, atau server menolaknya. Saat offline
+    // permintaan ini ditunda React Query dan tarif terakhir tetap dipakai.
+    void qc.invalidateQueries({ queryKey: ['me'] })
     kunci.current = kunciBaru()
     setGalatBayar(null)
     setBukaBayar(true)
