@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	"candra/backend-api/helpers"
@@ -80,12 +81,12 @@ func CreateOutlet(c *gin.Context) {
 	}
 	taxRate, err := parseRate(req.TaxRate)
 	if err != nil {
-		badRequest(c, "tax_rate", "Nilai tax_rate tidak valid")
+		badRequest(c, "tax_rate", "Tarif pajak tidak valid: "+err.Error())
 		return
 	}
 	serviceRate, err := parseRate(req.ServiceChargeRate)
 	if err != nil {
-		badRequest(c, "service_charge_rate", "Nilai service_charge_rate tidak valid")
+		badRequest(c, "service_charge_rate", "Tarif biaya layanan tidak valid: "+err.Error())
 		return
 	}
 
@@ -179,7 +180,7 @@ func UpdateOutlet(c *gin.Context) {
 	if req.TaxRate != nil {
 		r, err := parseRate(*req.TaxRate)
 		if err != nil {
-			badRequest(c, "tax_rate", "Nilai tax_rate tidak valid")
+			badRequest(c, "tax_rate", "Tarif pajak tidak valid: "+err.Error())
 			return
 		}
 		outlet.TaxRate = r
@@ -190,7 +191,7 @@ func UpdateOutlet(c *gin.Context) {
 	if req.ServiceChargeRate != nil {
 		r, err := parseRate(*req.ServiceChargeRate)
 		if err != nil {
-			badRequest(c, "service_charge_rate", "Nilai service_charge_rate tidak valid")
+			badRequest(c, "service_charge_rate", "Tarif biaya layanan tidak valid: "+err.Error())
 			return
 		}
 		outlet.ServiceChargeRate = r
@@ -251,11 +252,34 @@ func DeleteOutlet(c *gin.Context) {
 }
 
 // parseRate mengurai string tarif ("0.11") menjadi decimal. Kosong = 0.
+// parseRate mengurai tarif pajak / biaya layanan: PECAHAN desimal dengan
+// 0 ≤ tarif < 1 dan paling banyak 4 angka di belakang koma ("0.11" = 11%).
+// String kosong = 0.
+//
+// Dulu angka apa pun diterima. Pemilik yang mengetik "11" (maksudnya 11%)
+// tersimpan sebagai pajak 1.100%, tarif negatif justru memotong total, dan
+// tarif berdesimal lebih dari empat dibulatkan diam-diam oleh kolom
+// NUMERIC(7,4) — sehingga angka di balasan berbeda dari yang dipakai
+// menghitung transaksi berikutnya. Galatnya berisi kalimat yang bisa langsung
+// ditampilkan.
 func parseRate(s string) (decimal.Decimal, error) {
 	if s == "" {
 		return decimal.Zero, nil
 	}
-	return decimal.NewFromString(s)
+	r, err := decimal.NewFromString(s)
+	if err != nil {
+		return decimal.Zero, errors.New("tarif harus berupa angka desimal, mis. 0.11 untuk 11%")
+	}
+	if r.IsNegative() {
+		return decimal.Zero, errors.New("tarif tidak boleh negatif")
+	}
+	if r.GreaterThanOrEqual(decimal.NewFromInt(1)) {
+		return decimal.Zero, fmt.Errorf("tarif ditulis sebagai pecahan: 11%% ditulis 0.11, bukan %s", s)
+	}
+	if !r.Equal(r.Round(4)) {
+		return decimal.Zero, errors.New("tarif paling banyak 4 angka di belakang koma (0.0001 = 0,01%)")
+	}
+	return r, nil
 }
 
 func orDefault(v, def string) string {

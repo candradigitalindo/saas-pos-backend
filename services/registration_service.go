@@ -147,6 +147,13 @@ func RegisterTenant(ctx context.Context, in RegisterTenantInput) (*RegisterTenan
 			BusinessDayStart: dayStart,
 			Currency:         "IDR",
 			IsActive:         true,
+			// Nilai bawaan DDL (tax_inclusive DEFAULT true) WAJIB diisi di sini:
+			// GORM mengirim `false` untuk bool kosong, jadi tanpa baris ini outlet
+			// hasil pendaftaran berpajak EKSKLUSIF sementara cabang yang dibuat
+			// lewat POST /outlets inklusif — pemilik yang sekadar menyalakan
+			// pajak mendapati totalnya naik di satu cabang dan tidak di cabang
+			// lain.
+			TaxInclusive: true,
 		}
 		if err := repositories.CreateOutlet(ctx, tx, &outlet); err != nil {
 			return err

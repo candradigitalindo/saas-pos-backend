@@ -739,3 +739,42 @@ func TestOutletReadScope(t *testing.T) {
 	call(t, "POST", "/api/v1/outlets", gudang, map[string]any{"name": "X"}).
 		mustCode(t, "gudang tetap tak boleh menambah cabang", 403)
 }
+
+// TestOutletRatesValidated — tarif pajak & biaya layanan dulu diterima dalam
+// bentuk angka APA PUN. Pemilik yang mengetik "11" (maksudnya 11%) tersimpan
+// sebagai pajak 1.100%, tarif negatif memotong total, dan tarif berdesimal
+// lebih dari empat dibulatkan diam-diam oleh kolom NUMERIC(7,4).
+func TestOutletRatesValidated(t *testing.T) {
+	requireDB(t)
+	f := registerTenant(t, "tarifcek")
+
+	for _, kasus := range []struct {
+		kolom, nilai string
+	}{
+		{"tax_rate", "11"},      // persen, bukan pecahan
+		{"tax_rate", "1"},       // 100%
+		{"tax_rate", "-0.1"},    // negatif
+		{"tax_rate", "0.12345"}, // lebih dari 4 desimal
+		{"service_charge_rate", "5"},
+		{"service_charge_rate", "-0.05"},
+	} {
+		call(t, "PUT", "/api/v1/outlets/"+f.outletID, f.token, map[string]any{kasus.kolom: kasus.nilai}).
+			mustCode(t, kasus.kolom+"="+kasus.nilai, 400)
+	}
+	call(t, "POST", "/api/v1/outlets", f.token, map[string]any{"name": "Cabang Pajak", "tax_rate": "11"}).
+		mustCode(t, "buat cabang dengan tarif persen", 400)
+
+	// Outlet hasil pendaftaran mengikuti nilai bawaan yang sama dengan
+	// POST /outlets dan DDL: harga sudah termasuk pajak.
+	awal := call(t, "GET", "/api/v1/outlets/"+f.outletID, f.token, nil).mustOK(t, "outlet awal").data(t)
+	if awal["tax_inclusive"] != true {
+		t.Fatalf("outlet hasil pendaftaran tax_inclusive = %v, mau true (bawaan DDL)", awal["tax_inclusive"])
+	}
+
+	d := call(t, "PUT", "/api/v1/outlets/"+f.outletID, f.token, map[string]any{
+		"tax_enabled": true, "tax_rate": "0.11", "tax_inclusive": false, "service_charge_rate": "0.075",
+	}).mustOK(t, "tarif sah").data(t)
+	if d["tax_rate"] != "0.11" || d["service_charge_rate"] != "0.075" {
+		t.Fatalf("tarif tersimpan = %v / %v, mau 0.11 / 0.075", d["tax_rate"], d["service_charge_rate"])
+	}
+}
