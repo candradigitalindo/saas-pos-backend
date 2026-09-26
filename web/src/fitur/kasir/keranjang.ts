@@ -11,7 +11,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import type { Produk } from '@/bersama/tipe/katalog'
 import { bandingQty, kurangQty, qtyKosong, tambahQty } from '@/bersama/util/desimal'
-import { pratinjauBaris } from '@/bersama/util/uang'
+import { hitungTotal, type AturanHarga, type RincianTotal } from './total'
 
 export interface BarisKeranjang {
   produk: Produk
@@ -25,8 +25,14 @@ export interface Keranjang {
   baris: BarisKeranjang[]
   /** Jumlah jenis barang (bukan total qty) — untuk lencana di tombol. */
   jumlahBaris: number
-  /** Pratinjau total. Angka final tetap dari server. */
+  /**
+   * Total yang harus dibayar — dihitung PERSIS seperti server, termasuk pajak
+   * eksklusif dan biaya layanan cabang (lihat total.ts). Struk tetap memakai
+   * angka balasan server.
+   */
   pratinjauTotal: number
+  /** Rincian di balik total: subtotal, diskon, pajak, biaya layanan. */
+  rincian: RincianTotal
   tambah: (p: Produk, qty?: string) => void
   ubahQty: (produkId: string, qty: string) => void
   ubahDiskon: (produkId: string, diskon: number) => void
@@ -35,7 +41,11 @@ export interface Keranjang {
   qtyDari: (produkId: string) => string
 }
 
-export function useKeranjang(): Keranjang {
+/**
+ * @param aturan pengaturan harga cabang aktif (pajak, biaya layanan). Tanpa
+ *   aturan (profil belum termuat) total dihitung tanpa pajak dan layanan.
+ */
+export function useKeranjang(aturan?: AturanHarga): Keranjang {
   const [baris, setBaris] = useState<BarisKeranjang[]>([])
 
   const tambah = useCallback((p: Produk, qty = '1') => {
@@ -75,19 +85,13 @@ export function useKeranjang(): Keranjang {
     [baris],
   )
 
-  const pratinjauTotal = useMemo(
-    () =>
-      baris.reduce(
-        (jml, b) => jml + pratinjauBaris(b.produk.sell_price, b.qty, b.diskon),
-        0,
-      ),
-    [baris],
-  )
+  const rincian = useMemo(() => hitungTotal(barisHitung(baris), aturan), [baris, aturan])
 
   return {
     baris,
     jumlahBaris: baris.length,
-    pratinjauTotal,
+    pratinjauTotal: rincian.total,
+    rincian,
     tambah,
     ubahQty,
     ubahDiskon,
@@ -95,6 +99,11 @@ export function useKeranjang(): Keranjang {
     kosongkan,
     qtyDari,
   }
+}
+
+/** Baris keranjang dalam bentuk yang dipakai hitungTotal. */
+export function barisHitung(baris: BarisKeranjang[]) {
+  return baris.map((b) => ({ harga: b.produk.sell_price, qty: b.qty, diskon: b.diskon }))
 }
 
 /** Menyusun item checkout dari keranjang. Perhatikan: TANPA harga. */

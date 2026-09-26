@@ -33,7 +33,7 @@ import { HalamanBukaShift } from './halaman-buka-shift'
  * yang SELALU KELIHATAN (bukan geser atau tekan-lama).
  */
 export function HalamanKasir() {
-  const { tokoAktif } = useSesi()
+  const { tokoAktif, rincianToko } = useSesi()
   const toast = useToast()
   const sinkron = useSinkron()
   const { shift, memuat: memuatShift } = useShiftAktif()
@@ -42,7 +42,7 @@ export function HalamanKasir() {
   const [kategori, setKategori] = useState<string | undefined>(undefined)
   const { produk, petaStok, kategori: daftarKategori, kosong, memuat } =
     useKatalogKasir(cari, kategori)
-  const keranjang = useKeranjang()
+  const keranjang = useKeranjang(rincianToko)
 
   const [bukaPindai, setBukaPindai] = useState(false)
   const [bukaBayar, setBukaBayar] = useState(false)
@@ -77,6 +77,7 @@ export function HalamanKasir() {
     try {
       const hasil = await checkout.mutateAsync({
         kunci: kunci.current ?? kunciBaru(),
+        aturan: rincianToko,
         input: {
           outlet_id: tokoAktif,
           shift_id: shift.id,

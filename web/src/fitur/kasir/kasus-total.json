@@ -1,0 +1,200 @@
+[
+  {
+    "nama": "tanpa pajak dan biaya layanan",
+    "aturan": {
+      "tax_enabled": false,
+      "tax_rate": "0",
+      "tax_inclusive": true,
+      "service_charge_rate": "0"
+    },
+    "baris": [
+      {
+        "harga": 15000,
+        "qty": "3",
+        "diskon": 0
+      },
+      {
+        "harga": 8000,
+        "qty": "2",
+        "diskon": 0
+      }
+    ],
+    "diskon_transaksi": 0,
+    "harapan": {
+      "subtotal": 61000,
+      "discount_amount": 0,
+      "tax_amount": 0,
+      "service_amount": 0,
+      "total": 61000
+    }
+  },
+  {
+    "nama": "pajak eksklusif 11% dibulatkan per baris",
+    "aturan": {
+      "tax_enabled": true,
+      "tax_rate": "0.11",
+      "tax_inclusive": false,
+      "service_charge_rate": "0"
+    },
+    "baris": [
+      {
+        "harga": 3333,
+        "qty": "1",
+        "diskon": 0
+      },
+      {
+        "harga": 9999,
+        "qty": "2",
+        "diskon": 0
+      }
+    ],
+    "diskon_transaksi": 0,
+    "harapan": {
+      "subtotal": 23331,
+      "discount_amount": 0,
+      "tax_amount": 2567,
+      "service_amount": 0,
+      "total": 25898
+    }
+  },
+  {
+    "nama": "pajak eksklusif 10% tepat di setengah rupiah",
+    "aturan": {
+      "tax_enabled": true,
+      "tax_rate": "0.10",
+      "tax_inclusive": false,
+      "service_charge_rate": "0"
+    },
+    "baris": [
+      {
+        "harga": 1005,
+        "qty": "1",
+        "diskon": 0
+      }
+    ],
+    "diskon_transaksi": 0,
+    "harapan": {
+      "subtotal": 1005,
+      "discount_amount": 0,
+      "tax_amount": 101,
+      "service_amount": 0,
+      "total": 1106
+    }
+  },
+  {
+    "nama": "pajak inklusif 10% tidak menaikkan total",
+    "aturan": {
+      "tax_enabled": true,
+      "tax_rate": "0.10",
+      "tax_inclusive": true,
+      "service_charge_rate": "0"
+    },
+    "baris": [
+      {
+        "harga": 11000,
+        "qty": "1",
+        "diskon": 0
+      },
+      {
+        "harga": 12345,
+        "qty": "1",
+        "diskon": 0
+      }
+    ],
+    "diskon_transaksi": 0,
+    "harapan": {
+      "subtotal": 23345,
+      "discount_amount": 0,
+      "tax_amount": 2122,
+      "service_amount": 0,
+      "total": 23345
+    }
+  },
+  {
+    "nama": "biaya layanan 5% + pajak eksklusif 10% + diskon baris dan transaksi",
+    "aturan": {
+      "tax_enabled": true,
+      "tax_rate": "0.10",
+      "tax_inclusive": false,
+      "service_charge_rate": "0.05"
+    },
+    "baris": [
+      {
+        "harga": 25000,
+        "qty": "2",
+        "diskon": 5000
+      },
+      {
+        "harga": 18000,
+        "qty": "1",
+        "diskon": 0
+      }
+    ],
+    "diskon_transaksi": 3000,
+    "harapan": {
+      "subtotal": 68000,
+      "discount_amount": 8000,
+      "tax_amount": 6300,
+      "service_amount": 3000,
+      "total": 69300
+    }
+  },
+  {
+    "nama": "qty desimal dibulatkan setengah ke atas",
+    "aturan": {
+      "tax_enabled": false,
+      "tax_rate": "0",
+      "tax_inclusive": true,
+      "service_charge_rate": "0"
+    },
+    "baris": [
+      {
+        "harga": 3333,
+        "qty": "1.5",
+        "diskon": 0
+      },
+      {
+        "harga": 15000,
+        "qty": "0.25",
+        "diskon": 0
+      },
+      {
+        "harga": 1501,
+        "qty": "0.333",
+        "diskon": 0
+      }
+    ],
+    "diskon_transaksi": 0,
+    "harapan": {
+      "subtotal": 9250,
+      "discount_amount": 0,
+      "tax_amount": 0,
+      "service_amount": 0,
+      "total": 9250
+    }
+  },
+  {
+    "nama": "pajak aktif tapi tarif nol",
+    "aturan": {
+      "tax_enabled": true,
+      "tax_rate": "0",
+      "tax_inclusive": false,
+      "service_charge_rate": "0.1"
+    },
+    "baris": [
+      {
+        "harga": 7777,
+        "qty": "3",
+        "diskon": 777
+      }
+    ],
+    "diskon_transaksi": 0,
+    "harapan": {
+      "subtotal": 23331,
+      "discount_amount": 777,
+      "tax_amount": 0,
+      "service_amount": 2255,
+      "total": 24809
+    }
+  }
+]

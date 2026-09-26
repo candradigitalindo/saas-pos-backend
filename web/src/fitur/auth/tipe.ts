@@ -16,6 +16,8 @@ export interface ProfilSaya {
   tenant: Usaha
   permissions: string[]
   outlet_ids: string[]
+  /** Rincian cabang pada outlet_ids (pajak, biaya layanan, zona waktu). */
+  outlets?: Toko[]
 }
 
 export interface HasilDaftar {

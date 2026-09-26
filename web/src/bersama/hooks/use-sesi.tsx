@@ -16,10 +16,11 @@ import {
 } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { authApi } from '@/fitur/auth/api'
-import type { ProfilSaya } from '@/fitur/auth/tipe'
+import type { ProfilSaya, Toko } from '@/fitur/auth/tipe'
 import { GalatAPI } from '@/lib/api-client'
 import { adaSesi, ambilSesi, hapusSesi, langganSesi, simpanSesi } from '@/lib/penyimpanan-sesi'
 import { db, kosongkanDB } from '@/lib/offline/db'
+import { ingat, ingatan, lupakanSemua } from '@/lib/offline/ingatan'
 import type { KodeIzin } from '@/lib/izin'
 
 interface NilaiSesi {
@@ -30,6 +31,8 @@ interface NilaiSesi {
   boleh: (...kode: KodeIzin[]) => boolean
   /** Toko yang sedang dipakai. Kasir hampir selalu hanya punya satu. */
   tokoAktif: string | undefined
+  /** Rincian toko aktif — pajak & biaya layanan untuk total kasir. */
+  rincianToko: Toko | undefined
   gantiToko: (id: string) => void
   masuk: (username: string, password: string) => Promise<void>
   /**
@@ -61,6 +64,7 @@ export class GalatAdaAntrean extends Error {
 
 const KonteksSesi = createContext<NilaiSesi | null>(null)
 const KUNCI_TOKO = 'pos.toko-aktif'
+const KUNCI_INGAT_PROFIL = 'profil'
 
 export function PenyediaSesi({ children }: { children: ReactNode }) {
   const qc = useQueryClient()
@@ -73,8 +77,17 @@ export function PenyediaSesi({ children }: { children: ReactNode }) {
 
   const { data: profil, isLoading } = useQuery({
     queryKey: ['me'],
-    queryFn: authApi.saya,
+    queryFn: async () => {
+      const p = await authApi.saya()
+      ingat(KUNCI_INGAT_PROFIL, p)
+      return p
+    },
     enabled: punyaSesi,
+    // Profil terakhir dipakai sebagai data awal supaya aplikasi yang dibuka
+    // ulang tanpa sinyal tetap masuk ke kasir (lihat lib/offline/ingatan.ts).
+    // updatedAt 0 = dianggap basi, jadi tetap diambil ulang begitu bisa.
+    initialData: () => (adaSesi('tenant') ? ingatan<ProfilSaya>(KUNCI_INGAT_PROFIL) : undefined),
+    initialDataUpdatedAt: 0,
     staleTime: 5 * 60 * 1000,
     retry: (gagal, e) => !(e instanceof GalatAPI && e.status === 401) && gagal < 2,
   })
@@ -92,6 +105,11 @@ export function PenyediaSesi({ children }: { children: ReactNode }) {
     return daftar[0]
   }, [profil, tokoDipilih])
 
+  const rincianToko = useMemo(
+    () => profil?.outlets?.find((t) => t.id === tokoAktif),
+    [profil, tokoAktif],
+  )
+
   const gantiToko = useCallback((id: string) => {
     localStorage.setItem(KUNCI_TOKO, id)
     setTokoDipilih(id)
@@ -99,6 +117,8 @@ export function PenyediaSesi({ children }: { children: ReactNode }) {
 
   const pakaiSesiBaru = useCallback(
     (auth: { access_token: string; refresh_token: string; expires_in: number }) => {
+      // Ingatan milik pengguna sebelumnya dibuang SEBELUM sesi baru dipakai.
+      lupakanSemua()
       simpanSesi('tenant', {
         access_token: auth.access_token,
         refresh_token: auth.refresh_token,
@@ -136,6 +156,7 @@ export function PenyediaSesi({ children }: { children: ReactNode }) {
     }
     hapusSesi('tenant')
     localStorage.removeItem(KUNCI_TOKO)
+    lupakanSemua()
     // Data lokal WAJIB dibuang: satu tablet kasir dipakai bergantian, dan
     // katalog — apalagi antrean transaksi — milik usaha yang sedang masuk,
     // bukan milik perangkatnya.
@@ -151,12 +172,24 @@ export function PenyediaSesi({ children }: { children: ReactNode }) {
       sudahMasuk: punyaSesi && !!profil,
       boleh,
       tokoAktif,
+      rincianToko,
       gantiToko,
       masuk,
       keluar,
       pakaiSesiBaru,
     }),
-    [profil, punyaSesi, isLoading, boleh, tokoAktif, gantiToko, masuk, keluar, pakaiSesiBaru],
+    [
+      profil,
+      punyaSesi,
+      isLoading,
+      boleh,
+      tokoAktif,
+      rincianToko,
+      gantiToko,
+      masuk,
+      keluar,
+      pakaiSesiBaru,
+    ],
   )
 
   return <KonteksSesi.Provider value={nilai}>{children}</KonteksSesi.Provider>

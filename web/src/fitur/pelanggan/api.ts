@@ -44,10 +44,17 @@ export const pelangganApi = {
 
   kasbon: (id: string) => api.get<Kasbon>(`/receivables/${id}`),
 
-  /** Menerima setoran dari pelanggan atas kasbonnya. */
-  terimaSetoran: (input: {
-    receivable_id: string
-    amount: number
-    method: 'cash' | 'qris' | 'transfer' | 'card' | 'ewallet'
-  }) => api.post<Kasbon>('/receivable-payments', input),
+  /**
+   * Menerima setoran dari pelanggan atas kasbonnya. Wajib Idempotency-Key:
+   * setoran adalah uang masuk, dan kiriman ulang dengan kunci yang sama tidak
+   * boleh mencatatnya dua kali.
+   */
+  terimaSetoran: (
+    input: {
+      receivable_id: string
+      amount: number
+      method: 'cash' | 'qris' | 'transfer' | 'card' | 'ewallet'
+    },
+    kunci: string,
+  ) => api.post<Kasbon>('/receivable-payments', input, { idempotencyKey: kunci }),
 }

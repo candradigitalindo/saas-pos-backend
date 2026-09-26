@@ -4,7 +4,9 @@
  * antara layar dan struk menghancurkan kepercayaan pemilik usaha.
  *
  * Aturan yang dipegang berkas ini (ui/03-ARSITEKTUR-FRONTEND.md):
- *   1. Pembulatan TIDAK PERNAH dilakukan di frontend.
+ *   1. Frontend tidak mengarang aturan pembulatannya sendiri. Satu-satunya
+ *      hitungan uang yang harus SAMA PERSIS dengan server — total kasir — ada
+ *      di fitur/kasir/total.ts dan dijaga kontrak dua sisi.
  *   2. Perhitungan di sini hanya untuk PRATINJAU; angka final selalu dari server.
  */
 

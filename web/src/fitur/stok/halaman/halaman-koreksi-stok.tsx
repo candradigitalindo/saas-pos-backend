@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Package } from 'lucide-react'
+import { ulid } from 'ulid'
 import { Kartu } from '@/bersama/ui/kartu'
 import { Kolom } from '@/bersama/ui/kolom'
 import { StepperJumlah } from '@/bersama/ui/stepper-jumlah'
@@ -55,14 +56,20 @@ export function HalamanKoreksiStok() {
   })
   const saldoSekarang = saldo.data?.data.find((s) => s.product_id === produk?.id)
 
+  // Satu kunci untuk seluruh percobaan di layar ini: menekan "Simpan" lagi
+  // setelah sinyal putus tidak mencatat koreksinya dua kali.
+  const kunci = useRef(ulid())
   const simpan = useMutation({
     mutationFn: () =>
-      stokApi.koreksi({
-        outlet_id: tokoAktif!,
-        product_id: produk!.id,
-        new_qty: jumlah,
-        reason: alasan.trim(),
-      }),
+      stokApi.koreksi(
+        {
+          outlet_id: tokoAktif!,
+          product_id: produk!.id,
+          new_qty: jumlah,
+          reason: alasan.trim(),
+        },
+        kunci.current,
+      ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['stok'] })
       qc.invalidateQueries({ queryKey: ['stok-kasir'] })

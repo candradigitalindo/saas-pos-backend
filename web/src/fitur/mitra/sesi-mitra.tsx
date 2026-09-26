@@ -10,6 +10,7 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { adaSesi, hapusSesi, langganSesi, simpanSesi } from '@/lib/penyimpanan-sesi'
 import { mitraApi, type Mitra, type PenggunaMitra } from './api'
+import { keDate } from '@/bersama/util/tanggal'
 
 /**
  * Sesi portal mitra.
@@ -53,7 +54,7 @@ export function PenyediaSesiMitra({ children }: { children: ReactNode }) {
         access_token: hasil.access_token,
         // Realm mitra tidak menyediakan refresh token.
         refresh_token: '',
-        kedaluwarsa: new Date(hasil.expires_at).getTime(),
+        kedaluwarsa: keDate(hasil.expires_at).getTime(),
       })
       setPunyaSesi(true)
       await qc.invalidateQueries({ queryKey: ['mitra-me'] })

@@ -96,15 +96,19 @@ export const stokApi = {
   /**
    * Koreksi stok. Kirim `new_qty` (set ke angka pasti, dipakai saat mengisi
    * saldo awal atau hasil hitung fisik) ATAU `delta` (geser naik/turun) —
-   * tidak boleh dua-duanya.
+   * tidak boleh dua-duanya. Wajib Idempotency-Key: kiriman ulang dengan kunci
+   * yang sama tidak menggeser stok dua kali.
    */
-  koreksi: (input: {
-    outlet_id: string
-    product_id: string
-    new_qty?: string
-    delta?: string
-    reason: string
-  }) => api.post<GerakanStok>('/stock-adjustments', input),
+  koreksi: (
+    input: {
+      outlet_id: string
+      product_id: string
+      new_qty?: string
+      delta?: string
+      reason: string
+    },
+    kunci: string,
+  ) => api.post<GerakanStok>('/stock-adjustments', input, { idempotencyKey: kunci }),
 
   /** Barang masuk. Wajib Idempotency-Key: ini menciptakan stok DAN utang. */
   barangMasuk: (

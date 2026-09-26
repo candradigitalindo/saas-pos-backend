@@ -105,50 +105,100 @@ export type Realm = 'tenant' | 'mitra' | 'platform'
 // Satu pembaruan berjalan pada satu waktu. Permintaan lain yang kena 401
 // MENUNGGU pembaruan itu, bukan memicu pembaruannya sendiri — tanpa ini, lima
 // permintaan bersamaan menghasilkan lima kali refresh dan empat token terbuang.
+//
+// Dua aturan tambahan yang dulu tidak ada, keduanya pernah menendang kasir
+// keluar di tengah jualan:
+//
+//   1. Gagal SEMENTARA bukan sesi habis. Refresh yang putus di jalan (sinyal
+//      hilang sesaat) atau dibalas 5xx/429 dulu langsung menghapus sesi. Kini
+//      sesi hanya dibuang bila server benar-benar MENOLAK refresh token-nya;
+//      selain itu permintaannya gagal seperti gangguan jaringan biasa dan
+//      bisa diantre, sesi tetap utuh.
+//
+//   2. Satu refresh untuk SEMUA tab. Refresh token dirotasi setiap dipakai,
+//      dan server menganggap refresh token lama yang dipakai lagi sebagai
+//      tanda PENCURIAN lalu mencabut seluruh sesi. Dua tab yang kedaluwarsa
+//      bersamaan dulu sama-sama menukar token yang sama — tab kedua memicu
+//      pencabutan dan keduanya terlempar. Kini penukaran dikunci lintas tab
+//      (Web Locks), dan sebelum menukar, token tersimpan dibaca ulang: bila
+//      tab lain sudah memperbaruinya, token itu yang dipakai.
 
-const pembaruanBerjalan = new Map<Realm, Promise<string | null>>()
+type HasilPembaruan =
+  | { jenis: 'baru'; token: string }
+  /** Server menolak refresh token — sesi memang sudah habis. */
+  | { jenis: 'ditolak' }
+  /** Jaringan putus / server bermasalah — sesi tetap, coba lagi nanti. */
+  | { jenis: 'sementara'; sebab: 'jaringan' | 'server' }
 
-async function perbaruiToken(realm: Realm): Promise<string | null> {
+const pembaruanBerjalan = new Map<Realm, Promise<HasilPembaruan>>()
+
+async function perbaruiToken(realm: Realm, tokenDipakai: string): Promise<HasilPembaruan> {
   const sedang = pembaruanBerjalan.get(realm)
   if (sedang) return sedang
 
-  const jalan = (async () => {
-    const sesi = ambilSesi(realm)
-    if (!sesi?.refresh_token) return null
-
-    // Hanya realm tenant yang punya /auth/refresh. Realm lain: sesi habis =
-    // masuk ulang.
-    if (realm !== 'tenant') return null
-
-    try {
-      const res = await fetch(`${BASIS_API}/auth/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: sesi.refresh_token }),
-      })
-      if (!res.ok) return null
-      const amplop = (await res.json()) as AmplopSukses<{
-        access_token: string
-        refresh_token: string
-        expires_in: number
-      }>
-      simpanSesi(realm, {
-        ...sesi,
-        access_token: amplop.data.access_token,
-        refresh_token: amplop.data.refresh_token,
-        kedaluwarsa: Date.now() + amplop.data.expires_in * 1000,
-      })
-      return amplop.data.access_token
-    } catch {
-      return null
-    }
-  })()
-
+  const jalan = denganKunciLintasTab(`pos.perbarui-token.${realm}`, () =>
+    tukarRefreshToken(realm, tokenDipakai),
+  )
   pembaruanBerjalan.set(realm, jalan)
   try {
     return await jalan
   } finally {
     pembaruanBerjalan.delete(realm)
+  }
+}
+
+/** Menjalankan fn di bawah kunci Web Locks bila peramban mendukungnya. */
+async function denganKunciLintasTab<T>(nama: string, fn: () => Promise<T>): Promise<T> {
+  const kunci = typeof navigator !== 'undefined' ? navigator.locks : undefined
+  if (!kunci?.request) return fn()
+  return kunci.request(nama, fn) as Promise<T>
+}
+
+async function tukarRefreshToken(realm: Realm, tokenDipakai: string): Promise<HasilPembaruan> {
+  const sesi = ambilSesi(realm)
+  if (!sesi?.refresh_token) return { jenis: 'ditolak' }
+
+  // Sudah diperbarui tab lain (atau permintaan lain) selagi kita menunggu
+  // kunci: token tersimpan kini berbeda dan masih berlaku. Menukar refresh
+  // token lagi justru akan memakai token yang sudah dirotasi.
+  if (sesi.access_token && sesi.access_token !== tokenDipakai) {
+    return { jenis: 'baru', token: sesi.access_token }
+  }
+
+  // Hanya realm tenant yang punya /auth/refresh. Realm lain: sesi habis =
+  // masuk ulang.
+  if (realm !== 'tenant') return { jenis: 'ditolak' }
+
+  let res: Response
+  try {
+    res = await fetch(`${BASIS_API}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: sesi.refresh_token }),
+    })
+  } catch {
+    return { jenis: 'sementara', sebab: 'jaringan' }
+  }
+  if (res.status >= 500 || res.status === 429) return { jenis: 'sementara', sebab: 'server' }
+  if (!res.ok) return { jenis: 'ditolak' }
+
+  try {
+    const amplop = (await res.json()) as AmplopSukses<{
+      access_token: string
+      refresh_token: string
+      expires_in: number
+    }>
+    simpanSesi(realm, {
+      ...sesi,
+      access_token: amplop.data.access_token,
+      refresh_token: amplop.data.refresh_token,
+      kedaluwarsa: Date.now() + amplop.data.expires_in * 1000,
+    })
+    return { jenis: 'baru', token: amplop.data.access_token }
+  } catch {
+    // Balasan terpotong di jalan: refresh token lama mungkin sudah dirotasi
+    // server, tapi itu tetap bukan alasan membuang sesi diam-diam di sini.
+    return { jenis: 'sementara', sebab: 'jaringan' }
   }
 }
 
@@ -218,9 +268,10 @@ async function kirim<T>(jalur: string, opsi: OpsiMinta, ulangi: boolean): Promis
   } else if (opsi.mentah) headers['Content-Type'] = opsi.mentah.tipe
   else if (opsi.badan !== undefined) headers['Content-Type'] = 'application/json'
   if (opsi.idempotencyKey) headers['Idempotency-Key'] = opsi.idempotencyKey
+  let tokenDipakai = ''
   if (!opsi.tanpaToken) {
-    const token = ambilSesi(realm)?.access_token
-    if (token) headers.Authorization = `Bearer ${token}`
+    tokenDipakai = ambilSesi(realm)?.access_token ?? ''
+    if (tokenDipakai) headers.Authorization = `Bearer ${tokenDipakai}`
   }
 
   let res: Response
@@ -250,8 +301,15 @@ async function kirim<T>(jalur: string, opsi: OpsiMinta, ulangi: boolean): Promis
   }
 
   if (res.status === 401 && ulangi && !opsi.tanpaToken) {
-    const baru = await perbaruiToken(realm)
-    if (baru) return kirim<T>(jalur, opsi, false)
+    const hasil = await perbaruiToken(realm, tokenDipakai)
+    if (hasil.jenis === 'baru') return kirim<T>(jalur, opsi, false)
+    if (hasil.jenis === 'sementara') {
+      // Sesi TIDAK dibuang: gangguan ini lewat sendiri, dan aksi yang bisa
+      // diantre (checkout) masuk antrean offline alih-alih gagal.
+      throw hasil.sebab === 'jaringan'
+        ? new GalatAPI(0, 'Belum ada internet. Data disimpan di HP dan dikirim otomatis nanti.', {}, true)
+        : new GalatAPI(503, 'Server sedang bermasalah. Data Anda tidak hilang — coba lagi sebentar lagi.', {}, true)
+    }
     hapusSesi(realm)
     throw new GalatAPI(401, GALAT_SESI_HABIS)
   }

@@ -11,7 +11,12 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useOnline } from '@/bersama/hooks/use-online'
 import { useSesi } from '@/bersama/hooks/use-sesi'
 import { useToast } from '@/bersama/komponen/toast'
-import { jumlahMenunggu, jumlahPerluDiperiksa, kirimAntrean } from './antrean'
+import {
+  jumlahMenunggu,
+  jumlahPerluDiperiksa,
+  kirimAntrean,
+  pulihkanYangMenggantung,
+} from './antrean'
 import { tarikMasterData } from './tarik'
 
 interface NilaiSinkron {
@@ -104,10 +109,19 @@ export function PenyediaSinkron({ children }: { children: ReactNode }) {
     }
   }, [sudahMasuk, tokoAktif, online])
 
-  // Kirim begitu internet kembali.
+  // Kirim begitu internet kembali. Sebelum pengiriman pertama di halaman ini,
+  // operasi yang tertahan "mengirim" dari sesi sebelumnya dikembalikan ke
+  // antrean (lihat pulihkanYangMenggantung).
+  const sudahDipulihkan = useRef(false)
   useEffect(() => {
     if (!sudahMasuk || !online) return
-    void kirimSekarang()
+    void (async () => {
+      if (!sudahDipulihkan.current) {
+        sudahDipulihkan.current = true
+        await pulihkanYangMenggantung()
+      }
+      await kirimSekarang()
+    })()
   }, [sudahMasuk, online, kirimSekarang])
 
   // Lalu setiap 30 detik selama masih ada yang menunggu.

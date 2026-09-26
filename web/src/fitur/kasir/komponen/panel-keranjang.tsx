@@ -18,7 +18,13 @@ export function PanelKeranjang({
   keranjang: Keranjang
   onBayar: () => void
 }) {
-  const { baris, pratinjauTotal, ubahQty, hapus } = keranjang
+  const { baris, pratinjauTotal, rincian, ubahQty, hapus } = keranjang
+  // Pajak eksklusif MENAMBAH total (total = subtotal − diskon + pajak +
+  // layanan); pajak inklusif sudah ada di dalam harga dan hanya disebutkan.
+  const pajakEksklusif =
+    rincian.tax_amount > 0 &&
+    rincian.total ===
+      rincian.subtotal - rincian.discount_amount + rincian.tax_amount + rincian.service_amount
   const kosong = baris.length === 0
 
   return (
@@ -76,6 +82,29 @@ export function PanelKeranjang({
       </div>
 
       <div className="border-t border-garis p-4">
+        {/* Pajak & biaya layanan ditampilkan bila ada, supaya kasir bisa
+            menjelaskan ke pembeli kenapa total lebih besar dari harga barang. */}
+        {(rincian.tax_amount > 0 || rincian.service_amount > 0) && (
+          <dl className="mb-2 flex flex-col gap-1 text-label text-teks-sekunder">
+            {pajakEksklusif && (
+              <div className="flex justify-between">
+                <dt>Pajak</dt>
+                <dd className="tabular-nums">{formatRupiah(rincian.tax_amount)}</dd>
+              </div>
+            )}
+            {rincian.service_amount > 0 && (
+              <div className="flex justify-between">
+                <dt>Biaya layanan</dt>
+                <dd className="tabular-nums">{formatRupiah(rincian.service_amount)}</dd>
+              </div>
+            )}
+            {rincian.tax_amount > 0 && !pajakEksklusif && (
+              <p className="text-keterangan text-teks-redup">
+                Sudah termasuk pajak {formatRupiah(rincian.tax_amount)}
+              </p>
+            )}
+          </dl>
+        )}
         <div className="mb-3 flex items-baseline justify-between">
           <span className="text-isi text-teks-sekunder">Total</span>
           <span className="text-judul font-extrabold tabular-nums text-teks-utama">

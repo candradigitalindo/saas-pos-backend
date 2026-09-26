@@ -3,10 +3,12 @@ import { ulid } from 'ulid'
 import { useSesi } from '@/bersama/hooks/use-sesi'
 import { GalatAPI } from '@/lib/api-client'
 import { antrekan } from '@/lib/offline/antrean'
+import { ingat, ingatan } from '@/lib/offline/ingatan'
 import { kurangiStokLokal, produkLokal, useKatalogLokal } from '@/lib/offline/katalog-lokal'
 import { pratinjauBaris } from '@/bersama/util/uang'
 import type { ItemTransaksi, Shift, Transaksi } from '@/bersama/tipe/pos'
 import { kasirApi, type InputCheckout } from './api'
+import { hitungTotal, type AturanHarga, type BarisHitung } from './total'
 
 /**
  * Shift yang sedang terbuka di toko aktif.
@@ -18,17 +20,26 @@ import { kasirApi, type InputCheckout } from './api'
 export function useShiftAktif() {
   const { tokoAktif } = useSesi()
 
+  const kunciIngat = `shift-aktif.${tokoAktif}`
   const q = useQuery({
     queryKey: ['shift-aktif', tokoAktif],
     queryFn: async () => {
       const hal = await kasirApi.daftarShift(tokoAktif, 1, 20)
       const terbuka = hal.data.find((s) => s.status === 'open')
-      if (!terbuka) return null
       // Ambil detailnya supaya rincian kas (penjualan tunai, kas masuk/keluar)
       // ikut terisi — layar tutup shift membutuhkannya.
-      return kasirApi.shift(terbuka.id)
+      const hasil = terbuka ? await kasirApi.shift(terbuka.id) : null
+      ingat(kunciIngat, hasil)
+      return hasil
     },
     enabled: !!tokoAktif,
+    // Shift terakhir yang diketahui dipakai sebagai data awal: tanpa ini kasir
+    // yang membuka ulang aplikasi tanpa sinyal disodori "Buka shift" (yang juga
+    // butuh internet) dan tidak bisa berjualan. Transaksi offline tetap membawa
+    // shift_id; bila shift itu ternyata sudah ditutup di perangkat lain,
+    // server menolaknya saat sinkron dan transaksinya masuk "perlu diperiksa".
+    initialData: () => (tokoAktif ? ingatan<Shift | null>(kunciIngat) : undefined),
+    initialDataUpdatedAt: 0,
     staleTime: 15_000,
   })
 
@@ -66,8 +77,12 @@ export function useKatalogKasir(cari: string, kategoriId?: string) {
 export function useCheckout() {
   const qc = useQueryClient()
 
-  return useMutation<HasilCheckout, Error, { input: InputCheckout; kunci: string }>({
-    mutationFn: async ({ input, kunci }) => {
+  return useMutation<
+    HasilCheckout,
+    Error,
+    { input: InputCheckout; kunci: string; aturan?: AturanHarga }
+  >({
+    mutationFn: async ({ input, kunci, aturan }) => {
       try {
         const transaksi = await kasirApi.bayar(input, kunci)
         return { transaksi, diantre: false }
@@ -78,7 +93,7 @@ export function useCheckout() {
         // hanya menunda kabar buruk yang sama.
         if (!(e instanceof GalatAPI) || !e.bisaDiantre) throw e
 
-        const transaksi = await simpanKeAntrean(input, kunci)
+        const transaksi = await simpanKeAntrean(input, kunci, aturan)
         return { transaksi, diantre: true }
       }
     },
@@ -103,16 +118,20 @@ export interface HasilCheckout {
  * yang sah tetap yang dari server, dan akan menggantikannya begitu terkirim.
  * Karena itu layarnya diberi lencana "menunggu dikirim", bukan "tersimpan".
  */
-async function simpanKeAntrean(input: InputCheckout, kunci: string): Promise<Transaksi> {
+async function simpanKeAntrean(
+  input: InputCheckout,
+  kunci: string,
+  aturan?: AturanHarga,
+): Promise<Transaksi> {
   const idTransaksi = input.id ?? kunci
 
   const items: ItemTransaksi[] = []
-  let subtotal = 0
+  const untukHitung: BarisHitung[] = []
   for (const [i, it] of input.items.entries()) {
     const p = await produkLokal(it.product_id)
     const hargaSatuan = p?.sell_price ?? 0
     const lineTotal = pratinjauBaris(hargaSatuan, it.qty, it.discount_amount ?? 0)
-    subtotal += lineTotal
+    untukHitung.push({ harga: hargaSatuan, qty: it.qty, diskon: it.discount_amount ?? 0 })
     items.push({
       id: `${idTransaksi}-${i}`,
       product_id: it.product_id,
@@ -128,6 +147,10 @@ async function simpanKeAntrean(input: InputCheckout, kunci: string): Promise<Tra
   }
 
   const dibayar = input.payments.reduce((j, p) => j + p.amount, 0)
+  // Rumus yang sama dengan server (pajak, biaya layanan, diskon transaksi) —
+  // lihat total.ts.
+  const r = hitungTotal(untukHitung, aturan, input.order_discount ?? 0)
+  const total = r.total
   const sekarang = new Date().toISOString()
 
   await antrekan({
@@ -135,7 +158,7 @@ async function simpanKeAntrean(input: InputCheckout, kunci: string): Promise<Tra
     op: 'sale.create',
     payload: { ...input, id: idTransaksi, client_created_at: sekarang },
     ringkasan: items.map((i) => `${i.qty} ${i.product_name}`).join(', ') || 'Transaksi',
-    nominal: subtotal,
+    nominal: total,
   })
 
   // Stok lokal ikut turun supaya kasir tidak melihat angka yang jelas basi
@@ -155,14 +178,14 @@ async function simpanKeAntrean(input: InputCheckout, kunci: string): Promise<Tra
     receipt_no: 'Belum bernomor',
     order_type: input.order_type ?? 'takeaway',
     status: 'completed',
-    subtotal,
-    discount_amount: input.order_discount ?? 0,
-    tax_amount: 0,
-    service_amount: 0,
+    subtotal: r.subtotal,
+    discount_amount: r.discount_amount,
+    tax_amount: r.tax_amount,
+    service_amount: r.service_amount,
     rounding_amount: 0,
-    total: subtotal,
+    total,
     paid_amount: dibayar,
-    change_amount: Math.max(0, dibayar - subtotal),
+    change_amount: Math.max(0, dibayar - total),
     cost_total: 0,
     gross_profit: 0,
     occurred_at: sekarang,

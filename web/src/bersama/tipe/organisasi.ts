@@ -14,6 +14,8 @@ export interface Pengguna {
   role_name: string
   /** SELURUH peran yang dipegang. Izin efektifnya adalah gabungan. */
   role_ids?: string[]
+  /** Cabang tempat orang ini boleh bekerja (pemegang outlet.manage: semua). */
+  outlet_ids?: string[]
   is_active: boolean
   created_at: string
   updated_at: string

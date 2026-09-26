@@ -200,6 +200,77 @@ describe('api-client', () => {
     expect(localStorage.getItem('pos.sesi.toko')).toBeNull()
   })
 
+  it('refresh yang putus di jalan TIDAK membuang sesi — permintaannya bisa diantre', async () => {
+    simpanSesi('tenant', {
+      access_token: 'lama',
+      refresh_token: 'segar',
+      kedaluwarsa: Date.now() + 1000,
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/auth/refresh')) throw new TypeError('Failed to fetch')
+        return balasan(401, { success: false, message: 'kedaluwarsa' })
+      }),
+    )
+
+    const e = await tangkap(api.post('/sales', {}))
+    expect(e.bisaDiantre).toBe(true)
+    expect(e.pesan).not.toBe(GALAT_SESI_HABIS)
+    expect(localStorage.getItem('pos.sesi.toko')).not.toBeNull()
+  })
+
+  it('refresh yang dibalas 5xx juga tidak membuang sesi', async () => {
+    simpanSesi('tenant', {
+      access_token: 'lama',
+      refresh_token: 'segar',
+      kedaluwarsa: Date.now() + 1000,
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        url.includes('/auth/refresh')
+          ? balasan(503, { success: false, message: 'deploy' })
+          : balasan(401, { success: false, message: 'kedaluwarsa' }),
+      ),
+    )
+
+    const e = await tangkap(api.get('/me'))
+    expect(e.bisaDiantre).toBe(true)
+    expect(localStorage.getItem('pos.sesi.toko')).not.toBeNull()
+  })
+
+  it('token yang sudah diperbarui tab lain dipakai — refresh token TIDAK ditukar lagi', async () => {
+    // Tab ini mengirim dengan token lama; sementara itu tab lain sudah
+    // menukar refresh token dan menyimpan pasangan baru.
+    simpanSesi('tenant', {
+      access_token: 'lama',
+      refresh_token: 'segar',
+      kedaluwarsa: Date.now() + 60_000,
+    })
+    let refresh = 0
+    const palsu = vi.fn(async (url: string, init: { headers: Record<string, string> }) => {
+      if (url.includes('/auth/refresh')) {
+        refresh++
+        return balasan(401, { success: false, message: 'token sudah dirotasi' })
+      }
+      if (init.headers.Authorization === 'Bearer lama') {
+        simpanSesi('tenant', {
+          access_token: 'dari-tab-lain',
+          refresh_token: 'segar2',
+          kedaluwarsa: Date.now() + 60_000,
+        })
+        return balasan(401, { success: false, message: 'kedaluwarsa' })
+      }
+      return balasan(200, { success: true, message: '', data: { ok: true } })
+    })
+    vi.stubGlobal('fetch', palsu)
+
+    await expect(api.get('/me')).resolves.toEqual({ ok: true })
+    expect(refresh).toBe(0)
+    expect(panggilan(palsu, 1)[1].headers.Authorization).toBe('Bearer dari-tab-lain')
+  })
+
   it('query kosong tidak ikut dikirim ke URL', async () => {
     const palsu = vi.fn().mockResolvedValue(balasan(200, { success: true, message: '', data: [] }))
     vi.stubGlobal('fetch', palsu)

@@ -8,6 +8,7 @@ import {
   daftarPerluDiperiksa,
   jumlahMenunggu,
   kirimAntrean,
+  pulihkanYangMenggantung,
 } from './antrean'
 
 async function taruh(id: string, ringkasan = 'Transaksi', nominal = 10000) {
@@ -142,5 +143,22 @@ describe('antrean offline', () => {
     }
     expect(badan.operations[0]!.idempotency_key).toBe('A1')
     expect(badan.operations[0]!.id).toBe('A1')
+  })
+
+  it('operasi yang tertahan "mengirim" (tab tertutup di tengah kirim) dikirim ulang', async () => {
+    await taruh('A1')
+    await db.antrean.update('A1', { status: 'mengirim' })
+    const post = vi.spyOn(api, 'post').mockResolvedValue({
+      device_id: 'd', applied: 1, duplicate: 0, rejected: 0,
+      results: [{ id: 'A1', status: 'applied' }],
+    })
+
+    // Tanpa pemulihan, kirimAntrean tidak pernah menyentuhnya.
+    expect(await kirimAntrean()).toBeNull()
+    expect(post).not.toHaveBeenCalled()
+
+    expect(await pulihkanYangMenggantung()).toBe(1)
+    expect(await kirimAntrean()).toEqual({ terkirim: 1, duplikat: 0, gagal: 0 })
+    expect(await db.antrean.get('A1')).toBeUndefined()
   })
 })

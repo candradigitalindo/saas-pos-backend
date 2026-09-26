@@ -11,6 +11,7 @@ import { useToast } from '@/bersama/komponen/toast'
 import { useSesi } from '@/bersama/hooks/use-sesi'
 import { GalatAPI } from '@/lib/api-client'
 import { galatKolom } from '@/lib/galat-kolom'
+import { IZIN } from '@/lib/izin'
 import type { Pengguna } from '@/bersama/tipe/organisasi'
 import { pengaturanApi } from '../api'
 
@@ -108,6 +109,27 @@ function DialogPengguna({
 }) {
   const toast = useToast()
   const qc = useQueryClient()
+  const { boleh } = useSesi()
+
+  // Cabang: hanya ditanyakan bila usahanya punya lebih dari satu cabang
+  // aktif. Usaha satu cabang (mayoritas) tidak perlu melihatnya sama sekali —
+  // staf barunya otomatis bekerja di cabang itu.
+  const toko = useQuery({
+    queryKey: ['outlets'],
+    queryFn: () => pengaturanApi.daftarToko(),
+    enabled: boleh(IZIN.outletManage),
+  })
+  const tokoAktif = useMemo(
+    () => (toko.data?.data ?? []).filter((t) => t.is_active),
+    [toko.data],
+  )
+  const tanyaCabang = tokoAktif.length > 1
+  // null = belum disentuh: pengguna baru → semua cabang; pengguna lama →
+  // cabang yang sudah dimilikinya.
+  const [cabangDipilih, setCabangDipilih] = useState<Set<string> | null>(
+    awal?.outlet_ids ? new Set(awal.outlet_ids) : null,
+  )
+  const cabang = cabangDipilih ?? new Set(tokoAktif.map((t) => t.id))
 
   const [nama, setNama] = useState(awal?.name ?? '')
   const [username, setUsername] = useState(awal?.username ?? '')
@@ -159,6 +181,10 @@ function DialogPengguna({
   const simpan = useMutation({
     mutationFn: () => {
       const tambahan = [...peranTambahan]
+      // Cabang hanya dikirim bila memang ditanyakan dan diubah — tanpanya
+      // server memberi staf baru semua cabang, dan staf lama tidak berubah.
+      const aksesCabang =
+        tanyaCabang && cabangDipilih ? { outlet_ids: [...cabangDipilih] } : {}
       if (awal) {
         return pengaturanApi.ubahPengguna(awal.id, {
           name: nama.trim(),
@@ -167,6 +193,7 @@ function DialogPengguna({
           ...(sandi ? { password: sandi } : {}),
           role_id: peranUtama,
           role_ids: tambahan,
+          ...aksesCabang,
         })
       }
       return pengaturanApi.buatPengguna({
@@ -176,10 +203,14 @@ function DialogPengguna({
         password: sandi,
         role_id: peranUtama,
         ...(tambahan.length ? { role_ids: tambahan } : {}),
+        ...aksesCabang,
       })
     },
     onSuccess: (u) => {
       qc.invalidateQueries({ queryKey: ['pengguna'] })
+      // Bisa jadi yang diubah adalah akun sendiri (peran/cabang) — menu dan
+      // toko aktif dihitung dari /me.
+      qc.invalidateQueries({ queryKey: ['me'] })
       toast.berhasil(awal ? `${u.name} diperbarui.` : `${u.name} bisa mulai masuk sekarang.`)
       onTutup()
     },
@@ -192,7 +223,12 @@ function DialogPengguna({
   })
 
   const lengkap =
-    nama.trim() && username.trim() && email.trim() && peranUtama && (awal || sandi.length >= 8)
+    nama.trim() &&
+    username.trim() &&
+    email.trim() &&
+    peranUtama &&
+    (awal || sandi.length >= 8) &&
+    (!tanyaCabang || cabang.size > 0)
 
   return (
     <Dialog open onOpenChange={(o) => !o && !simpan.isPending && onTutup()}>
@@ -297,6 +333,44 @@ function DialogPengguna({
                 </label>
               ))}
           </fieldset>
+
+          {tanyaCabang && (
+            <fieldset className="flex flex-col gap-2">
+              <legend className="mb-1 text-label font-medium text-teks-sekunder">
+                Bekerja di cabang
+              </legend>
+              <p className="mb-1 text-keterangan text-teks-redup">
+                Kasir hanya bisa berjualan, membuka shift, dan mengurus stok di
+                cabang yang dicentang. Minimal satu.
+              </p>
+              {tokoAktif.map((t) => (
+                <label
+                  key={t.id}
+                  className="flex min-h-12 cursor-pointer items-center gap-3 rounded-kontrol px-2 hover:bg-permukaan-2"
+                >
+                  <input
+                    type="checkbox"
+                    checked={cabang.has(t.id)}
+                    onChange={(e) =>
+                      setCabangDipilih(() => {
+                        const baru = new Set(cabang)
+                        if (e.target.checked) baru.add(t.id)
+                        else baru.delete(t.id)
+                        return baru
+                      })
+                    }
+                    className="h-5 w-5 shrink-0 accent-[var(--warna-utama)]"
+                  />
+                  <span className="text-label text-teks-utama">{t.name}</span>
+                </label>
+              ))}
+              {galatKolom(kolomGalat, 'outlet_ids') && (
+                <p className="text-keterangan text-bahaya-teks">
+                  {galatKolom(kolomGalat, 'outlet_ids')}
+                </p>
+              )}
+            </fieldset>
+          )}
 
           {/* Pratinjau izin gabungan: pemilik melihat akibatnya SEBELUM menyimpan. */}
           {rincianPeran.isLoading ? (

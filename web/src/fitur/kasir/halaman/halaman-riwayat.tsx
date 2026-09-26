@@ -93,6 +93,10 @@ function BarisTransaksi({
   onBatalkan: () => void
 }) {
   const sudahBatal = !!transaksi.voided_at
+  // Hanya penjualan berstatus selesai yang bisa dibatalkan. Baris retur
+  // (status 'returned', bernilai negatif) bukan penjualan — tombolnya dulu
+  // tetap muncul dan selalu berakhir dengan penolakan server.
+  const bisaDibatalkan = transaksi.status === 'completed' && !sudahBatal
 
   return (
     <Kartu className="flex items-center justify-between gap-3 p-4">
@@ -114,7 +118,7 @@ function BarisTransaksi({
           {formatRupiah(transaksi.total)}
         </p>
         {/* Izin menyembunyikan: kalau tidak berhak, tombolnya tidak ada. */}
-        {bolehBatalkan && !sudahBatal && (
+        {bolehBatalkan && bisaDibatalkan && (
           <Tombol jenis="kedua" ukuran="padat" onClick={onBatalkan}>
             Batalkan
           </Tombol>
@@ -150,14 +154,10 @@ function DialogBatalkan({
       toast.berhasil(`Transaksi ${transaksi.receipt_no} dibatalkan.`)
       onTutup()
     },
+    // 409 punya beberapa sebab (sudah dibatalkan, sudah diretur, kasbonnya
+    // sudah dicicil) — kalimat dari server yang menyebut sebab sebenarnya.
     onError: (e) =>
-      setGalat(
-        e instanceof GalatAPI
-          ? e.status === 409
-            ? 'Transaksi ini sudah dibatalkan sebelumnya.'
-            : e.pesan
-          : 'Terjadi kesalahan. Coba lagi.',
-      ),
+      setGalat(e instanceof GalatAPI ? e.pesan : 'Terjadi kesalahan. Coba lagi.'),
   })
 
   return (

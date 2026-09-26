@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ulid } from 'ulid'
 import { NotebookPen } from 'lucide-react'
 import { Kartu } from '@/bersama/ui/kartu'
 import { KolomUang } from '@/bersama/ui/kolom-uang'
@@ -166,27 +167,30 @@ function DialogSetoran({
   const [cara, setCara] = useState<'cash' | 'qris' | 'transfer'>('cash')
   const [galat, setGalat] = useState<string | null>(null)
 
+  // Satu kunci per dialog: tombol yang ditekan lagi setelah sinyal putus
+  // tidak mencatat setoran yang sama dua kali.
+  const kunci = useRef(ulid())
   const bayar = useMutation({
     mutationFn: () =>
-      pelangganApi.terimaSetoran({
-        receivable_id: kasbon.id,
-        amount: nominal,
-        method: cara,
-      }),
+      pelangganApi.terimaSetoran(
+        {
+          receivable_id: kasbon.id,
+          amount: nominal,
+          method: cara,
+        },
+        kunci.current,
+      ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['kasbon'] })
       qc.invalidateQueries({ queryKey: ['shift-aktif'] })
       toast.berhasil(`Setoran ${formatRupiah(nominal)} dari ${nama} tercatat.`)
       onTutup()
     },
-    onError: (e) =>
-      setGalat(
-        e instanceof GalatAPI
-          ? e.status === 409
-            ? 'Setoran melebihi sisa utangnya. Periksa lagi nominalnya.'
-            : e.pesan
-          : 'Terjadi kesalahan. Coba lagi.',
-      ),
+    // Kalimat server dipakai apa adanya: 409 di sini berarti kasbonnya sudah
+    // lunas/dihapusbukukan, sedangkan kelebihan bayar dibalas 400 dengan
+    // pesannya sendiri — menebak dari kode status dulu menyebut "melebihi
+    // sisa" untuk kasbon yang sudah lunas.
+    onError: (e) => setGalat(e instanceof GalatAPI ? e.pesan : 'Terjadi kesalahan. Coba lagi.'),
   })
 
   const lebih = nominal > kasbon.outstanding

@@ -21,6 +21,7 @@ import { formatTanggalJam, tanggalISO } from '@/bersama/util/tanggal'
 import { cn } from '@/bersama/util/cn'
 import { KEMAMPUAN, panelApi, type AdminPanel } from '../api'
 import { SegmenPilihan } from '@/bersama/ui/segmen'
+import { keDate } from '@/bersama/util/tanggal'
 
 /**
  * Panel internal penyedia SaaS.
@@ -75,7 +76,7 @@ function PenyediaSesiPanel({ children }: { children: ReactNode }) {
       simpanSesi('platform', {
         access_token: hasil.access_token,
         refresh_token: '',
-        kedaluwarsa: new Date(hasil.expires_at).getTime(),
+        kedaluwarsa: keDate(hasil.expires_at).getTime(),
       })
       setPunyaSesi(true)
       await qc.invalidateQueries({ queryKey: ['panel-me'] })

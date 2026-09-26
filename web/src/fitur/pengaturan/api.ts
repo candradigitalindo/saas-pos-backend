@@ -18,6 +18,8 @@ export interface InputPengguna {
   role_id: string
   /** Peran TAMBAHAN. Izin efektif = gabungan peran utama + peran-peran ini. */
   role_ids?: string[]
+  /** Cabang tempat staf boleh bekerja. Tidak dikirim saat membuat = semua cabang aktif. */
+  outlet_ids?: string[]
 }
 
 export const pengaturanApi = {

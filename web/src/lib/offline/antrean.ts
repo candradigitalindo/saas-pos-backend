@@ -41,6 +41,23 @@ export async function daftarPerluDiperiksa(): Promise<AntreanOperasi[]> {
   return db.antrean.where('status').equals('perlu-diperiksa').toArray()
 }
 
+/**
+ * Mengembalikan operasi yang tertahan berstatus "mengirim" ke antrean.
+ *
+ * Status itu hanya dipasang selama satu pengiriman berjalan. Bila tab ditutup,
+ * HP mati, atau halaman dimuat ulang di tengah pengiriman, operasinya
+ * tertinggal "mengirim" selamanya: kirimAntrean hanya mengambil yang
+ * "menunggu", jadi ia tidak pernah dikirim ulang — padahal tetap dihitung
+ * sebagai belum terkirim dan menghalangi keluar akun.
+ *
+ * Dipanggil sekali saat mesin sinkronisasi mulai. Kalau ternyata tab lain
+ * sedang mengirim operasi yang sama, kiriman ulangnya aman: server membalas
+ * "duplicate" berkat kunci idempotensi.
+ */
+export async function pulihkanYangMenggantung(): Promise<number> {
+  return db.antrean.where('status').equals('mengirim').modify({ status: 'menunggu' })
+}
+
 /** Mengembalikan satu operasi bermasalah ke antrean untuk dicoba lagi. */
 export async function cobaLagi(id: string): Promise<void> {
   await db.antrean.update(id, { status: 'menunggu', percobaan: 0, alasan: undefined })
