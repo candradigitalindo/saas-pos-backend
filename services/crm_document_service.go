@@ -634,7 +634,7 @@ func quotationToResponse(q models.Quotation, projectID string) structs.Quotation
 		ID: q.ID, Number: q.Number, CustomerID: q.CustomerID, OwnerID: q.OwnerID,
 		Status: q.Status, Subtotal: q.Subtotal, DiscountAmount: q.DiscountAmount,
 		TaxAmount: q.TaxAmount, Total: q.Total, Note: q.Note, ProjectID: projectID,
-		CreatedAt: q.CreatedAt.Format(saleTimeLayout),
+		CreatedAt: q.CreatedAt.UTC().Format(saleTimeLayout),
 	}
 	if q.DealID != nil {
 		r.DealID = *q.DealID
@@ -643,7 +643,7 @@ func quotationToResponse(q models.Quotation, projectID string) structs.Quotation
 		r.ValidUntil = q.ValidUntil.Format(crmDateLayout)
 	}
 	if q.AcceptedAt != nil {
-		r.AcceptedAt = q.AcceptedAt.Format(saleTimeLayout)
+		r.AcceptedAt = q.AcceptedAt.UTC().Format(saleTimeLayout)
 	}
 	for _, it := range q.Items {
 		ir := structs.QuotationItemResponse{
@@ -662,7 +662,7 @@ func projectToResponse(p models.Project) structs.ProjectResponse {
 	r := structs.ProjectResponse{
 		ID: p.ID, CustomerID: p.CustomerID, OwnerID: p.OwnerID, Name: p.Name,
 		Status: p.Status, ContractValue: p.ContractValue,
-		CreatedAt: p.CreatedAt.Format(saleTimeLayout),
+		CreatedAt: p.CreatedAt.UTC().Format(saleTimeLayout),
 	}
 	if p.QuotationID != nil {
 		r.QuotationID = *p.QuotationID
@@ -679,7 +679,7 @@ func projectToResponse(p models.Project) structs.ProjectResponse {
 			tr.DueDate = t.DueDate.Format(crmDateLayout)
 		}
 		if t.DoneAt != nil {
-			tr.DoneAt = t.DoneAt.Format(saleTimeLayout)
+			tr.DoneAt = t.DoneAt.UTC().Format(saleTimeLayout)
 		}
 		r.Tasks = append(r.Tasks, tr)
 	}
@@ -700,7 +700,7 @@ func invoiceToResponse(in models.Invoice) structs.InvoiceResponse {
 		Status: in.Status, Subtotal: in.Subtotal, DiscountAmount: in.DiscountAmount,
 		TaxAmount: in.TaxAmount, Total: in.Total, PaidAmount: in.PaidAmount,
 		Outstanding: in.Total - in.PaidAmount, TermLabel: in.TermLabel,
-		CreatedAt: in.CreatedAt.Format(saleTimeLayout),
+		CreatedAt: in.CreatedAt.UTC().Format(saleTimeLayout),
 	}
 	if in.ProjectID != nil {
 		r.ProjectID = *in.ProjectID
@@ -724,7 +724,7 @@ func invoiceToResponse(in models.Invoice) structs.InvoiceResponse {
 	for _, p := range in.Payments {
 		r.Payments = append(r.Payments, structs.InvoicePaymentResponse{
 			ID: p.ID, Amount: p.Amount, Method: p.Method,
-			PaidAt: p.PaidAt.Format(saleTimeLayout), BusinessDate: p.BusinessDate.Format(crmDateLayout),
+			PaidAt: p.PaidAt.UTC().Format(saleTimeLayout), BusinessDate: p.BusinessDate.Format(crmDateLayout),
 			ProofURL: p.ProofURL,
 		})
 	}

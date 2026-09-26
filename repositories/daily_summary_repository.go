@@ -199,7 +199,7 @@ func summaryScope(ctx context.Context, outletID, from, to string) *gorm.DB {
 	if outletID != "" {
 		q = q.Where("outlet_id = ?", outletID)
 	}
-	return q
+	return scopeOutlet(ctx, q, "outlet_id")
 }
 
 // SalesByCashier mengelompokkan penjualan 'completed' per kasir (created_by),
@@ -213,6 +213,7 @@ func SalesByCashier(ctx context.Context, outletID, from, to string) ([]SummaryGr
 	if outletID != "" {
 		q = q.Where("s.outlet_id = ?", outletID)
 	}
+	q = scopeOutlet(ctx, q, "s.outlet_id")
 	var rows []SummaryGroupRow
 	err := q.Select(`
 		u.name AS key,
@@ -257,6 +258,7 @@ func SalesByHour(ctx context.Context, outletID, from, to string) ([]SummaryGroup
 	if outletID != "" {
 		q = q.Where("s.outlet_id = ?", outletID)
 	}
+	q = scopeOutlet(ctx, q, "s.outlet_id")
 	// Ekspresi jamnya dipakai dua kali — di SELECT dan di GROUP BY — jadi
 	// ditulis sekali di sini supaya keduanya tidak bisa berbeda diam-diam.
 	const ekspresiJam = `LPAD(EXTRACT(HOUR FROM s.occurred_at AT TIME ZONE o.timezone)::int::text, 2, '0')`
@@ -303,6 +305,7 @@ func SalesByPaymentMethod(ctx context.Context, outletID, from, to string) ([]Sum
 	if outletID != "" {
 		q = q.Where("s.outlet_id = ?", outletID)
 	}
+	q = scopeOutlet(ctx, q, "s.outlet_id")
 	var rows []SummaryGroupRow
 	err := q.Select(`
 		sp.method                          AS key,
@@ -328,6 +331,7 @@ func SalesByPaymentMethod(ctx context.Context, outletID, from, to string) ([]Sum
 	if outletID != "" {
 		kq = kq.Where("outlet_id = ?", outletID)
 	}
+	kq = scopeOutlet(ctx, kq, "outlet_id")
 	var kembalian int64
 	if err := kq.Select("COALESCE(SUM(change_amount), 0)").Scan(&kembalian).Error; err != nil {
 		return nil, err

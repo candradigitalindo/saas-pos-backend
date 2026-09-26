@@ -68,3 +68,25 @@ func TestWithPermissionsCopies(t *testing.T) {
 		t.Fatal("context seharusnya menyimpan salinan, bukan referensi slice")
 	}
 }
+
+func TestOutletScope(t *testing.T) {
+	ctx := context.Background()
+	if _, terbatas := OutletScope(ctx); terbatas {
+		t.Fatal("tanpa WithOutletScope seharusnya tidak terbatas")
+	}
+	if !OutletAllowed(ctx, "X") {
+		t.Fatal("tanpa batas cabang, semua outlet boleh")
+	}
+
+	asal := []string{"A"}
+	ctx = WithOutletScope(ctx, asal)
+	asal[0] = "Z" // mengubah slice asal tidak boleh mengubah isi context
+	if !OutletAllowed(ctx, "A") || OutletAllowed(ctx, "Z") || OutletAllowed(ctx, "B") {
+		t.Fatal("OutletAllowed salah membaca daftar cabang")
+	}
+
+	kosong := WithOutletScope(context.Background(), nil)
+	if ids, terbatas := OutletScope(kosong); !terbatas || len(ids) != 0 {
+		t.Fatal("daftar kosong tetap berarti TERBATAS (tanpa cabang)")
+	}
+}

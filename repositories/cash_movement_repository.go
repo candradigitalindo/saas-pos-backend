@@ -19,5 +19,6 @@ func ListCashMovements(ctx context.Context, shiftID string, limit, offset int) (
 	if shiftID != "" {
 		where, args = "shift_id = ?", []any{shiftID}
 	}
+	where, args = whereOutlet(ctx, where, args, "outlet_id")
 	return paginateTenant[models.CashMovement](ctx, where, args, "occurred_at DESC, id DESC", limit, offset)
 }

@@ -22,8 +22,8 @@ func userToResponse(user models.User) structs.UserResponse {
 		RoleID:    user.RoleID,
 		RoleName:  user.Role.Name,
 		IsActive:  user.IsActive,
-		CreatedAt: user.CreatedAt.Format(timeLayout),
-		UpdatedAt: user.UpdatedAt.Format(timeLayout),
+		CreatedAt: user.CreatedAt.UTC().Format(timeLayout),
+		UpdatedAt: user.UpdatedAt.UTC().Format(timeLayout),
 	}
 }
 

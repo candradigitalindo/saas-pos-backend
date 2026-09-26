@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"strings"
 
 	"candra/backend-api/internal/reqctx"
 
@@ -39,6 +40,67 @@ func scopeOwnUnless(ctx context.Context, db *gorm.DB, col string, bypassPerms ..
 		return db
 	}
 	return db.Where(col+" = ?", reqctx.UserID(ctx))
+}
+
+// ── Batas cabang (user_outlets) untuk query BACA ───────────────────────────
+//
+// Staf yang tidak memegang outlet.manage hanya boleh melihat data cabang
+// tempat ia bekerja — penjualan, shift, kas, stok, pembelian, opname,
+// transfer, dan laporan. Daftarnya dimuat middleware TenantScope ke context
+// (reqctx.OutletScope); tanpa batas → query tidak disentuh.
+//
+// Kueri yang MEMINTA cabang lain secara eksplisit (outlet_id=B) tidak
+// ditolak di sini — hasilnya kosong, karena `outlet_id = B AND outlet_id IN
+// (A)` tidak pernah benar. Detail dokumen diperiksa OutletVisible.
+
+// scopeOutlet membatasi query ke cabang yang boleh dilihat user permintaan.
+// `col` harus dikualifikasi nama tabel bila query-nya memakai JOIN.
+func scopeOutlet(ctx context.Context, db *gorm.DB, col string) *gorm.DB {
+	ids, terbatas := reqctx.OutletScope(ctx)
+	if !terbatas {
+		return db
+	}
+	if len(ids) == 0 {
+		return db.Where("1 = 0")
+	}
+	return db.Where(col+" IN ?", ids)
+}
+
+// whereOutlet = scopeOutlet untuk pemanggil paginateTenant yang menyusun
+// klausa WHERE sebagai teks: menambahkan batas cabang ke `where`/`args`.
+// `cols` lebih dari satu = cukup salah satu kolom cocok (transfer stok
+// terlihat oleh cabang asal MAUPUN tujuan).
+func whereOutlet(ctx context.Context, where string, args []any, cols ...string) (string, []any) {
+	ids, terbatas := reqctx.OutletScope(ctx)
+	if !terbatas {
+		return where, args
+	}
+	kondisi := "1 = 0"
+	if len(ids) > 0 {
+		bagian := make([]string, len(cols))
+		for i, c := range cols {
+			bagian[i] = c + " IN ?"
+			args = append(args, ids)
+		}
+		kondisi = "(" + strings.Join(bagian, " OR ") + ")"
+	}
+	if where == "" {
+		return kondisi, args
+	}
+	return "(" + where + ") AND " + kondisi, args
+}
+
+// OutletVisible melaporkan apakah dokumen milik outlet-outlet ini boleh
+// dilihat user permintaan (cukup salah satu). Dipakai endpoint detail —
+// penjualan, shift, pembelian, opname, transfer — yang memuat dokumennya lewat
+// fungsi Find*InTenant bersama jalur tulis.
+func OutletVisible(ctx context.Context, outletIDs ...string) bool {
+	for _, id := range outletIDs {
+		if reqctx.OutletAllowed(ctx, id) {
+			return true
+		}
+	}
+	return false
 }
 
 // currentUserID mengambil user_id dari context (mis. untuk stempel owner_id saat

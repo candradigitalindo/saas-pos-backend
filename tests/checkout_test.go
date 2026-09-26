@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+
+	"candra/backend-api/internal/ulid"
 )
 
 // posFixture: tenant + outlet + unit + 2 produk ber-stok + shift terbuka.
@@ -44,7 +46,7 @@ func setupPOS(t *testing.T, slug string) posFixture {
 
 func adjust(t *testing.T, f tenantFixture, outletID, productID, newQty, reason string) {
 	t.Helper()
-	call(t, "POST", "/api/v1/stock-adjustments", f.token, map[string]any{
+	checkoutLike(t, f.token, ulid.New(), "/api/v1/stock-adjustments", map[string]any{
 		"outlet_id": outletID, "product_id": productID, "new_qty": newQty, "reason": reason,
 	}).mustCode(t, "stock adjust", 201)
 }
@@ -262,18 +264,18 @@ func TestKasbonCreatesAndSettlesReceivable(t *testing.T) {
 	assertI64(t, r, "outstanding", 20000)
 
 	// Bayar sebagian.
-	call(t, "POST", "/api/v1/receivable-payments", f.token, map[string]any{
+	checkoutLike(t, f.token, ulid.New(), "/api/v1/receivable-payments", map[string]any{
 		"receivable_id": recID, "amount": 12000, "method": "cash",
 	}).mustCode(t, "bayar piutang 1", 201)
 	// Pelunasan.
-	paid := call(t, "POST", "/api/v1/receivable-payments", f.token, map[string]any{
+	paid := checkoutLike(t, f.token, ulid.New(), "/api/v1/receivable-payments", map[string]any{
 		"receivable_id": recID, "amount": 8000, "method": "cash",
 	}).mustCode(t, "bayar piutang 2", 201).data(t)
 	if paid["status"] != "paid" {
 		t.Fatalf("status piutang = %v, mau paid", paid["status"])
 	}
 	// Overpay ditolak.
-	call(t, "POST", "/api/v1/receivable-payments", f.token, map[string]any{
+	checkoutLike(t, f.token, ulid.New(), "/api/v1/receivable-payments", map[string]any{
 		"receivable_id": recID, "amount": 1, "method": "cash",
 	}).mustCode(t, "overpay", 409)
 }

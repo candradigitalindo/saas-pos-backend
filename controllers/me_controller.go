@@ -34,13 +34,34 @@ func Me(c *gin.Context) {
 		return
 	}
 
-	outletIDs, err := repositories.OutletIDsForUser(ctx, user.ID)
+	// Pemegang outlet.manage bekerja di SEMUA cabang — termasuk cabang yang
+	// baru dibuat, yang tidak pernah punya baris user_outlets. Dulu daftar ini
+	// selalu dari user_outlets saja, sehingga pemilik tidak bisa berpindah ke
+	// cabang barunya di aplikasi ("Pakai toko ini" tidak berefek).
+	var (
+		outletIDs []string
+		err       error
+	)
+	if reqctx.HasPermission(ctx, "outlet.manage") {
+		outletIDs, err = repositories.ActiveOutletIDs(ctx, nil)
+	} else {
+		outletIDs, err = repositories.OutletIDsForUser(ctx, user.ID)
+	}
 	if err != nil {
 		respondServiceError(c, err)
 		return
 	}
 	if outletIDs == nil {
 		outletIDs = []string{}
+	}
+	rincian, err := repositories.OutletsByIDs(ctx, nil, outletIDs)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	outlets := make([]structs.OutletResponse, len(rincian))
+	for i, o := range rincian {
+		outlets[i] = outletToResponse(o)
 	}
 
 	perms := reqctx.Permissions(ctx)
@@ -56,6 +77,7 @@ func Me(c *gin.Context) {
 			Tenant:      tenantToResponse(tenant),
 			Permissions: perms,
 			OutletIDs:   outletIDs,
+			Outlets:     outlets,
 		},
 	})
 }

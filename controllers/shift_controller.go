@@ -97,6 +97,10 @@ func GetShift(c *gin.Context) {
 		notFoundOr(c, err, repositories.ErrShiftNotFound, "Shift tidak ditemukan")
 		return
 	}
+	if !repositories.OutletVisible(ctx, sh.OutletID) {
+		notFound(c, "Shift tidak ditemukan")
+		return
+	}
 
 	res := shiftToResponse(sh)
 

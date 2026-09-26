@@ -110,6 +110,7 @@ func ListSales(ctx context.Context, f SaleFilter, limit, offset int) ([]models.S
 		}
 		where += c
 	}
+	where, args = whereOutlet(ctx, where, args, "outlet_id")
 	return paginateTenant[models.Sale](ctx, where, args, "occurred_at DESC, id DESC", limit, offset)
 }
 
@@ -158,6 +159,7 @@ func SummarizeSales(ctx context.Context, outletID, from, to string) (SalesSummar
 	if outletID != "" {
 		q = q.Where("outlet_id = ?", outletID)
 	}
+	q = scopeOutlet(ctx, q, "outlet_id")
 	var s SalesSummary
 	err := q.Select(`
 		COUNT(*)                              AS sales_count,

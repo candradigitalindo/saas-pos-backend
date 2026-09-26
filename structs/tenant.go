@@ -20,4 +20,10 @@ type MeResponse struct {
 	Tenant      TenantResponse `json:"tenant"`
 	Permissions []string       `json:"permissions"`
 	OutletIDs   []string       `json:"outlet_ids"`
+	// Outlets = rincian cabang pada OutletIDs, urutan sama. Kasir butuh
+	// pengaturan harga cabangnya (pajak, biaya layanan) untuk menghitung total
+	// yang PERSIS sama dengan server — termasuk saat offline, ketika total
+	// itulah yang dibayar pas lewat QRIS/kasbon — padahal kasir tidak boleh
+	// membaca GET /outlets (butuh outlet.manage).
+	Outlets []OutletResponse `json:"outlets"`
 }

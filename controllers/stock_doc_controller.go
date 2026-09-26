@@ -90,6 +90,10 @@ func GetOpname(c *gin.Context) {
 		notFoundOr(c, err, repositories.ErrOpnameNotFound, "Opname tidak ditemukan")
 		return
 	}
+	if !repositories.OutletVisible(c.Request.Context(), o.OutletID) {
+		notFound(c, "Opname tidak ditemukan")
+		return
+	}
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.OpnameResponse]{
 		Success: true, Message: "Detail opname", Data: services.OpnameToResponse(&o),
 	})
@@ -165,6 +169,11 @@ func GetTransfer(c *gin.Context) {
 	var tr models.StockTransfer
 	if err := repositories.FindTransferInTenant(c.Request.Context(), nil, c.Param("id"), &tr); err != nil {
 		notFoundOr(c, err, repositories.ErrTransferNotFound, "Transfer tidak ditemukan")
+		return
+	}
+	// Transfer terlihat oleh cabang asal MAUPUN tujuan.
+	if !repositories.OutletVisible(c.Request.Context(), tr.FromOutletID, tr.ToOutletID) {
+		notFound(c, "Transfer tidak ditemukan")
 		return
 	}
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.TransferResponse]{

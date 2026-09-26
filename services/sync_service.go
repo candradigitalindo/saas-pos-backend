@@ -5,6 +5,7 @@ import (
 
 	"candra/backend-api/config"
 	"candra/backend-api/helpers"
+	"candra/backend-api/internal/reqctx"
 	"candra/backend-api/repositories"
 	"candra/backend-api/structs"
 
@@ -90,6 +91,14 @@ func applySyncOp(ctx context.Context, op structs.SyncOperation) (structs.SyncOpR
 		return structs.SyncOpResult{ID: op.ID, Status: "rejected", Reason: reason}
 	}
 
+	// Rute /sync dibuka untuk siapa pun yang boleh berjualan ATAU mencatat
+	// kunjungan, jadi izin WAJIB diperiksa lagi per operasi — sama dengan izin
+	// endpoint HTTP padanannya (POST /sales, POST /visits). Tanpa ini kasir
+	// bisa menulis kunjungan sales lewat pintu belakang ini.
+	if perm, ok := syncOpPermission[op.Op]; ok && !reqctx.HasPermission(ctx, perm) {
+		return reject("Anda tidak punya izin untuk operasi " + op.Op), nil
+	}
+
 	switch op.Op {
 	case "sale.create":
 		var payload structs.CheckoutRequest
@@ -148,6 +157,13 @@ func applySyncOp(ctx context.Context, op structs.SyncOperation) (structs.SyncOpR
 	default:
 		return reject("operasi tidak dikenal: " + op.Op), nil
 	}
+}
+
+// syncOpPermission memetakan jenis operasi /sync/push ke izin yang sama dengan
+// endpoint HTTP padanannya.
+var syncOpPermission = map[string]string{
+	"sale.create":  "sale.create",
+	"visit.upsert": "crm.visit.checkin",
 }
 
 // cleanReason menampilkan pesan error yang aman untuk klien.

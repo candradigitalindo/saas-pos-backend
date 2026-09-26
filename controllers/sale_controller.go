@@ -75,6 +75,12 @@ func GetSale(c *gin.Context) {
 		notFoundOr(c, err, repositories.ErrSaleNotFound, "Transaksi tidak ditemukan")
 		return
 	}
+	// Transaksi cabang lain diperlakukan seperti tidak ada (batas cabang,
+	// sama seperti lapis 3 CRM) — keberadaannya pun tidak dibocorkan.
+	if !repositories.OutletVisible(c.Request.Context(), sale.OutletID) {
+		notFound(c, "Transaksi tidak ditemukan")
+		return
+	}
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.SaleResponse]{
 		Success: true, Message: "Berhasil mengambil data transaksi", Data: services.SaleToResponse(&sale),
 	})

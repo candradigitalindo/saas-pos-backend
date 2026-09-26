@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"io"
 	"net/http"
 
 	"candra/backend-api/helpers"
@@ -23,15 +24,22 @@ type stockAdjustRequest struct {
 	Reason    string `json:"reason" binding:"required,min=1,max=200"`
 }
 
-// AdjustStock menyetel/menggeser saldo stok dan mencatat gerakannya.
+// AdjustStock menyetel/menggeser saldo stok dan mencatat gerakannya. Wajib
+// header Idempotency-Key (§8).
 func AdjustStock(c *gin.Context) {
+	raw, err := io.ReadAll(io.LimitReader(c.Request.Body, checkoutMaxBodyBytes))
+	if err != nil {
+		badRequest(c, "body", "Gagal membaca body")
+		return
+	}
 	var req stockAdjustRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := bindJSONBytes(raw, &req); err != nil {
 		validationFailed(c, err)
 		return
 	}
 	in := services.StockAdjustInput{
 		OutletID: req.OutletID, ProductID: req.ProductID, VariantID: req.VariantID, Reason: req.Reason,
+		IdempotencyKey: c.GetHeader("Idempotency-Key"), RequestHash: helpers.SHA256Hex(raw),
 	}
 	if req.NewQty != "" {
 		d, err := decimal.NewFromString(req.NewQty)
@@ -50,14 +58,12 @@ func AdjustStock(c *gin.Context) {
 		in.Delta = &d
 	}
 
-	mv, err := services.AdjustStock(c.Request.Context(), in)
+	status, body, err := services.AdjustStock(c.Request.Context(), in)
 	if err != nil {
 		respondServiceError(c, err)
 		return
 	}
-	c.JSON(http.StatusCreated, structs.SuccessResponse[structs.StockMovementResponse]{
-		Success: true, Message: "Stok disesuaikan", Data: stockMovementToResponse(mv),
-	})
+	c.Data(status, "application/json; charset=utf-8", body)
 }
 
 // ListStocks mengembalikan saldo stok (opsional per outlet, opsional hanya yang
@@ -96,7 +102,7 @@ func ListStockMovements(c *gin.Context) {
 	}
 	items := make([]structs.StockMovementResponse, len(rows))
 	for i, r := range rows {
-		items[i] = stockMovementToResponse(r)
+		items[i] = services.StockMovementToResponse(r)
 	}
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.PaginatedResponse[structs.StockMovementResponse]]{
 		Success: true, Message: "Kartu stok",

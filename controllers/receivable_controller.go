@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"errors"
+	"io"
 	"net/http"
 
 	"candra/backend-api/helpers"
@@ -25,7 +26,7 @@ func ListReceivables(c *gin.Context) {
 	}
 	items := make([]structs.ReceivableResponse, len(rows))
 	for i, r := range rows {
-		items[i] = receivableToResponse(r)
+		items[i] = services.ReceivableToResponse(r)
 	}
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.PaginatedResponse[structs.ReceivableResponse]]{
 		Success: true, Message: "Berhasil mengambil data piutang",
@@ -41,14 +42,21 @@ func GetReceivable(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.ReceivableResponse]{
-		Success: true, Message: "Berhasil mengambil data piutang", Data: receivableToResponse(row),
+		Success: true, Message: "Berhasil mengambil data piutang", Data: services.ReceivableToResponse(row),
 	})
 }
 
 // AddReceivablePayment mencatat pembayaran cicilan/pelunasan piutang.
+//
+// Wajib header Idempotency-Key — setoran adalah uang masuk (§8).
 func AddReceivablePayment(c *gin.Context) {
+	raw, err := io.ReadAll(io.LimitReader(c.Request.Body, checkoutMaxBodyBytes))
+	if err != nil {
+		badRequest(c, "body", "Gagal membaca body")
+		return
+	}
 	var req structs.ReceivablePaymentRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := bindJSONBytes(raw, &req); err != nil {
 		validationFailed(c, err)
 		return
 	}
@@ -63,7 +71,8 @@ func AddReceivablePayment(c *gin.Context) {
 		CollectedBy:  &collectedBy,
 		ProofURL:     req.ProofURL,
 	}
-	rec, err := services.AddReceivablePayment(ctx, pay)
+	status, body, err := services.AddReceivablePayment(ctx, pay,
+		c.GetHeader("Idempotency-Key"), helpers.SHA256Hex(raw))
 	switch {
 	case errors.Is(err, repositories.ErrReceivableNotFound):
 		notFound(c, "Piutang tidak ditemukan")
@@ -74,8 +83,6 @@ func AddReceivablePayment(c *gin.Context) {
 	case err != nil:
 		respondServiceError(c, err)
 	default:
-		c.JSON(http.StatusCreated, structs.SuccessResponse[structs.ReceivableResponse]{
-			Success: true, Message: "Pembayaran piutang dicatat", Data: receivableToResponse(rec),
-		})
+		c.Data(status, "application/json; charset=utf-8", body)
 	}
 }

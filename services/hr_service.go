@@ -305,7 +305,9 @@ func CreateAdvance(ctx context.Context, in structs.AdvanceCreateRequest) (struct
 func DisburseAdvance(ctx context.Context, id string) (structs.AdvanceResponse, error) {
 	var out structs.AdvanceResponse
 	err := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
-		a, err := repositories.FindAdvance(ctx, tx, id)
+		// Dikunci: pencairan menulis kas keluar, dan dua klik bersamaan dulu
+		// sama-sama membaca 'pending' lalu mengeluarkan uangnya dua kali.
+		a, err := repositories.LockAdvance(ctx, tx, id)
 		if err != nil {
 			return err
 		}

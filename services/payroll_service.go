@@ -664,13 +664,13 @@ func payrollPeriodToResponse(p models.PayrollPeriod) structs.PayrollPeriodRespon
 		res.OutletID = *p.OutletID
 	}
 	if p.CalculatedAt != nil {
-		res.CalculatedAt = p.CalculatedAt.Format(saleTimeLayout)
+		res.CalculatedAt = p.CalculatedAt.UTC().Format(saleTimeLayout)
 	}
 	if p.LockedAt != nil {
-		res.LockedAt = p.LockedAt.Format(saleTimeLayout)
+		res.LockedAt = p.LockedAt.UTC().Format(saleTimeLayout)
 	}
 	if p.PaidAt != nil {
-		res.PaidAt = p.PaidAt.Format(saleTimeLayout)
+		res.PaidAt = p.PaidAt.UTC().Format(saleTimeLayout)
 	}
 	return res
 }

@@ -359,7 +359,7 @@ func computeDay(d time.Time, key string, loc *time.Location, schedules []models.
 func attendanceToResponse(a models.Attendance) structs.AttendanceResponse {
 	return structs.AttendanceResponse{
 		ID: a.ID, EmployeeID: a.EmployeeID, OutletID: a.OutletID, Kind: a.Kind,
-		OccurredAt: a.OccurredAt.Format(saleTimeLayout), BusinessDate: a.BusinessDate.Format("2006-01-02"),
+		OccurredAt: a.OccurredAt.UTC().Format(saleTimeLayout), BusinessDate: a.BusinessDate.Format("2006-01-02"),
 		Source: a.Source, PhotoURL: a.PhotoURL,
 	}
 }
@@ -367,10 +367,10 @@ func attendanceToResponse(a models.Attendance) structs.AttendanceResponse {
 func correctionToResponse(c models.AttendanceCorrection) structs.CorrectionResponse {
 	r := structs.CorrectionResponse{
 		ID: c.ID, AttendanceID: c.AttendanceID, Reason: c.Reason,
-		NewOccurredAt: c.NewOccurredAt.Format(saleTimeLayout), Status: c.Status,
+		NewOccurredAt: c.NewOccurredAt.UTC().Format(saleTimeLayout), Status: c.Status,
 	}
 	if c.ApprovedAt != nil {
-		r.ApprovedAt = c.ApprovedAt.Format(saleTimeLayout)
+		r.ApprovedAt = c.ApprovedAt.UTC().Format(saleTimeLayout)
 	}
 	return r
 }

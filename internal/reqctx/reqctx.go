@@ -25,6 +25,7 @@ const (
 	partnerUserIDKey
 	platformAdminIDKey
 	platformRoleKey
+	outletScopeKey
 )
 
 // WithTenantID menautkan tenant_id efektif ke context.
@@ -141,4 +142,41 @@ func PlatformAdminID(ctx context.Context) string {
 func PlatformRole(ctx context.Context) string {
 	s, _ := ctx.Value(platformRoleKey).(string)
 	return s
+}
+
+// ── Akses cabang (user_outlets) ──────────────────────────────────────────
+//
+// Di-set oleh middleware TenantScope HANYA untuk user yang TIDAK memegang
+// outlet.manage. Ketiadaan nilai berarti "tanpa batas cabang" (pengelola
+// semua cabang, atau pekerja latar tanpa user).
+
+// WithOutletScope menautkan daftar outlet yang boleh disentuh user ke context.
+// Nilai disalin agar pemanggil tidak bisa mengubahnya belakangan. Daftar
+// kosong (bukan nil) berarti user terbatas tapi belum punya cabang sama sekali.
+func WithOutletScope(ctx context.Context, outletIDs []string) context.Context {
+	salin := make([]string, len(outletIDs))
+	copy(salin, outletIDs)
+	return context.WithValue(ctx, outletScopeKey, salin)
+}
+
+// OutletScope mengembalikan (daftar outlet, true) bila user dibatasi ke
+// cabang tertentu; (nil, false) bila tidak dibatasi.
+func OutletScope(ctx context.Context) ([]string, bool) {
+	ids, ok := ctx.Value(outletScopeKey).([]string)
+	return ids, ok
+}
+
+// OutletAllowed melaporkan apakah outletID boleh disentuh menurut
+// OutletScope. Tanpa batas cabang → selalu true.
+func OutletAllowed(ctx context.Context, outletID string) bool {
+	ids, terbatas := OutletScope(ctx)
+	if !terbatas {
+		return true
+	}
+	for _, id := range ids {
+		if id == outletID {
+			return true
+		}
+	}
+	return false
 }

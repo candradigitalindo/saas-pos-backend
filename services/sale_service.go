@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -88,9 +89,25 @@ func Checkout(ctx context.Context, in CheckoutInput) (int, []byte, bool, error) 
 		if it.Qty.LessThanOrEqual(decimal.Zero) {
 			return 0, nil, false, fmt.Errorf("%w: qty harus lebih besar dari 0", helpers.ErrValidation)
 		}
+		if it.DiscountAmount < 0 {
+			return 0, nil, false, fmt.Errorf("%w: diskon baris tidak boleh negatif", helpers.ErrValidation)
+		}
+	}
+	if in.OrderDiscount < 0 {
+		return 0, nil, false, fmt.Errorf("%w: diskon transaksi tidak boleh negatif", helpers.ErrValidation)
+	}
+	// Izin sale.discount ditegakkan DI SINI, bukan hanya dengan menyembunyikan
+	// kolom diskon di layar: klien bisa dibuat siapa saja, dan /sync/push
+	// membawa badan checkout yang sama.
+	if hasDiscount(in) && reqctx.UserID(ctx) != "" && !reqctx.HasPermission(ctx, "sale.discount") {
+		return 0, nil, false, fmt.Errorf("%w: Anda tidak punya izin memberi diskon", helpers.ErrForbidden)
 	}
 
-	// 0. Di luar transaksi: outlet (butuh zona & batas hari), waktu, tanggal usaha.
+	// 0. Di luar transaksi: hak akses outlet, outlet (butuh zona & batas hari),
+	//    waktu, tanggal usaha.
+	if err := ensureOutletAccess(ctx, in.OutletID); err != nil {
+		return 0, nil, false, err
+	}
 	var outlet models.Outlet
 	if err := repositories.FindOutletByID(ctx, nil, in.OutletID, &outlet); err != nil {
 		return 0, nil, false, fmt.Errorf("%w: outlet tidak ditemukan", helpers.ErrValidation)
@@ -316,6 +333,14 @@ func priceCheckout(in CheckoutInput, outlet models.Outlet, products map[string]m
 		t.total += lineTotal
 	}
 
+	// Diskon transaksi dipotong dari Σ total baris. Melebihinya membuat total
+	// negatif — dan pembayaran tunai berapa pun lalu tercatat "berkembalian"
+	// lebih besar dari uang yang diterima.
+	if in.OrderDiscount > t.total {
+		return nil, t, fmt.Errorf("%w: diskon transaksi (%d) melebihi total belanja (%d)",
+			helpers.ErrValidation, in.OrderDiscount, t.total)
+	}
+
 	t.discountAmount = t.sumLineDiscount + in.OrderDiscount
 	baseForService := t.subtotal - t.discountAmount
 	if outlet.ServiceChargeRate.GreaterThan(decimal.Zero) && baseForService > 0 {
@@ -341,6 +366,21 @@ func resolvePayments(ctx context.Context, tx *gorm.DB, in CheckoutInput, total i
 	var r paymentResolution
 	now := time.Now().UTC()
 
+	// Pelanggan diperiksa untuk SEMUA metode bayar, bukan hanya kasbon. Tanpa
+	// ini id yang tidak dikenal baru ditolak foreign key saat INSERT sebagai
+	// galat 500 — dan di /sync/push galat 500 membatalkan seluruh batch, jadi
+	// satu transaksi offline yang merujuk pelanggan terhapus memacetkan
+	// antrean perangkat selamanya.
+	var cust models.Customer
+	if in.CustomerID != "" {
+		if err := repositories.FindCustomerInTenant(ctx, tx, in.CustomerID, &cust); err != nil {
+			if errors.Is(err, repositories.ErrCustomerNotFound) {
+				return r, fmt.Errorf("%w: pelanggan tidak ditemukan", helpers.ErrValidation)
+			}
+			return r, err
+		}
+	}
+
 	var nonCredit int64
 	for _, p := range in.Payments {
 		if p.Amount <= 0 {
@@ -363,10 +403,6 @@ func resolvePayments(ctx context.Context, tx *gorm.DB, in CheckoutInput, total i
 		}
 		if nonCredit+r.creditAmount != total {
 			return r, fmt.Errorf("%w: total pembayaran (termasuk kasbon) harus sama persis dengan total transaksi", helpers.ErrValidation)
-		}
-		var cust models.Customer
-		if err := repositories.FindCustomerInTenant(ctx, tx, in.CustomerID, &cust); err != nil {
-			return r, fmt.Errorf("%w: pelanggan tidak ditemukan", helpers.ErrValidation)
 		}
 		if cust.CreditLimit > 0 {
 			outstanding, err := repositories.OutstandingReceivableTotal(ctx, tx, in.CustomerID)
@@ -490,6 +526,20 @@ func formatReceiptNo(outlet models.Outlet, bizDate time.Time, seq int64) string 
 		code = strings.ToUpper(outlet.ID[:4])
 	}
 	return fmt.Sprintf("%s-%s-%04d", code, bizDate.Format("060102"), seq)
+}
+
+// hasDiscount melaporkan apakah checkout memuat diskon apa pun (baris atau
+// transaksi) — penentu perlu-tidaknya izin sale.discount.
+func hasDiscount(in CheckoutInput) bool {
+	if in.OrderDiscount > 0 {
+		return true
+	}
+	for _, it := range in.Items {
+		if it.DiscountAmount > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func sortedUniqueProductIDs(items []CheckoutItem) []string {

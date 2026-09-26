@@ -18,6 +18,9 @@ import (
 // OpenShift membuka shift kas untuk sebuah outlet. Menolak (ErrConflict) bila
 // outlet sudah punya shift terbuka — dijamin ganda oleh partial unique index.
 func OpenShift(ctx context.Context, outletID string, openingCash int64, note string) (*models.Shift, error) {
+	if err := ensureOutletAccess(ctx, outletID); err != nil {
+		return nil, err
+	}
 	var outlet models.Outlet
 	if err := repositories.FindOutletByID(ctx, nil, outletID, &outlet); err != nil {
 		return nil, fmt.Errorf("%w: outlet tidak ditemukan", helpers.ErrValidation)
@@ -59,6 +62,9 @@ func CloseShift(ctx context.Context, shiftID string, countedCash int64, note str
 	err := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
 		var sh models.Shift
 		if err := repositories.FindShiftInTenant(ctx, tx, shiftID, &sh); err != nil {
+			return err
+		}
+		if err := ensureOutletAccess(ctx, sh.OutletID); err != nil {
 			return err
 		}
 		if sh.Status != "open" {
@@ -141,6 +147,9 @@ func HandoverShift(
 		if err := repositories.FindShiftInTenant(ctx, tx, shiftID, &lama); err != nil {
 			return err
 		}
+		if err := ensureOutletAccess(ctx, lama.OutletID); err != nil {
+			return err
+		}
 		if lama.Status != "open" {
 			return fmt.Errorf("%w: shift sudah ditutup", helpers.ErrConflict)
 		}
@@ -200,6 +209,9 @@ func HandoverShift(
 func CreateCashMovement(ctx context.Context, outletID, shiftID, direction string, amount int64, reason string) (*models.CashMovement, error) {
 	if amount <= 0 {
 		return nil, fmt.Errorf("%w: nominal harus lebih besar dari 0", helpers.ErrValidation)
+	}
+	if err := ensureOutletAccess(ctx, outletID); err != nil {
+		return nil, err
 	}
 	var mv models.CashMovement
 	err := repositories.WithTenant(ctx, func(tx *gorm.DB) error {

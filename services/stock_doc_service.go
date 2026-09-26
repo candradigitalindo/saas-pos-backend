@@ -18,6 +18,9 @@ import (
 
 // CreateOpname membuka sesi hitung fisik untuk sebuah outlet.
 func CreateOpname(ctx context.Context, outletID, note string) (*models.StockOpname, error) {
+	if err := ensureOutletAccess(ctx, outletID); err != nil {
+		return nil, err
+	}
 	var outlet models.Outlet
 	if err := repositories.FindOutletByID(ctx, nil, outletID, &outlet); err != nil {
 		return nil, fmt.Errorf("%w: outlet tidak ditemukan", helpers.ErrValidation)
@@ -51,18 +54,35 @@ func SetOpnameItems(ctx context.Context, opnameID string, counts []OpnameCountIn
 	var result models.StockOpname
 	err := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
 		var o models.StockOpname
-		if err := repositories.FindOpnameInTenant(ctx, tx, opnameID, &o); err != nil {
+		if err := repositories.LockOpnameInTenant(ctx, tx, opnameID, &o); err != nil {
+			return err
+		}
+		if err := ensureOutletAccess(ctx, o.OutletID); err != nil {
 			return err
 		}
 		if o.Status != "draft" {
 			return fmt.Errorf("%w: opname sudah diposting", helpers.ErrConflict)
 		}
+		// Saldo sistem seluruh barang dibaca SEKALI, dan hitungan disimpan
+		// dalam satu upsert — dulu dua query per barang, jadi opname 500
+		// barang berarti 1.000 query di dalam satu transaksi.
+		ids := make([]string, 0, len(counts))
 		for _, c := range counts {
-			sys, err := repositories.CurrentStockQty(ctx, tx, o.OutletID, c.ProductID, c.VariantID)
-			if err != nil {
-				return err
-			}
-			item := &models.StockOpnameItem{
+			ids = append(ids, c.ProductID)
+		}
+		saldo, err := repositories.StockQtyMap(ctx, tx, o.OutletID, ids)
+		if err != nil {
+			return err
+		}
+
+		// Barang yang sama dua kali dalam satu kiriman: hitungan TERAKHIR yang
+		// berlaku (sama seperti bila dikirim dalam dua permintaan).
+		urutan := make([]repositories.StockKey, 0, len(counts))
+		perKey := make(map[repositories.StockKey]models.StockOpnameItem, len(counts))
+		for _, c := range counts {
+			key := repositories.StockKey{OutletID: o.OutletID, ProductID: c.ProductID, VariantID: c.VariantID}
+			sys := saldo[key] // tanpa baris saldo = 0
+			item := models.StockOpnameItem{
 				OpnameID: o.ID, ProductID: c.ProductID,
 				SystemQty: sys, CountedQty: c.CountedQty, DiffQty: c.CountedQty.Sub(sys),
 			}
@@ -70,9 +90,17 @@ func SetOpnameItems(ctx context.Context, opnameID string, counts []OpnameCountIn
 				vid := c.VariantID
 				item.VariantID = &vid
 			}
-			if err := repositories.UpsertOpnameItem(ctx, tx, item); err != nil {
-				return err
+			if _, ada := perKey[key]; !ada {
+				urutan = append(urutan, key)
 			}
+			perKey[key] = item
+		}
+		items := make([]models.StockOpnameItem, 0, len(urutan))
+		for _, k := range urutan {
+			items = append(items, perKey[k])
+		}
+		if err := repositories.UpsertOpnameItems(ctx, tx, items); err != nil {
+			return err
 		}
 		return repositories.FindOpnameInTenant(ctx, tx, opnameID, &result)
 	})
@@ -85,8 +113,13 @@ func SetOpnameItems(ctx context.Context, opnameID string, counts []OpnameCountIn
 func PostOpname(ctx context.Context, opnameID string) (*models.StockOpname, error) {
 	var result models.StockOpname
 	err := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
+		// Baris opname DIKUNCI: dua posting bersamaan dulu sama-sama membaca
+		// 'draft' dan menulis gerakan stok dua kali.
 		var o models.StockOpname
-		if err := repositories.FindOpnameInTenant(ctx, tx, opnameID, &o); err != nil {
+		if err := repositories.LockOpnameInTenant(ctx, tx, opnameID, &o); err != nil {
+			return err
+		}
+		if err := ensureOutletAccess(ctx, o.OutletID); err != nil {
 			return err
 		}
 		if o.Status != "draft" {
@@ -141,6 +174,9 @@ func CreateTransfer(ctx context.Context, fromOutlet, toOutlet, note string, item
 	if len(items) == 0 {
 		return nil, fmt.Errorf("%w: tidak ada item", helpers.ErrValidation)
 	}
+	if err := ensureOutletAccess(ctx, fromOutlet); err != nil {
+		return nil, err
+	}
 	var result models.StockTransfer
 	err := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
 		for _, oid := range []string{fromOutlet, toOutlet} {
@@ -191,17 +227,24 @@ func ReceiveTransfer(ctx context.Context, id string) (*models.StockTransfer, err
 func advanceTransfer(ctx context.Context, id, fromStatus, toStatus, kind string, sign func(decimal.Decimal) decimal.Decimal, tsField string) (*models.StockTransfer, error) {
 	var result models.StockTransfer
 	err := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
+		// Baris transfer DIKUNCI: dua klik "kirim" bersamaan dulu sama-sama
+		// membaca 'draft' dan mengurangi stok asal dua kali.
 		var tr models.StockTransfer
-		if err := repositories.FindTransferInTenant(ctx, tx, id, &tr); err != nil {
+		if err := repositories.LockTransferInTenant(ctx, tx, id, &tr); err != nil {
 			return err
 		}
 		if tr.Status != fromStatus {
 			return fmt.Errorf("%w: status transfer harus '%s'", helpers.ErrConflict, fromStatus)
 		}
 
+		// Yang mengirim harus berhak atas outlet asal; yang menerima atas
+		// outlet tujuan.
 		outletID := tr.FromOutletID
 		if kind == "transfer_in" {
 			outletID = tr.ToOutletID
+		}
+		if err := ensureOutletAccess(ctx, outletID); err != nil {
+			return err
 		}
 		deltas := make([]repositories.StockDelta, 0, len(tr.Items))
 		for _, it := range tr.Items {

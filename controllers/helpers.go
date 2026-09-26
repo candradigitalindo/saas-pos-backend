@@ -3,6 +3,7 @@ package controllers
 import (
 	"errors"
 	"log/slog"
+	"time"
 
 	"candra/backend-api/helpers"
 	"candra/backend-api/models"
@@ -19,8 +20,12 @@ func bindJSONBytes(raw []byte, obj any) error {
 	return binding.JSON.BindBody(raw, obj)
 }
 
-// timeLayout adalah format waktu seragam untuk semua response (CONVENTIONS §3).
-const timeLayout = "2006-01-02 15:04:05"
+// timeLayout adalah format waktu seragam untuk semua response (CONVENTIONS §3):
+// waktu di response SELALU UTC berformat RFC 3339 dengan penanda
+// zona ("2026-09-26T00:22:10Z"). Format lama tanpa zona ("2006-01-02
+// 15:04:05") ditafsirkan browser sebagai jam LOKAL perangkat, sehingga jam
+// UTC dari server produksi tampil mundur 7 jam di layar WIB.
+const timeLayout = time.RFC3339
 
 // badRequest membalas 400 dengan satu pesan per field.
 func badRequest(c *gin.Context, field, msg string) {
@@ -115,8 +120,8 @@ func categoryToResponse(c models.Category) structs.CategoryResponse {
 		ParentID:  deref(c.ParentID),
 		Name:      c.Name,
 		SortOrder: c.SortOrder,
-		CreatedAt: c.CreatedAt.Format(timeLayout),
-		UpdatedAt: c.UpdatedAt.Format(timeLayout),
+		CreatedAt: c.CreatedAt.UTC().Format(timeLayout),
+		UpdatedAt: c.UpdatedAt.UTC().Format(timeLayout),
 	}
 }
 
@@ -128,8 +133,8 @@ func unitToResponse(u models.Unit) structs.UnitResponse {
 		BaseUnitID:   deref(u.BaseUnitID),
 		Conversion:   u.Conversion.String(),
 		AllowDecimal: u.AllowDecimal,
-		CreatedAt:    u.CreatedAt.Format(timeLayout),
-		UpdatedAt:    u.UpdatedAt.Format(timeLayout),
+		CreatedAt:    u.CreatedAt.UTC().Format(timeLayout),
+		UpdatedAt:    u.UpdatedAt.UTC().Format(timeLayout),
 	}
 }
 
@@ -141,8 +146,8 @@ func supplierToResponse(s models.Supplier) structs.SupplierResponse {
 		Phone:     s.Phone,
 		Address:   s.Address,
 		Note:      s.Note,
-		CreatedAt: s.CreatedAt.Format(timeLayout),
-		UpdatedAt: s.UpdatedAt.Format(timeLayout),
+		CreatedAt: s.CreatedAt.UTC().Format(timeLayout),
+		UpdatedAt: s.UpdatedAt.UTC().Format(timeLayout),
 	}
 }
 
@@ -161,8 +166,8 @@ func productToResponse(p models.Product) structs.ProductResponse {
 		MinStock:   p.MinStock.String(),
 		IsActive:   p.IsActive,
 		ImageURL:   p.ImageURL,
-		CreatedAt:  p.CreatedAt.Format(timeLayout),
-		UpdatedAt:  p.UpdatedAt.Format(timeLayout),
+		CreatedAt:  p.CreatedAt.UTC().Format(timeLayout),
+		UpdatedAt:  p.UpdatedAt.UTC().Format(timeLayout),
 	}
 	if p.Unit != nil {
 		r.UnitName = p.Unit.Name
@@ -183,7 +188,7 @@ func tenantToResponse(t models.Tenant) structs.TenantResponse {
 		Phone:        t.Phone,
 		Email:        t.Email,
 		Status:       t.Status,
-		CreatedAt:    t.CreatedAt.Format(timeLayout),
+		CreatedAt:    t.CreatedAt.UTC().Format(timeLayout),
 	}
 }
 
@@ -206,7 +211,7 @@ func outletToResponse(o models.Outlet) structs.OutletResponse {
 		ReceiptHeader:     o.ReceiptHeader,
 		ReceiptFooter:     o.ReceiptFooter,
 		IsActive:          o.IsActive,
-		CreatedAt:         o.CreatedAt.Format(timeLayout),
-		UpdatedAt:         o.UpdatedAt.Format(timeLayout),
+		CreatedAt:         o.CreatedAt.UTC().Format(timeLayout),
+		UpdatedAt:         o.UpdatedAt.UTC().Format(timeLayout),
 	}
 }

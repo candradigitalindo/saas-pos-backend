@@ -249,6 +249,17 @@ func FindAdvance(ctx context.Context, tx *gorm.DB, id string) (models.EmployeeAd
 	return a, err
 }
 
+// LockAdvance = FindAdvance dengan baris dikunci (FOR UPDATE) — dipakai
+// pencairan, supaya dua klik bersamaan tidak mengeluarkan kas dua kali.
+func LockAdvance(ctx context.Context, tx *gorm.DB, id string) (models.EmployeeAdvance, error) {
+	var a models.EmployeeAdvance
+	err := scopeTenant(ctx, tx).Clauses(lockForUpdate()).First(&a, "id = ?", id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return a, ErrAdvanceNotFound
+	}
+	return a, err
+}
+
 func SaveAdvance(ctx context.Context, tx *gorm.DB, a *models.EmployeeAdvance) error {
 	return scopeTenant(ctx, tenantDB(ctx, tx)).Model(&models.EmployeeAdvance{}).Where("id = ?", a.ID).
 		Updates(map[string]any{

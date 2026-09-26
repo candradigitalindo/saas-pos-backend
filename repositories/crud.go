@@ -62,6 +62,18 @@ func firstTenant[T any](ctx context.Context, tx *gorm.DB, id string, out *T) err
 	return scopeTenant(ctx, tenantDB(ctx, tx)).First(out, "id = ?", id).Error
 }
 
+// lockTenantRow mengunci (SELECT ... FOR UPDATE) satu baris milik tenant
+// konteks, di dalam tx pemanggil. Dipakai sebelum transisi status dokumen yang
+// punya efek samping (gerakan stok, kas keluar): dua permintaan bersamaan
+// untuk dokumen yang sama menjadi berurutan, dan yang kedua membaca status
+// yang sudah diubah yang pertama alih-alih ikut mengerjakan ulang.
+// Mengembalikan gorm.ErrRecordNotFound bila baris tidak ada.
+func lockTenantRow[T any](ctx context.Context, tx *gorm.DB, id string) error {
+	var row T
+	return scopeTenant(ctx, tx).Clauses(lockForUpdate()).
+		Select("id").First(&row, "id = ?", id).Error
+}
+
 // createTenant menyimpan baris baru, dengan TenantID di-stempel dari context.
 // tx opsional.
 func createTenant[T any](ctx context.Context, tx *gorm.DB, row *T) error {

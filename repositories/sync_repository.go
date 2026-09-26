@@ -93,6 +93,7 @@ func pullStocks(ctx context.Context, outletID string, limit int) ([]models.Stock
 	if outletID != "" {
 		q = q.Where("outlet_id = ?", outletID)
 	}
+	q = scopeOutlet(ctx, q, "outlet_id")
 	var rows []models.Stock
 	err := q.Order("product_id, variant_id").Limit(limit).Find(&rows).Error
 	return rows, err

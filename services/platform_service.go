@@ -39,7 +39,7 @@ func PlatformLogin(ctx context.Context, email, password string) (structs.Platfor
 
 	return structs.PlatformAuthResponse{
 		AccessToken: token,
-		ExpiresAt:   expiresAt.Format(partnerTimeLayout),
+		ExpiresAt:   expiresAt.UTC().Format(partnerTimeLayout),
 		Admin:       platformAdminToResponse(admin),
 	}, nil
 }
@@ -157,7 +157,7 @@ func platformAdminToResponse(a models.PlatformAdmin) structs.PlatformAdminRespon
 		Capabilities: models.PlatformCapabilities(a.Role), IsActive: a.IsActive,
 	}
 	if a.LastLoginAt != nil {
-		r.LastLoginAt = a.LastLoginAt.Format(partnerTimeLayout)
+		r.LastLoginAt = a.LastLoginAt.UTC().Format(partnerTimeLayout)
 	}
 	return r
 }

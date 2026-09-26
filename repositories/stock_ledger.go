@@ -47,10 +47,16 @@ func ApplyStockDeltas(ctx context.Context, tx *gorm.DB, outletID string, deltas 
 		return nil, nil
 	}
 
-	// Kumpulkan & urutkan product_id unik untuk penguncian.
+	// Kumpulkan & urutkan product_id unik untuk penguncian. Baris saldo yang
+	// belum ada dibuat dulu supaya ikut terkunci (lihat EnsureStockRows).
 	idSet := map[string]struct{}{}
+	keys := make([]StockKey, 0, len(deltas))
 	for _, d := range deltas {
 		idSet[d.ProductID] = struct{}{}
+		keys = append(keys, StockKey{OutletID: outletID, ProductID: d.ProductID, VariantID: d.VariantID})
+	}
+	if _, err := EnsureStockRows(ctx, tx, outletID, keys); err != nil {
+		return nil, err
 	}
 	ids := make([]string, 0, len(idSet))
 	for id := range idSet {

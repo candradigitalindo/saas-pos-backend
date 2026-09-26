@@ -64,6 +64,20 @@ func TenantScope() gin.HandlerFunc {
 		ctx = reqctx.WithTenantID(ctx, user.TenantID)
 		ctx = reqctx.WithUserID(ctx, user.ID)
 		ctx = reqctx.WithPermissions(ctx, codes)
+
+		// Batas cabang (§9, user_outlets): hanya untuk yang TIDAK mengelola
+		// semua cabang. Repositori daftar & laporan menyaring dengannya, dan
+		// layanan tulis memeriksanya — satu query di sini, bukan satu per
+		// pemeriksaan.
+		if !reqctx.HasPermission(ctx, "outlet.manage") {
+			ids, err := repositories.AccessOutletIDs(ctx, user.ID)
+			if err != nil {
+				log.Error("gagal memuat akses cabang", slog.Any("error", err), slog.String("user_id", userID))
+				abort(c, http.StatusInternalServerError, "server", "Terjadi kesalahan internal")
+				return
+			}
+			ctx = reqctx.WithOutletScope(ctx, ids)
+		}
 		c.Request = c.Request.WithContext(ctx)
 
 		c.Next()

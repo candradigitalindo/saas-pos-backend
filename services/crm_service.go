@@ -406,8 +406,8 @@ func dealToResponse(d models.Deal) structs.DealResponse {
 		ID: d.ID, PipelineID: d.PipelineID, StageID: d.StageID,
 		OwnerID: d.OwnerID, Title: d.Title, Value: d.Value,
 		Status: d.Status, LostReason: d.LostReason,
-		CreatedAt: d.CreatedAt.Format(saleTimeLayout),
-		UpdatedAt: d.UpdatedAt.Format(saleTimeLayout),
+		CreatedAt: d.CreatedAt.UTC().Format(saleTimeLayout),
+		UpdatedAt: d.UpdatedAt.UTC().Format(saleTimeLayout),
 	}
 	if d.CustomerID != nil {
 		r.CustomerID = *d.CustomerID
@@ -419,7 +419,7 @@ func dealToResponse(d models.Deal) structs.DealResponse {
 		r.ExpectedCloseDate = d.ExpectedCloseDate.Format("2006-01-02")
 	}
 	if d.ClosedAt != nil {
-		r.ClosedAt = d.ClosedAt.Format(saleTimeLayout)
+		r.ClosedAt = d.ClosedAt.UTC().Format(saleTimeLayout)
 	}
 	return r
 }
@@ -428,7 +428,7 @@ func activityToResponse(a models.Activity) structs.ActivityResponse {
 	r := structs.ActivityResponse{
 		ID: a.ID, Kind: a.Kind, Subject: a.Subject, Body: a.Body,
 		OwnerID: a.OwnerID, Status: a.Status,
-		CreatedAt: a.CreatedAt.Format(saleTimeLayout),
+		CreatedAt: a.CreatedAt.UTC().Format(saleTimeLayout),
 	}
 	if a.CustomerID != nil {
 		r.CustomerID = *a.CustomerID
@@ -437,10 +437,10 @@ func activityToResponse(a models.Activity) structs.ActivityResponse {
 		r.DealID = *a.DealID
 	}
 	if a.DueAt != nil {
-		r.DueAt = a.DueAt.Format(saleTimeLayout)
+		r.DueAt = a.DueAt.UTC().Format(saleTimeLayout)
 	}
 	if a.CompletedAt != nil {
-		r.CompletedAt = a.CompletedAt.Format(saleTimeLayout)
+		r.CompletedAt = a.CompletedAt.UTC().Format(saleTimeLayout)
 	}
 	return r
 }

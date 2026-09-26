@@ -2,12 +2,17 @@ package services
 
 import (
 	"encoding/json"
+	"time"
 
 	"candra/backend-api/models"
 	"candra/backend-api/structs"
 )
 
-const saleTimeLayout = "2006-01-02 15:04:05"
+// saleTimeLayout: waktu di response SELALU UTC berformat RFC 3339 dengan penanda
+// zona ("2026-09-26T00:22:10Z"). Format lama tanpa zona ("2006-01-02
+// 15:04:05") ditafsirkan browser sebagai jam LOKAL perangkat, sehingga jam
+// UTC dari server produksi tampil mundur 7 jam di layar WIB.
+const saleTimeLayout = time.RFC3339
 
 // SaleToResponse memetakan model Sale (dengan Items & Payments ter-load) ke DTO.
 // Diekspor agar controller list/detail memakainya juga.
@@ -29,10 +34,10 @@ func SaleToResponse(s *models.Sale) structs.SaleResponse {
 		CostTotal:      s.CostTotal,
 		GrossProfit:    s.Total - s.CostTotal,
 		Note:           s.Note,
-		OccurredAt:     s.OccurredAt.Format(saleTimeLayout),
+		OccurredAt:     s.OccurredAt.UTC().Format(saleTimeLayout),
 		BusinessDate:   s.BusinessDate.Format("2006-01-02"),
 		VoidReason:     s.VoidReason,
-		CreatedAt:      s.CreatedAt.Format(saleTimeLayout),
+		CreatedAt:      s.CreatedAt.UTC().Format(saleTimeLayout),
 	}
 	if s.ShiftID != nil {
 		r.ShiftID = *s.ShiftID
@@ -44,7 +49,7 @@ func SaleToResponse(s *models.Sale) structs.SaleResponse {
 		r.ReturnOfSaleID = *s.ReturnOfSaleID
 	}
 	if s.VoidedAt != nil {
-		r.VoidedAt = s.VoidedAt.Format(saleTimeLayout)
+		r.VoidedAt = s.VoidedAt.UTC().Format(saleTimeLayout)
 	}
 
 	for _, it := range s.Items {
@@ -63,7 +68,7 @@ func SaleToResponse(s *models.Sale) structs.SaleResponse {
 	for _, p := range s.Payments {
 		r.Payments = append(r.Payments, structs.SalePaymentResponse{
 			ID: p.ID, Method: p.Method, Amount: p.Amount, Reference: p.Reference,
-			FeeAmount: p.FeeAmount, PaidAt: p.PaidAt.Format(saleTimeLayout),
+			FeeAmount: p.FeeAmount, PaidAt: p.PaidAt.UTC().Format(saleTimeLayout),
 		})
 	}
 	return r

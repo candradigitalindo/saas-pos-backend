@@ -105,6 +105,10 @@ func CreateProduct(c *gin.Context) {
 	if handled {
 		return
 	}
+	if alamatUnggahanKita(req.ImageURL) {
+		badRequest(c, "image_url", pesanFotoLewatUnggah)
+		return
+	}
 
 	ctx := c.Request.Context()
 	row := models.Product{
@@ -199,7 +203,11 @@ func UpdateProduct(c *gin.Context) {
 	if req.IsActive != nil {
 		row.IsActive = *req.IsActive
 	}
-	if req.ImageURL != nil {
+	if req.ImageURL != nil && *req.ImageURL != row.ImageURL {
+		if alamatUnggahanKita(*req.ImageURL) {
+			badRequest(c, "image_url", pesanFotoLewatUnggah)
+			return
+		}
 		row.ImageURL = *req.ImageURL
 	}
 	if req.MinStock != nil {
@@ -346,4 +354,20 @@ func DeleteProductImage(c *gin.Context) {
 	c.JSON(http.StatusOK, structs.SuccessResponse[gin.H]{
 		Success: true, Message: "Foto barang dihapus", Data: gin.H{"image_url": ""},
 	})
+}
+
+// pesanFotoLewatUnggah menjelaskan kenapa alamat berkas unggahan ditolak di
+// form barang.
+const pesanFotoLewatUnggah = "Foto hasil unggahan hanya bisa dipasang lewat tombol unggah foto"
+
+// alamatUnggahanKita melaporkan apakah sebuah image_url menunjuk berkas di
+// folder unggahan server ini.
+//
+// Alamat seperti itu HANYA boleh ditulis oleh endpoint unggah foto, yang
+// membuat nama berkasnya sendiri. Bila form barang boleh mengisinya bebas,
+// satu tenant bisa mengarahkan fotonya ke berkas milik tenant lain lalu
+// menekan "hapus foto" — dan hapusFotoLama menghapus berkas tenant lain itu
+// dari disk. URL luar (CDN, dsb.) tetap diterima seperti sebelumnya.
+func alamatUnggahanKita(alamat string) bool {
+	return strings.HasPrefix(strings.TrimSpace(alamat), "/uploads/")
 }

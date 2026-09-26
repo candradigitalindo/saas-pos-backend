@@ -87,6 +87,10 @@ func GetPurchase(c *gin.Context) {
 		notFoundOr(c, err, repositories.ErrPurchaseNotFound, "Pembelian tidak ditemukan")
 		return
 	}
+	if !repositories.OutletVisible(c.Request.Context(), p.OutletID) {
+		notFound(c, "Pembelian tidak ditemukan")
+		return
+	}
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.PurchaseResponse]{
 		Success: true, Message: "Berhasil mengambil data pembelian", Data: services.PurchaseToResponse(&p),
 	})

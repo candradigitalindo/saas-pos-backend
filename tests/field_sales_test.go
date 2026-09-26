@@ -195,7 +195,7 @@ func TestCommissionOnCollectedNotShipped(t *testing.T) {
 	// 3. Setor piutang 15000 di lapangan (collected_by = sales).
 	recID := call(t, "GET", "/api/v1/receivables?customer_id="+cust, sales, nil).
 		mustOK(t, "piutang").data(t)["data"].([]any)[0].(map[string]any)["id"].(string)
-	call(t, "POST", "/api/v1/receivable-payments", sales, map[string]any{
+	checkoutLike(t, sales, ulid.New(), "/api/v1/receivable-payments", map[string]any{
 		"receivable_id": recID, "amount": 15000, "method": "cash",
 	}).mustCode(t, "setor piutang", 201)
 
@@ -336,7 +336,7 @@ func TestReceivablePaymentUsesOutletBusinessDate(t *testing.T) {
 	// Setor piutangnya.
 	recID := call(t, "GET", "/api/v1/receivables?customer_id="+cust, f.token, nil).
 		mustOK(t, "piutang").data(t)["data"].([]any)[0].(map[string]any)["id"].(string)
-	call(t, "POST", "/api/v1/receivable-payments", f.token, map[string]any{
+	checkoutLike(t, f.token, ulid.New(), "/api/v1/receivable-payments", map[string]any{
 		"receivable_id": recID, "amount": 12000, "method": "cash",
 	}).mustCode(t, "setor piutang", 201)
 

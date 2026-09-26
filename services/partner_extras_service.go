@@ -143,7 +143,7 @@ func ListTrainingsForCurrentPartnerUser(ctx context.Context) ([]structs.PartnerT
 		}
 		if rec, ok := recs[t.ID]; ok && rec.CompletedAt != nil {
 			r.Completed = true
-			r.CompletedAt = rec.CompletedAt.Format(partnerTimeLayout)
+			r.CompletedAt = rec.CompletedAt.UTC().Format(partnerTimeLayout)
 			r.Score = rec.Score
 		}
 		out[i] = r
@@ -236,7 +236,7 @@ func disputeToResponse(d models.PartnerDispute) structs.PartnerDisputeResponse {
 	r := structs.PartnerDisputeResponse{
 		ID: d.ID, ClaimantPartnerID: d.ClaimantPartnerID, Reason: d.Reason,
 		Status: d.Status, DecisionNote: d.DecisionNote,
-		CreatedAt: d.CreatedAt.Format(partnerTimeLayout),
+		CreatedAt: d.CreatedAt.UTC().Format(partnerTimeLayout),
 	}
 	if d.TenantID != nil {
 		r.TenantID = *d.TenantID
@@ -245,7 +245,7 @@ func disputeToResponse(d models.PartnerDispute) structs.PartnerDisputeResponse {
 		r.LeadID = *d.LeadID
 	}
 	if d.DecidedAt != nil {
-		r.DecidedAt = d.DecidedAt.Format(partnerTimeLayout)
+		r.DecidedAt = d.DecidedAt.UTC().Format(partnerTimeLayout)
 	}
 	return r
 }

@@ -698,7 +698,7 @@ func channelToResponse(c models.Channel) structs.ChannelResponse {
 		ID: c.ID, OutletID: c.OutletID, Kind: c.Kind, Provider: c.Provider, Name: c.Name,
 		MerchantRef: c.MerchantRef, CommissionRate: c.CommissionRate.String(),
 		IntegrationMode: c.IntegrationMode, IsActive: c.IsActive,
-		CreatedAt: c.CreatedAt.Format(saleTimeLayout),
+		CreatedAt: c.CreatedAt.UTC().Format(saleTimeLayout),
 	}
 	if c.PriceListID != nil {
 		r.PriceListID = *c.PriceListID
@@ -725,7 +725,7 @@ func channelOrderToResponse(o models.ChannelOrder, amt channelSaleAmounts) struc
 		BuyerName: o.BuyerName, BuyerPhone: o.BuyerPhone, ShippingAddress: o.ShippingAddress,
 		Courier: o.Courier, TrackingNo: o.TrackingNo,
 		GrossAmount: amt.gross, FeeAmount: amt.fee, NetAmount: amt.net,
-		CreatedAt: o.CreatedAt.Format(saleTimeLayout),
+		CreatedAt: o.CreatedAt.UTC().Format(saleTimeLayout),
 	}
 }
 

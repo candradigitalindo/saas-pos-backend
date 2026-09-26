@@ -59,6 +59,7 @@ func ListShifts(ctx context.Context, outletID string, limit, offset int) ([]mode
 	if outletID != "" {
 		where, args = "outlet_id = ?", []any{outletID}
 	}
+	where, args = whereOutlet(ctx, where, args, "outlet_id")
 	return paginateTenant[models.Shift](ctx, where, args, "opened_at DESC, id DESC", limit, offset)
 }
 
@@ -78,6 +79,13 @@ func ListShifts(ctx context.Context, outletID string, limit, offset int) ([]mode
 // untuk belanja Rp 36.000 menambah Rp 36.000 ke laci, bukan Rp 50.000 — tanpa
 // pengurangan ini setiap shift akan tampak kurang persis sebesar total
 // kembalian yang diberikan, dan kasir yang jujur akan terus dituduh selisih.
+//
+// Retur tunai juga dikurangkan: baris retur (status 'returned') yang dicatat
+// pada shift ini mengembalikan bagian TUNAI bersih penjualan asalnya (tunai
+// diterima − kembalian) dari laci. Bagian non-tunai (QRIS, transfer) kembali
+// lewat salurannya sendiri dan kasbon dihapusbukukan — keduanya tidak
+// menyentuh laci. Tanpa pengurangan ini setiap retur tampil sebagai
+// kekurangan kas kasir saat tutup shift.
 func ShiftCashTotals(ctx context.Context, tx *gorm.DB, shiftID string) (cashSales, cashIn, cashOut int64, err error) {
 	tid := currentTenantID(ctx)
 
@@ -100,7 +108,21 @@ func ShiftCashTotals(ctx context.Context, tx *gorm.DB, shiftID string) (cashSale
 	if err != nil {
 		return
 	}
-	cashSales = tunaiDiterima - kembalian
+
+	var tunaiDiretur int64
+	err = tenantDB(ctx, tx).Raw(`
+		SELECT COALESCE(SUM(GREATEST(
+			COALESCE((SELECT SUM(sp.amount) FROM sale_payments sp
+			          WHERE sp.tenant_id = o.tenant_id AND sp.sale_id = o.id AND sp.method = 'cash'), 0)
+			- o.change_amount, 0)), 0)
+		FROM sales r
+		JOIN sales o ON o.tenant_id = r.tenant_id AND o.id = r.return_of_sale_id
+		WHERE r.tenant_id = ? AND r.shift_id = ? AND r.status = 'returned'`,
+		tid, shiftID).Scan(&tunaiDiretur).Error
+	if err != nil {
+		return
+	}
+	cashSales = tunaiDiterima - kembalian - tunaiDiretur
 
 	err = scopeTenant(ctx, tenantDB(ctx, tx).Model(&models.CashMovement{})).
 		Where("shift_id = ? AND direction = 'in'", shiftID).

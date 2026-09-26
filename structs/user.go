@@ -12,7 +12,11 @@ type UserResponse struct {
 	RoleName string `json:"role_name"`
 	// RoleIDs = SELURUH peran yang dipegang (termasuk peran utama). Izin
 	// efektifnya adalah gabungan izin peran-peran ini.
-	RoleIDs   []string `json:"role_ids,omitempty"`
+	RoleIDs []string `json:"role_ids,omitempty"`
+	// OutletIDs = cabang yang boleh dipakai user ini (user_outlets). Pemegang
+	// outlet.manage tetap boleh bekerja di SEMUA cabang walau daftar ini
+	// lebih sempit.
+	OutletIDs []string `json:"outlet_ids,omitempty"`
 	IsActive  bool     `json:"is_active"`
 	CreatedAt string   `json:"created_at"`
 	UpdatedAt string   `json:"updated_at"`
@@ -32,6 +36,10 @@ type UserCreateRequest struct {
 	// RoleIDs = peran TAMBAHAN, opsional. Izin efektif = gabungan peran utama +
 	// peran tambahan (migrasi 000034). Kosong = hanya peran utama.
 	RoleIDs []string `json:"role_ids" binding:"omitempty,dive,ulid"`
+	// OutletIDs = cabang tempat staf ini boleh bekerja. Kosong/tidak dikirim =
+	// SEMUA cabang aktif saat ini — usaha satu cabang (mayoritas UMKM) tidak
+	// perlu memikirkannya, dan staf barunya langsung bisa membuka kasir.
+	OutletIDs []string `json:"outlet_ids" binding:"omitempty,dive,ulid"`
 }
 
 // UserUpdateRequest — perubahan user staf. omitempty: field yang tidak dikirim
@@ -47,6 +55,9 @@ type UserUpdateRequest struct {
 	// artinya hapus semua peran tambahan — bisa dibedakan dari "tidak dikirim").
 	RoleIDs  *[]string `json:"role_ids" binding:"omitempty,dive,ulid"`
 	IsActive *bool     `json:"is_active" binding:"omitempty"`
+	// OutletIDs dikirim = ganti SELURUH akses cabang (minimal satu). Tidak
+	// dikirim = tidak diubah.
+	OutletIDs *[]string `json:"outlet_ids" binding:"omitempty,min=1,dive,ulid"`
 }
 
 // Struct ini digunakan saat user melakukan proses login.

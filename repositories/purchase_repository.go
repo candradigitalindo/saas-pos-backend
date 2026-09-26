@@ -36,6 +36,7 @@ func ListPurchases(ctx context.Context, outletID string, limit, offset int) ([]m
 	if outletID != "" {
 		where, args = "outlet_id = ?", []any{outletID}
 	}
+	where, args = whereOutlet(ctx, where, args, "outlet_id")
 	return paginateTenant[models.Purchase](ctx, where, args, "occurred_at DESC, id DESC", limit, offset)
 }
 

@@ -58,6 +58,9 @@ func ReceivePurchase(ctx context.Context, in PurchaseInput) (int, []byte, error)
 		}
 	}
 
+	if err := ensureOutletAccess(ctx, in.OutletID); err != nil {
+		return 0, nil, err
+	}
 	var outlet models.Outlet
 	if err := repositories.FindOutletByID(ctx, nil, in.OutletID, &outlet); err != nil {
 		return 0, nil, fmt.Errorf("%w: outlet tidak ditemukan", helpers.ErrValidation)

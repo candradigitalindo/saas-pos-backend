@@ -465,10 +465,10 @@ func visitToResponse(v models.Visit) structs.VisitResponse {
 		r.VisitPlanID = *v.VisitPlanID
 	}
 	if v.CheckinAt != nil {
-		r.CheckinAt = v.CheckinAt.Format(saleTimeLayout)
+		r.CheckinAt = v.CheckinAt.UTC().Format(saleTimeLayout)
 	}
 	if v.CheckoutAt != nil {
-		r.CheckoutAt = v.CheckoutAt.Format(saleTimeLayout)
+		r.CheckoutAt = v.CheckoutAt.UTC().Format(saleTimeLayout)
 	}
 	if v.CheckinLat != nil {
 		r.CheckinLat = v.CheckinLat.String()

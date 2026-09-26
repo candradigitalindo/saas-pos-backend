@@ -612,8 +612,8 @@ func subscriptionToResponse(s models.Subscription) structs.SubscriptionResponse 
 		TermMonths:         s.TermMonths,
 		DiscountRate:       s.DiscountRate.String(),
 		Status:             s.Status,
-		CurrentPeriodStart: s.CurrentPeriodStart.Format(saleTimeLayout),
-		CurrentPeriodEnd:   s.CurrentPeriodEnd.Format(saleTimeLayout),
+		CurrentPeriodStart: s.CurrentPeriodStart.UTC().Format(saleTimeLayout),
+		CurrentPeriodEnd:   s.CurrentPeriodEnd.UTC().Format(saleTimeLayout),
 		AutoRenew:          s.AutoRenew,
 		CancelReason:       s.CancelReason,
 	}
@@ -622,10 +622,10 @@ func subscriptionToResponse(s models.Subscription) structs.SubscriptionResponse 
 		r.PlanName = s.Plan.Name
 	}
 	if s.TrialEndsAt != nil {
-		r.TrialEndsAt = s.TrialEndsAt.Format(saleTimeLayout)
+		r.TrialEndsAt = s.TrialEndsAt.UTC().Format(saleTimeLayout)
 	}
 	if s.CanceledAt != nil {
-		r.CanceledAt = s.CanceledAt.Format(saleTimeLayout)
+		r.CanceledAt = s.CanceledAt.UTC().Format(saleTimeLayout)
 	}
 	return r
 }
@@ -646,7 +646,7 @@ func subInvoiceToResponse(i models.SubscriptionInvoice) structs.SubInvoiceRespon
 		DueDate: i.DueDate.Format("2006-01-02"), Status: i.Status,
 	}
 	if i.PaidAt != nil {
-		r.PaidAt = i.PaidAt.Format(saleTimeLayout)
+		r.PaidAt = i.PaidAt.UTC().Format(saleTimeLayout)
 	}
 	return r
 }

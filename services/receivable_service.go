@@ -2,11 +2,18 @@ package services
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
 	"time"
 
+	"candra/backend-api/helpers"
 	"candra/backend-api/internal/timez"
 	"candra/backend-api/models"
 	"candra/backend-api/repositories"
+	"candra/backend-api/structs"
+
+	"gorm.io/gorm"
 )
 
 // AddReceivablePayment mencatat setoran atas piutang pelanggan.
@@ -31,21 +38,44 @@ import (
 // Asia/Jayapura), jadi memakai "outlet pertama" akan salah untuk cabang di
 // zona lain. Piutang dari invoice tidak terikat outlet, jadi di situ barulah
 // outlet pertama dipakai sebagai perkiraan terbaik.
+//
+// Idempoten lewat Idempotency-Key (scope "receivable.payment"): setoran adalah
+// uang yang masuk, dan tombol "Terima setoran" yang ditekan dua kali — atau
+// dikirim ulang setelah sinyal putus — dulu mencatat cicilan DUA kali selama
+// sisanya masih cukup. Mengembalikan (status HTTP, body JSON siap kirim).
 func AddReceivablePayment(
 	ctx context.Context,
 	in *models.ReceivablePayment,
-) (models.Receivable, error) {
+	idempotencyKey, requestHash string,
+) (int, []byte, error) {
+	if idempotencyKey == "" {
+		return 0, nil, fmt.Errorf("%w: header Idempotency-Key wajib", helpers.ErrValidation)
+	}
 	now := time.Now().UTC()
 
 	bizDate, err := receivableBusinessDate(ctx, in.ReceivableID, now)
 	if err != nil {
-		return models.Receivable{}, err
+		return 0, nil, err
 	}
 
 	in.PaidAt = now
 	in.BusinessDate = bizDate
-	return repositories.AddReceivablePayment(ctx, in)
+	status, body, _, err := jalankanIdempoten(ctx, idempotencyScopeReceivablePayment, idempotencyKey, requestHash,
+		func(tx *gorm.DB) (int, []byte, error) {
+			rec, err := repositories.AddReceivablePayment(ctx, tx, in)
+			if err != nil {
+				return 0, nil, err
+			}
+			body, err := json.Marshal(structs.SuccessResponse[structs.ReceivableResponse]{
+				Success: true, Message: "Pembayaran piutang dicatat", Data: ReceivableToResponse(rec),
+			})
+			return http.StatusCreated, body, err
+		})
+	return status, body, err
 }
+
+// idempotencyScopeReceivablePayment untuk setoran piutang.
+const idempotencyScopeReceivablePayment = "receivable.payment"
 
 // receivableBusinessDate menentukan hari usaha untuk sebuah setoran piutang.
 func receivableBusinessDate(

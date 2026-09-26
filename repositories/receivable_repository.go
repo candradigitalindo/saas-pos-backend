@@ -58,11 +58,12 @@ func ListReceivables(ctx context.Context, customerID, status string, limit, offs
 }
 
 // AddReceivablePayment mencatat pembayaran cicilan dan memperbarui
-// paid_amount/status piutang, dalam satu transaksi. Menolak bila amount melebihi
-// sisa (ErrOverpay).
-func AddReceivablePayment(ctx context.Context, pay *models.ReceivablePayment) (models.Receivable, error) {
+// paid_amount/status piutang, DI DALAM tx pemanggil (WithTenant — pemanggil
+// menyimpan catatan idempotensinya di transaksi yang sama). Baris piutang
+// dikunci lebih dulu. Menolak bila amount melebihi sisa (ErrOverpay).
+func AddReceivablePayment(ctx context.Context, tx *gorm.DB, pay *models.ReceivablePayment) (models.Receivable, error) {
 	var rec models.Receivable
-	err := WithTenant(ctx, func(tx *gorm.DB) error {
+	err := func() error {
 		if err := scopeTenant(ctx, tx).Clauses(lockForUpdate()).
 			First(&rec, "id = ?", pay.ReceivableID).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -91,7 +92,7 @@ func AddReceivablePayment(ctx context.Context, pay *models.ReceivablePayment) (m
 		return scopeTenant(ctx, tx).Model(&models.Receivable{}).
 			Where("id = ?", rec.ID).
 			Updates(map[string]any{"paid_amount": newPaid, "status": newStatus, "updated_at": gorm.Expr("now()")}).Error
-	})
+	}()
 	return rec, err
 }
 

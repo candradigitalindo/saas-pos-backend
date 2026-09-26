@@ -26,6 +26,9 @@ import (
 func VoidSale(ctx context.Context, saleID, reason string) (*structs.SaleResponse, error) {
 	var result models.Sale
 	err := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
+		if err := ensureSaleOutletAccess(ctx, tx, saleID); err != nil {
+			return err
+		}
 		if err := voidSaleInTx(ctx, tx, saleID, reason); err != nil {
 			return err
 		}
@@ -49,6 +52,18 @@ func voidSaleInTx(ctx context.Context, tx *gorm.DB, saleID, reason string) error
 	}
 	if sale.Status != "completed" {
 		return fmt.Errorf("%w: hanya transaksi berstatus selesai yang bisa dibatalkan", helpers.ErrConflict)
+	}
+	// Retur tidak mengubah status penjualan asal (returnya baris terpisah
+	// berstatus 'returned'), jadi pemeriksaan status di atas tidak cukup. Tanpa
+	// penjaga ini, penjualan yang sudah diretur masih bisa di-void: stoknya
+	// dikembalikan DUA kali dan omzetnya dikurangi dua kali.
+	var ret models.Sale
+	switch err := repositories.FindReturnSale(ctx, tx, saleID, &ret); {
+	case err == nil:
+		return fmt.Errorf("%w: transaksi ini sudah diretur (%s), tidak bisa dibatalkan lagi",
+			helpers.ErrConflict, ret.ReceiptNo)
+	case !errors.Is(err, repositories.ErrSaleNotFound):
+		return err
 	}
 	if err := writeOffKasbonIfAny(ctx, tx, saleID); err != nil {
 		return err
@@ -84,6 +99,9 @@ func RefundSale(ctx context.Context, saleID, reason string) (*structs.SaleRespon
 		if orig.Status != "completed" {
 			return fmt.Errorf("%w: hanya transaksi selesai yang bisa diretur", helpers.ErrConflict)
 		}
+		if err := ensureOutletAccess(ctx, orig.OutletID); err != nil {
+			return err
+		}
 
 		// Retur yang sudah ada → kembalikan (idempoten).
 		var existing models.Sale
@@ -113,10 +131,23 @@ func RefundSale(ctx context.Context, saleID, reason string) (*structs.SaleRespon
 			return err
 		}
 
+		// Uang retur keluar dari laci yang SEDANG dipakai, bukan dari laci shift
+		// asal yang mungkin sudah ditutup dan dihitung kemarin. Bila tidak ada
+		// shift terbuka, retur tetap menunjuk shift asal (tidak mengubah angka
+		// laci mana pun yang masih berjalan).
+		shiftID := orig.ShiftID
+		var open models.Shift
+		switch err := repositories.FindOpenShift(ctx, tx, orig.OutletID, &open); {
+		case err == nil:
+			shiftID = &open.ID
+		case !errors.Is(err, repositories.ErrNoOpenShift):
+			return err
+		}
+
 		refOf := orig.ID
 		ret := models.Sale{
 			OutletID:       orig.OutletID,
-			ShiftID:        orig.ShiftID,
+			ShiftID:        shiftID,
 			CustomerID:     orig.CustomerID,
 			ReceiptNo:      formatReceiptNo(outlet, bizDate, seq),
 			IdempotencyKey: "refund:" + orig.ID,
@@ -227,4 +258,18 @@ func reverseSaleStock(ctx context.Context, tx *gorm.DB, origSaleID, reversalSale
 		OccurredAt: time.Now().UTC(), BusinessDate: bizDate,
 	})
 	return err
+}
+
+// ensureSaleOutletAccess memastikan user boleh bekerja di outlet tempat
+// penjualan `saleID` terjadi. Penjualan yang tidak ada dibiarkan lolos di sini
+// — pemanggil sesudahnya yang membalas 404 dengan pesannya sendiri.
+func ensureSaleOutletAccess(ctx context.Context, tx *gorm.DB, saleID string) error {
+	var sale models.Sale
+	if err := repositories.FindSaleInTenant(ctx, tx, saleID, &sale); err != nil {
+		if errors.Is(err, repositories.ErrSaleNotFound) {
+			return nil
+		}
+		return err
+	}
+	return ensureOutletAccess(ctx, sale.OutletID)
 }

@@ -25,7 +25,11 @@ import (
 // admin platform sendiri — untuk sekarang dijalankan lewat cmd/partner-admin &
 // cmd/partner-commissions, dan fungsi servicenya diekspor agar bisa diuji.
 
-const partnerTimeLayout = "2006-01-02 15:04:05"
+// partnerTimeLayout: waktu di response SELALU UTC berformat RFC 3339 dengan penanda
+// zona ("2026-09-26T00:22:10Z"). Format lama tanpa zona ("2006-01-02
+// 15:04:05") ditafsirkan browser sebagai jam LOKAL perangkat, sehingga jam
+// UTC dari server produksi tampil mundur 7 jam di layar WIB.
+const partnerTimeLayout = time.RFC3339
 
 // ── Auth mitra ───────────────────────────────────────────────────────────
 
@@ -56,7 +60,7 @@ func PartnerLogin(ctx context.Context, email, password string) (structs.PartnerA
 
 	out = structs.PartnerAuthResponse{
 		AccessToken: token,
-		ExpiresAt:   expiresAt.Format(partnerTimeLayout),
+		ExpiresAt:   expiresAt.UTC().Format(partnerTimeLayout),
 		Partner:     partnerToResponse(partner),
 		User: structs.PartnerUserResponse{
 			ID: pu.ID, Name: pu.Name, Email: pu.Email, Phone: pu.Phone,
@@ -203,7 +207,7 @@ func ListPartnerMerchants(ctx context.Context) ([]structs.PartnerMerchantRespons
 			BusinessName:       st.BusinessName,
 			SubscriptionStatus: st.SubStatus,
 			IsActive:           st.SubStatus == "active" || st.SubStatus == "trial",
-			AttributedAt:       r.AttributedAt.Format(partnerTimeLayout),
+			AttributedAt:       r.AttributedAt.UTC().Format(partnerTimeLayout),
 			Activated:          r.ActivatedAt != nil,
 		}
 		if st.PeriodEnd != nil {
@@ -417,10 +421,10 @@ func partnerToResponse(p models.Partner) structs.PartnerResponse {
 		r.TierName = p.Tier.Name
 	}
 	if p.VerifiedAt != nil {
-		r.VerifiedAt = p.VerifiedAt.Format(partnerTimeLayout)
+		r.VerifiedAt = p.VerifiedAt.UTC().Format(partnerTimeLayout)
 	}
 	if p.JoinedAt != nil {
-		r.JoinedAt = p.JoinedAt.Format(partnerTimeLayout)
+		r.JoinedAt = p.JoinedAt.UTC().Format(partnerTimeLayout)
 	}
 	return r
 }
@@ -440,7 +444,7 @@ func leadToResponse(l models.PartnerLead) structs.PartnerLeadResponse {
 		ID: l.ID, BusinessName: l.BusinessName, ContactName: l.ContactName,
 		Phone: l.Phone, City: l.City, Status: l.Status,
 		AttributionExpiresAt: l.AttributionExpiresAt.Format("2006-01-02"),
-		CreatedAt:            l.CreatedAt.Format(partnerTimeLayout),
+		CreatedAt:            l.CreatedAt.UTC().Format(partnerTimeLayout),
 	}
 	if l.ConvertedTenantID != nil {
 		r.ConvertedTenantID = *l.ConvertedTenantID
@@ -468,7 +472,7 @@ func payoutToResponse(p models.PartnerPayout) structs.PartnerPayoutResponse {
 		TransferProofURL: p.TransferProofURL, TaxSlipURL: p.TaxSlipURL,
 	}
 	if p.PaidAt != nil {
-		r.PaidAt = p.PaidAt.Format(partnerTimeLayout)
+		r.PaidAt = p.PaidAt.UTC().Format(partnerTimeLayout)
 	}
 	return r
 }

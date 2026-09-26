@@ -220,14 +220,14 @@ func ListOutboxEvents(ctx context.Context, status, topic string, limit int) ([]s
 		r := structs.OutboxEventResponse{
 			ID: e.ID, Topic: e.Topic, Status: e.Status,
 			Attempts: e.Attempts, LastError: e.LastError,
-			AvailableAt: e.AvailableAt.Format(partnerTimeLayout),
-			CreatedAt:   e.CreatedAt.Format(partnerTimeLayout),
+			AvailableAt: e.AvailableAt.UTC().Format(partnerTimeLayout),
+			CreatedAt:   e.CreatedAt.UTC().Format(partnerTimeLayout),
 		}
 		if e.TenantID != nil {
 			r.TenantID = *e.TenantID
 		}
 		if e.ProcessedAt != nil {
-			r.ProcessedAt = e.ProcessedAt.Format(partnerTimeLayout)
+			r.ProcessedAt = e.ProcessedAt.UTC().Format(partnerTimeLayout)
 		}
 		out[i] = r
 	}

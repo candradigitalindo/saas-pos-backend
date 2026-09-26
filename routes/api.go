@@ -265,9 +265,12 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	// Profil pengguna — semua user tenant boleh.
 	t.GET("/me", controllers.Me)
 
-	// Outlet.
+	// Outlet. Daftarnya juga dibuka untuk pemegang stock.transfer: petugas
+	// gudang harus bisa MEMILIH cabang tujuan kiriman, dan dulu layar transfer
+	// menerima 403 sehingga pilihan tujuannya kosong bagi peran Gudang bawaan.
+	// Mengubah/menambah cabang tetap hanya outlet.manage.
+	t.GET("/outlets", middlewares.Require("outlet.manage", "stock.transfer"), controllers.ListOutlets)
 	outlet := t.Group("/outlets", middlewares.Require("outlet.manage"))
-	outlet.GET("", controllers.ListOutlets)
 	outlet.POST("", controllers.CreateOutlet)
 	outlet.GET("/:id", controllers.GetOutlet)
 	outlet.PUT("/:id", controllers.UpdateOutlet)
@@ -345,11 +348,19 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	rep.GET("/sales", middlewares.Require("report.view"), controllers.ReportSales)
 	rep.GET("/profit", middlewares.Require("report.profit"), controllers.ReportProfit)
 	rep.GET("/export", middlewares.Require("report.export"), controllers.ReportExport)
-	rep.POST("/rebuild-summaries", middlewares.Require("report.view"), controllers.RebuildReportSummaries)
+	// Bangun ulang ringkasan: pekerjaan pemeliharaan BERAT (sampai 366 hari ×
+	// semua cabang) yang menulis ulang tabel laporan. Izin baca laporan saja
+	// tidak cukup — butuh juga outlet.manage (pengelola seluruh cabang), sama
+	// seperti kasir tidak boleh memicu rekonsiliasi stok.
+	rep.POST("/rebuild-summaries",
+		middlewares.Require("report.view"), middlewares.Require("outlet.manage"),
+		controllers.RebuildReportSummaries)
 
 	// Sinkronisasi offline (Fase 6, §10). Perangkat kasir mendorong penjualan
-	// yang dibuat offline dan menarik master data + stok. Dijaga sale.create.
-	sync := t.Group("/sync", middlewares.Require("sale.create"))
+	// yang dibuat offline dan perangkat sales lapangan mendorong kunjungan;
+	// keduanya menarik master data + stok. Pintu masuknya cukup salah satu
+	// izin, dan izin tiap operasi push diperiksa lagi di services.SyncPush.
+	sync := t.Group("/sync", middlewares.Require("sale.create", "crm.visit.checkin"))
 	sync.POST("/push", controllers.SyncPush)
 	sync.GET("/pull", controllers.SyncPull)
 

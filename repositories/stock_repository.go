@@ -2,6 +2,8 @@ package repositories
 
 import (
 	"context"
+	"sort"
+	"strings"
 
 	"candra/backend-api/internal/reqctx"
 	"candra/backend-api/models"
@@ -44,6 +46,70 @@ func LockStocks(ctx context.Context, tx *gorm.DB, outletID string, productIDsSor
 	return out, nil
 }
 
+// EnsureStockRows memastikan baris saldo `stocks` ADA untuk setiap key (dibuat
+// dengan qty 0 bila belum), SEBELUM LockStocks dipanggil. Mengembalikan key
+// yang baru dibuat oleh panggilan ini.
+//
+// Kenapa perlu: SELECT ... FOR UPDATE hanya bisa mengunci baris yang sudah
+// ada. Untuk barang yang belum pernah bergerak, dua transaksi bersamaan
+// sama-sama "mengunci" nol baris, sama-sama menganggap saldo awal 0, lalu
+// UpsertStockQty yang kedua menimpa hasil yang pertama — 12 pembelian
+// bersamaan pernah berakhir dengan stok 1. INSERT ... ON CONFLICT DO NOTHING
+// menunggu transaksi lain yang sedang menyisipkan key yang sama selesai,
+// sehingga LockStocks sesudahnya selalu menemukan baris untuk dikunci dan
+// membaca saldo yang sudah di-commit.
+//
+// Disisipkan URUT (product_id, variant_id) — urutan yang sama dengan
+// LockStocks — supaya dua transaksi tidak saling menunggu dalam lingkaran.
+func EnsureStockRows(ctx context.Context, tx *gorm.DB, outletID string, keys []StockKey) (map[StockKey]bool, error) {
+	created := map[StockKey]bool{}
+	if len(keys) == 0 {
+		return created, nil
+	}
+	uniq := make(map[StockKey]struct{}, len(keys))
+	sorted := make([]StockKey, 0, len(keys))
+	for _, k := range keys {
+		k.OutletID = outletID
+		if _, ok := uniq[k]; ok {
+			continue
+		}
+		uniq[k] = struct{}{}
+		sorted = append(sorted, k)
+	}
+	sort.Slice(sorted, func(i, j int) bool {
+		if sorted[i].ProductID != sorted[j].ProductID {
+			return sorted[i].ProductID < sorted[j].ProductID
+		}
+		return sorted[i].VariantID < sorted[j].VariantID
+	})
+
+	tid := reqctx.TenantID(ctx)
+	var sb strings.Builder
+	args := make([]any, 0, len(sorted)*4)
+	sb.WriteString("INSERT INTO stocks (tenant_id, outlet_id, product_id, variant_id) VALUES ")
+	for i, k := range sorted {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString("(?, ?, ?, ?)")
+		args = append(args, tid, outletID, k.ProductID, k.VariantID)
+	}
+	sb.WriteString(" ON CONFLICT (tenant_id, outlet_id, product_id, variant_id) DO NOTHING" +
+		" RETURNING product_id, variant_id")
+
+	var rows []struct {
+		ProductID string
+		VariantID string
+	}
+	if err := tx.WithContext(ctx).Raw(sb.String(), args...).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		created[StockKey{OutletID: outletID, ProductID: r.ProductID, VariantID: r.VariantID}] = true
+	}
+	return created, nil
+}
+
 // UpsertStockQty menyetel saldo cache stok ke qty (hasil hitung dari
 // balance_after gerakan terakhir). ON CONFLICT pada PK komposit → qty ditimpa,
 // updated_at diperbarui ke waktu server.
@@ -81,6 +147,26 @@ func RecordMovements(ctx context.Context, tx *gorm.DB, moves []models.StockMovem
 	return tx.WithContext(ctx).Create(&moves).Error
 }
 
+// StockQtyMap mengembalikan saldo cache banyak barang sekaligus untuk satu
+// outlet, dalam SATU query (bukan CurrentStockQty per barang). Key yang tidak
+// punya baris tidak ada di peta — pemanggil menganggapnya 0. tx opsional.
+func StockQtyMap(ctx context.Context, tx *gorm.DB, outletID string, productIDs []string) (map[StockKey]decimal.Decimal, error) {
+	out := map[StockKey]decimal.Decimal{}
+	if len(productIDs) == 0 {
+		return out, nil
+	}
+	var rows []models.Stock
+	if err := scopeTenant(ctx, tenantDB(ctx, tx)).
+		Where("outlet_id = ? AND product_id IN ?", outletID, productIDs).
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		out[StockKey{OutletID: r.OutletID, ProductID: r.ProductID, VariantID: r.VariantID}] = r.Qty
+	}
+	return out, nil
+}
+
 // CurrentStockQty mengembalikan saldo cache untuk satu (outlet, product, variant),
 // 0 bila belum ada baris. tx opsional.
 func CurrentStockQty(ctx context.Context, tx *gorm.DB, outletID, productID, variantID string) (decimal.Decimal, error) {
@@ -111,6 +197,7 @@ func ListStocks(ctx context.Context, outletID string, lowOnly bool, limit, offse
 		if outletID != "" {
 			q = q.Where("stocks.outlet_id = ?", outletID)
 		}
+		q = scopeOutlet(ctx, q, "stocks.outlet_id")
 		if lowOnly {
 			q = q.Where("stocks.qty <= p.min_stock")
 		}
@@ -169,5 +256,6 @@ func ListStockMovements(ctx context.Context, productID, outletID string, limit, 
 		where += " AND outlet_id = ?"
 		args = append(args, outletID)
 	}
+	where, args = whereOutlet(ctx, where, args, "outlet_id")
 	return paginateTenant[models.StockMovement](ctx, where, args, "occurred_at DESC, id DESC", limit, offset)
 }

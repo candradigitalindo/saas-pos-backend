@@ -37,8 +37,8 @@ func roleToResponse(r models.Role, permCodes []string) structs.RoleResponse {
 		Description:     r.Description,
 		IsSystem:        r.IsSystem,
 		PermissionCodes: permCodes,
-		CreatedAt:       r.CreatedAt.Format(timeLayout),
-		UpdatedAt:       r.UpdatedAt.Format(timeLayout),
+		CreatedAt:       r.CreatedAt.UTC().Format(timeLayout),
+		UpdatedAt:       r.UpdatedAt.UTC().Format(timeLayout),
 	}
 }
 

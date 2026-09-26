@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"candra/backend-api/helpers"
@@ -39,9 +40,15 @@ func GetAllUsers(c *gin.Context) {
 		respondServiceError(c, err)
 		return
 	}
+	outletsByUser, err := repositories.OutletIDsForUsers(c.Request.Context(), ids)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
 	items := make([]structs.UserResponse, len(users))
 	for i, u := range users {
 		items[i] = userToResponseWithRoles(u, rolesByUser[u.ID])
+		items[i].OutletIDs = outletsByUser[u.ID]
 	}
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.PaginatedResponse[structs.UserResponse]]{
 		Success: true,
@@ -73,10 +80,17 @@ func GetUserByID(c *gin.Context) {
 		respondServiceError(c, err)
 		return
 	}
+	outletIDs, err := repositories.OutletIDsForUser(c.Request.Context(), user.ID)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	res := userToResponseWithRoles(user, roleIDs)
+	res.OutletIDs = outletIDs
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.UserResponse]{
 		Success: true,
 		Message: "Berhasil mengambil data user",
-		Data:    userToResponseWithRoles(user, roleIDs),
+		Data:    res,
 	})
 }
 
@@ -103,6 +117,21 @@ func CreateUser(c *gin.Context) {
 		badRequest(c, "role_ids", err.Error())
 		return
 	}
+	// Akses cabang. Dulu tidak pernah diisi untuk staf, sehingga /me
+	// mengembalikan outlet_ids kosong dan layar kasir web tidak punya toko
+	// aktif sama sekali untuk siapa pun selain pemilik.
+	outletIDs := req.OutletIDs
+	if len(outletIDs) == 0 {
+		semua, err := repositories.ActiveOutletIDs(ctx, nil)
+		if err != nil {
+			respondServiceError(c, err)
+			return
+		}
+		outletIDs = semua
+	} else if err := ensureOutletsInTenant(ctx, outletIDs); err != nil {
+		badRequest(c, "outlet_ids", err.Error())
+		return
+	}
 
 	hash, err := helpers.HashPassword(req.Password)
 	if err != nil {
@@ -123,6 +152,9 @@ func CreateUser(c *gin.Context) {
 		if err := repositories.CreateUser(ctx, tx, &user); err != nil {
 			return err
 		}
+		if err := repositories.SetUserOutlets(ctx, tx, reqctx.TenantID(ctx), user.ID, outletIDs); err != nil {
+			return err
+		}
 		return repositories.SetUserRoles(ctx, tx, reqctx.TenantID(ctx), user.ID, role.ID, req.RoleIDs)
 	}); err != nil {
 		if helpers.IsDuplicateEntryError(err) {
@@ -138,10 +170,12 @@ func CreateUser(c *gin.Context) {
 	}
 
 	user.Role = role
+	res := userToResponse(user)
+	res.OutletIDs = outletIDs
 	c.JSON(http.StatusCreated, structs.SuccessResponse[structs.UserResponse]{
 		Success: true,
 		Message: "User berhasil dibuat",
-		Data:    userToResponse(user),
+		Data:    res,
 	})
 }
 
@@ -189,6 +223,17 @@ func UpdateUser(c *gin.Context) {
 		}
 		roleChanged = true
 	}
+	if req.OutletIDs != nil {
+		if err := ensureOutletsInTenant(ctx, *req.OutletIDs); err != nil {
+			badRequest(c, "outlet_ids", err.Error())
+			return
+		}
+	}
+	// Ganti password atau penonaktifan WAJIB memutus sesi yang sedang
+	// berjalan. Tanpa ini perangkat yang tertinggal di tangan orang lain (atau
+	// token yang dicuri) tetap bisa memperbarui aksesnya sampai 30 hari,
+	// walau pemilik sudah mengganti password-nya.
+	cabutSesi := req.Password != "" || (req.IsActive != nil && !*req.IsActive)
 	if req.Name != "" {
 		user.Name = req.Name
 	}
@@ -213,6 +258,11 @@ func UpdateUser(c *gin.Context) {
 	if err := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
 		if err := repositories.UpdateUser(ctx, tx, &user); err != nil {
 			return err
+		}
+		if req.OutletIDs != nil {
+			if err := repositories.SetUserOutlets(ctx, tx, reqctx.TenantID(ctx), user.ID, *req.OutletIDs); err != nil {
+				return err
+			}
 		}
 		if !roleChanged {
 			return nil
@@ -256,6 +306,12 @@ func UpdateUser(c *gin.Context) {
 		return
 	}
 
+	if cabutSesi {
+		if err := repositories.RevokeAllUserRefreshTokens(ctx, user.ID); err != nil {
+			helpers.LoggerFromContext(ctx).Error("gagal mencabut sesi setelah perubahan akun",
+				slog.Any("error", err), slog.String("user_id", user.ID))
+		}
+	}
 	if roleChanged {
 		user.Role = newRole
 	}
@@ -290,6 +346,10 @@ func DeleteUser(c *gin.Context) {
 		respondServiceError(c, err)
 		return
 	}
+	if err := repositories.RevokeAllUserRefreshTokens(ctx, id); err != nil {
+		helpers.LoggerFromContext(ctx).Error("gagal mencabut sesi user yang dihapus",
+			slog.Any("error", err), slog.String("user_id", id))
+	}
 
 	c.JSON(http.StatusOK, structs.SuccessResponse[any]{
 		Success: true,
@@ -308,6 +368,18 @@ func ensureRolesInTenant(ctx context.Context, roleIDs []string) error {
 		var r models.Role
 		if err := repositories.FindRoleInTenant(ctx, nil, id, &r); err != nil {
 			return fmt.Errorf("role %s tidak ditemukan di usaha ini", id)
+		}
+	}
+	return nil
+}
+
+// ensureOutletsInTenant memastikan setiap id outlet milik tenant permintaan
+// ini, sebelum ditautkan ke seorang user.
+func ensureOutletsInTenant(ctx context.Context, outletIDs []string) error {
+	for _, id := range outletIDs {
+		var o models.Outlet
+		if err := repositories.FindOutletByID(ctx, nil, id, &o); err != nil {
+			return fmt.Errorf("outlet %s tidak ditemukan di usaha ini", id)
 		}
 	}
 	return nil

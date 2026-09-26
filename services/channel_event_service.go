@@ -647,10 +647,10 @@ func ListChannelStockSyncs(ctx context.Context, channelID, status string) ([]str
 			ID: r.ID, ChannelID: r.ChannelID, ProductID: r.ProductID,
 			RequestedQty: r.RequestedQty.String(), Status: r.Status,
 			Attempts: r.Attempts, LastError: r.LastError,
-			QueuedAt: r.QueuedAt.Format(saleTimeLayout),
+			QueuedAt: r.QueuedAt.UTC().Format(saleTimeLayout),
 		}
 		if r.SentAt != nil {
-			resp.SentAt = r.SentAt.Format(saleTimeLayout)
+			resp.SentAt = r.SentAt.UTC().Format(saleTimeLayout)
 		} else {
 			resp.LateMinutes = int64(now.Sub(r.QueuedAt).Minutes())
 		}
@@ -700,7 +700,7 @@ func settlementToResponse(s models.ChannelSettlement) structs.ChannelSettlementR
 		r.Difference = *s.ReceivedAmount - s.NetAmount
 	}
 	if s.ReceivedAt != nil {
-		r.ReceivedAt = s.ReceivedAt.Format(saleTimeLayout)
+		r.ReceivedAt = s.ReceivedAt.UTC().Format(saleTimeLayout)
 	}
 	return r
 }
@@ -709,10 +709,10 @@ func channelEventToResponse(e models.ChannelEvent) structs.ChannelEventResponse 
 	r := structs.ChannelEventResponse{
 		ID: e.ID, ChannelID: e.ChannelID, EventType: e.EventType, ExternalRef: e.ExternalRef,
 		Status: e.Status, Attempts: e.Attempts, LastError: e.LastError,
-		ReceivedAt: e.ReceivedAt.Format(saleTimeLayout),
+		ReceivedAt: e.ReceivedAt.UTC().Format(saleTimeLayout),
 	}
 	if e.ProcessedAt != nil {
-		r.ProcessedAt = e.ProcessedAt.Format(saleTimeLayout)
+		r.ProcessedAt = e.ProcessedAt.UTC().Format(saleTimeLayout)
 	}
 	return r
 }
