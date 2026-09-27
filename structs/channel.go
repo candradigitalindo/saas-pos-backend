@@ -169,6 +169,8 @@ type ChannelProviderInfo struct {
 	Note         string                 `json:"note,omitempty"`
 	// WebhookLabel: nama alamat webhook utama di konsol penyedia (bawaan "Callback URL").
 	WebhookLabel string `json:"webhook_label,omitempty"`
+	// RequiresAuthorization: toko harus memberi izin lewat peramban (OAuth).
+	RequiresAuthorization bool `json:"requires_authorization,omitempty"`
 }
 
 // ChannelConnectionRequest: PUT /channels/:id/connection. Isian rahasia yang
@@ -204,6 +206,10 @@ type ChannelConnectionResponse struct {
 	LastEventAt   string                            `json:"last_event_at,omitempty"`
 	// Info dari tes terakhir yang baru saja dijalankan (mis. nama bisnis & nomor).
 	Info string `json:"info,omitempty"`
+	// Penyedia yang tokonya harus memberi izin lewat peramban (Shopee):
+	// Authorized = nama/ID toko yang sudah mengizinkan ("" = belum).
+	NeedsAuthorization bool   `json:"needs_authorization,omitempty"`
+	Authorized         string `json:"authorized,omitempty"`
 }
 
 // ProviderWebhookResult: balasan webhook bertanda tangan.

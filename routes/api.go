@@ -517,6 +517,7 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	ch.GET("/:id/connection", controllers.GetChannelConnection)
 	ch.PUT("/:id/connection", controllers.SaveChannelConnection)
 	ch.POST("/:id/connection/test", controllers.TestChannelConnection)
+	ch.POST("/:id/connection/authorize", controllers.AuthorizeChannelConnection)
 	ch.DELETE("/:id/connection", controllers.DeleteChannelConnection)
 	t.GET("/channel-providers", chMgr, controllers.ListChannelProviders)
 

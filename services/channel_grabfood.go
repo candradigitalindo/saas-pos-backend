@@ -137,10 +137,11 @@ func grabTokenSah(token, secret string) bool {
 
 // WebhookAction menangani POST .../oauth/token: Grab menukar Partner Client
 // ID & Secret (buatan platform) dengan token untuk memanggil Order URL.
-func (grabfoodAdapter) WebhookAction(aksi string, _ http.Header, body []byte, cred ChannelCredentials) (WebhookBalasan, bool) {
-	if aksi != "oauth/token" {
+func (grabfoodAdapter) WebhookAction(_ context.Context, p WebhookPermintaan, cred ChannelCredentials) (WebhookBalasan, bool) {
+	if p.Metode != http.MethodPost || p.Aksi != "oauth/token" {
 		return WebhookBalasan{}, false
 	}
+	body := p.Body
 	var req struct {
 		ClientID     string `json:"client_id"`
 		ClientSecret string `json:"client_secret"`
@@ -170,7 +171,7 @@ func (grabfoodAdapter) WebhookAction(aksi string, _ http.Header, body []byte, cr
 	}}, true
 }
 
-func (grabfoodAdapter) VerifySignature(h http.Header, _ []byte, cred ChannelCredentials) error {
+func (grabfoodAdapter) VerifySignature(h http.Header, _ []byte, cred ChannelCredentials, _ string) error {
 	auth := strings.TrimSpace(h.Get("Authorization"))
 	if len(auth) < 7 || !strings.EqualFold(auth[:7], "bearer ") || !grabTokenSah(strings.TrimSpace(auth[7:]), cred["partner_client_secret"]) {
 		return errTandaTangan

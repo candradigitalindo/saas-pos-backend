@@ -94,7 +94,7 @@ func (gofoodAdapter) WebhookValues(ChannelCredentials, string) []structs.LabelVa
 // GoBiz tidak memverifikasi alamat lewat GET.
 func (gofoodAdapter) VerifyChallenge(url.Values, ChannelCredentials) (string, bool) { return "", false }
 
-func (gofoodAdapter) VerifySignature(h http.Header, body []byte, cred ChannelCredentials) error {
+func (gofoodAdapter) VerifySignature(h http.Header, body []byte, cred ChannelCredentials, _ string) error {
 	want, err := hex.DecodeString(strings.TrimSpace(h.Get("X-Go-Signature")))
 	if err != nil || len(want) == 0 || cred["notification_secret"] == "" {
 		return errTandaTangan

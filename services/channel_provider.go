@@ -38,7 +38,8 @@ type ProviderAdapter interface {
 	// VerifyChallenge menjawab GET verifikasi alamat webhook. ok=false → 403.
 	VerifyChallenge(q url.Values, cred ChannelCredentials) (body string, ok bool)
 	// VerifySignature memeriksa tanda tangan webhook (bukan dari penyedia → galat).
-	VerifySignature(h http.Header, body []byte, cred ChannelCredentials) error
+	// alamat = URL publik webhook kanal (Shopee menandatangani URL|body).
+	VerifySignature(h http.Header, body []byte, cred ChannelCredentials, alamat string) error
 	// Events mengurai satu webhook jadi nol atau lebih peristiwa seragam.
 	Events(body []byte, cred ChannelCredentials) ([]NormalizedEvent, error)
 	// Test memanggil API penyedia dengan kredensial ini; info singkat bila berhasil.
@@ -50,21 +51,58 @@ var providerAdapters = map[string]ProviderAdapter{
 	"whatsapp": whatsappAdapter{},
 	"gofood":   gofoodAdapter{},
 	"grabfood": grabfoodAdapter{},
+	"shopee":   shopeeAdapter{},
 }
 
 // WebhookBalasan: balasan langsung untuk sub-jalur webhook yang ditangani
-// adaptor sendiri (bukan peristiwa pesanan).
+// adaptor sendiri (bukan peristiwa pesanan). HTML diisi untuk halaman yang
+// dibuka peramban (mis. kembali dari otorisasi toko); Kosong = 200 tanpa isi.
 type WebhookBalasan struct {
 	Status int
 	Body   any
+	HTML   string
+	Kosong bool
+}
+
+// WebhookPermintaan: satu panggilan penyedia ke alamat webhook kanal.
+type WebhookPermintaan struct {
+	Metode string
+	Aksi   string // sub-jalur tanpa garis miring tepi, mis. "oauth/token"
+	Query  url.Values
+	Header http.Header
+	Body   []byte
+	Alamat string // URL publik webhook kanal (tanpa sub-jalur)
 }
 
 // webhookActor: penyedia yang punya sub-jalur di bawah alamat webhook — mis.
-// GrabFood meminta token OAuth dari "server partner" sebelum mengirim pesanan.
-// handled=false → diperlakukan sebagai webhook pesanan biasa.
+// GrabFood meminta token OAuth dari "server partner"; Shopee mengembalikan
+// penjual ke alamat callback setelah otorisasi. handled=false → diperlakukan
+// sebagai webhook pesanan biasa. Perubahan pada cred (token baru) disimpan.
 type webhookActor interface {
-	WebhookAction(aksi string, h http.Header, body []byte, cred ChannelCredentials) (WebhookBalasan, bool)
+	WebhookAction(ctx context.Context, p WebhookPermintaan, cred ChannelCredentials) (WebhookBalasan, bool)
 }
+
+// ackKosong: penyedia yang menganggap balasan ber-isi sebagai kegagalan
+// (Shopee: "2xx dan body kosong").
+type ackKosong interface{ AckKosong() bool }
+
+// orderFetcher: penyedia yang webhook-nya hanya membawa nomor pesanan (Shopee)
+// — rinciannya diambil PEKERJA, bukan di jalur webhook. nil = tidak dicatat
+// (mis. belum dibayar / sudah batal).
+type orderFetcher interface {
+	FetchOrder(ctx context.Context, cred ChannelCredentials, orderID string) (*NormalizedEvent, error)
+}
+
+// authorizer: penyedia yang tokonya harus memberi izin lewat peramban (OAuth).
+type authorizer interface {
+	AuthorizeURL(cred ChannelCredentials, redirect string) string
+	// Diotorisasi: nama/ID toko yang sudah memberi izin ("" = belum).
+	Diotorisasi(cred ChannelCredentials) string
+}
+
+// statefulAuth: kunci kredensial yang merupakan hasil otorisasi (token) —
+// dihapus bila identitas aplikasinya berganti.
+type statefulAuth interface{ StateKeys() []string }
 
 // webhookSubscriber: penyedia yang alamat webhook-nya bisa didaftarkan lewat
 // API (GoBiz) — tenant tidak perlu menempelkannya sendiri.
@@ -98,10 +136,10 @@ func segera(code, name, kind, docs, catatan string) structs.ChannelProviderInfo 
 
 // ListChannelProviders: katalog penyedia untuk layar "Hubungkan API".
 func ListChannelProviders() []structs.ChannelProviderInfo {
-	out := []structs.ChannelProviderInfo{whatsappAdapter{}.Info(), gofoodAdapter{}.Info(), grabfoodAdapter{}.Info()}
+	out := []structs.ChannelProviderInfo{
+		whatsappAdapter{}.Info(), gofoodAdapter{}.Info(), grabfoodAdapter{}.Info(), shopeeAdapter{}.Info(),
+	}
 	out = append(out,
-		segera("shopee", "Shopee", "marketplace", "https://open.shopee.com/",
-			"Butuh aplikasi Shopee Open Platform (Partner ID & Partner Key) milik toko."),
 		segera("tiktokshop", "TikTok Shop & Tokopedia", "marketplace", "https://partner.tiktokshop.com/",
 			"Tokopedia kini lewat API TikTok Shop — butuh App Key & App Secret milik toko."),
 		segera("lazada", "Lazada", "marketplace", "https://open.lazada.com/",
@@ -137,13 +175,14 @@ func genericFromEvent(ev NormalizedEvent, raw []byte) ([]byte, error) {
 		Reason          string          `json:"reason,omitempty"`
 		OccurredAt      string          `json:"occurred_at,omitempty"`
 		IgnoreIfMissing bool            `json:"ignore_if_missing,omitempty"`
+		NeedsFetch      bool            `json:"_fetch,omitempty"`
 		Items           []item          `json:"items,omitempty"`
 		Fees            []fee           `json:"fees,omitempty"`
 		Raw             json.RawMessage `json:"_raw,omitempty"`
 	}{
 		EventType: ev.EventType, ExternalOrderID: ev.ExternalOrderID, ExternalStatus: ev.ExternalStatus,
 		BuyerName: ev.BuyerName, BuyerPhone: ev.BuyerPhone, ShippingAddress: ev.ShippingAddress,
-		Courier: ev.Courier, Reason: ev.Reason, IgnoreIfMissing: ev.IgnoreIfMissing,
+		Courier: ev.Courier, Reason: ev.Reason, IgnoreIfMissing: ev.IgnoreIfMissing, NeedsFetch: ev.NeedsFetch,
 	}
 	if ev.OccurredAt != nil {
 		p.OccurredAt = ev.OccurredAt.UTC().Format(time.RFC3339)

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"net/http"
 	"net/url"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"candra/backend-api/config"
 	"candra/backend-api/helpers"
 	"candra/backend-api/internal/rahasia"
+	"candra/backend-api/internal/reqctx"
 	"candra/backend-api/models"
 	"candra/backend-api/repositories"
 	"candra/backend-api/structs"
@@ -90,6 +92,10 @@ func connectionResponse(ctx context.Context, ch models.Channel, cred ChannelCred
 		out.WebhookURL = webhookURL(ch.Provider, *ch.WebhookToken)
 	}
 	out.WebhookValues = ad.WebhookValues(cred, out.WebhookURL)
+	if auth, ok := ad.(authorizer); ok {
+		out.NeedsAuthorization = true
+		out.Authorized = auth.Diotorisasi(cred)
+	}
 	if t, err := repositories.LastChannelEventAt(ctx, ch.ID); err == nil && t != nil {
 		out.LastEventAt = t.UTC().Format(saleTimeLayout)
 	}
@@ -141,10 +147,16 @@ func SaveChannelConnection(ctx context.Context, channelID string, in structs.Cha
 			}
 		}
 		ad.Prepare(cred)
-		// Akun/toko/lingkungan berganti → alamat webhook harus didaftarkan ulang.
-		for _, k := range []string{"client_id", "outlet_id", "merchant_id", "environment", "phone_number_id"} {
+		// Akun/toko/lingkungan berganti → alamat webhook harus didaftarkan ulang,
+		// dan token hasil otorisasi (Shopee) tidak berlaku untuk aplikasi baru.
+		for _, k := range []string{"client_id", "outlet_id", "merchant_id", "environment", "phone_number_id", "partner_id", "partner_key"} {
 			if lama[k] != cred[k] {
 				delete(cred, "subscribed_url")
+				if sa, ok := ad.(statefulAuth); ok {
+					for _, s := range sa.StateKeys() {
+						delete(cred, s)
+					}
+				}
 				break
 			}
 		}
@@ -180,43 +192,118 @@ func SaveChannelConnection(ctx context.Context, channelID string, in structs.Cha
 	return out, err
 }
 
+// denganKredensialTerkunci menjalankan fn atas kredensial kanal dengan baris
+// kanalnya TERKUNCI (FOR UPDATE), lalu menyimpan kredensial bila fn
+// mengubahnya (mis. token baru) beserta status sambungan pada ch. Pembaruan
+// token yang bersamaan antre di sini — refresh token Shopee sekali pakai.
+func denganKredensialTerkunci(ctx context.Context, channelID string, fn func(ch *models.Channel, ad ProviderAdapter, cred ChannelCredentials) error) error {
+	return repositories.WithTenant(ctx, func(tx *gorm.DB) error {
+		ch, err := repositories.FindChannelForUpdate(ctx, tx, channelID)
+		if err != nil {
+			return err
+		}
+		ad, ada := providerAdapters[ch.Provider]
+		if !ada || len(ch.CredentialsEncrypted) == 0 {
+			return fmt.Errorf("%w: kanal ini belum disambungkan", helpers.ErrValidation)
+		}
+		cred, err := bukaKredensial(ch)
+		if err != nil {
+			return err
+		}
+		sebelum, _ := json.Marshal(cred)
+		lamaStatus, lamaGalat, lamaCek := ch.ConnectionStatus, ch.ConnectionError, ch.ConnectionCheckedAt
+		ferr := fn(&ch, ad, cred)
+		sesudah, _ := json.Marshal(cred)
+		berubah := string(sebelum) != string(sesudah)
+		if berubah {
+			sandi, err := rahasia.Tutup(sesudah)
+			if err != nil {
+				return err
+			}
+			ch.CredentialsEncrypted = sandi
+			ch.MerchantRef = ad.MerchantRef(cred) // mis. shop_id Shopee baru diketahui setelah otorisasi
+		}
+		if berubah || ch.ConnectionStatus != lamaStatus || ch.ConnectionError != lamaGalat || ch.ConnectionCheckedAt != lamaCek {
+			if err := repositories.SaveChannelConnection(ctx, tx, &ch); err != nil {
+				if helpers.IsDuplicateEntryError(err) {
+					return fmt.Errorf("%w: toko ini sudah tersambung ke kanal lain", helpers.ErrConflict)
+				}
+				return err
+			}
+		}
+		return ferr
+	})
+}
+
 // TestChannelConnection memanggil API penyedia dengan kredensial tersimpan dan
 // mencatat hasilnya — kegagalan penyedia BUKAN galat HTTP; statusnya "error"
 // dengan pesan dari penyedia supaya tenant tahu isian mana yang salah.
 func TestChannelConnection(ctx context.Context, channelID string) (structs.ChannelConnectionResponse, error) {
 	var out structs.ChannelConnectionResponse
-	ch, err := repositories.FindChannel(ctx, nil, channelID)
-	if err != nil {
-		return out, err
-	}
-	ad, ada := providerAdapters[ch.Provider]
-	if !ada || len(ch.CredentialsEncrypted) == 0 {
-		return out, fmt.Errorf("%w: kanal ini belum disambungkan", helpers.ErrValidation)
-	}
-	cred, err := bukaKredensial(ch)
-	if err != nil {
-		return out, err
-	}
-	tctx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-	info, terr := ad.Test(tctx, cred)
-	now := time.Now().UTC()
-	ch.ConnectionCheckedAt = &now
-	if terr != nil {
-		ch.ConnectionStatus, ch.ConnectionError = "error", terr.Error()
-	} else {
-		ch.ConnectionStatus, ch.ConnectionError = "connected", ""
-		info = daftarkanWebhook(tctx, ad, &ch, cred, info)
-	}
-	err = repositories.WithTenant(ctx, func(tx *gorm.DB) error {
-		return repositories.SaveChannelConnection(ctx, tx, &ch)
+	var info string
+	var akhir models.Channel
+	var credAkhir ChannelCredentials
+	err := denganKredensialTerkunci(ctx, channelID, func(ch *models.Channel, ad ProviderAdapter, cred ChannelCredentials) error {
+		tctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		defer cancel()
+		i, terr := ad.Test(tctx, cred)
+		now := time.Now().UTC()
+		ch.ConnectionCheckedAt = &now
+		if terr != nil {
+			ch.ConnectionStatus, ch.ConnectionError = "error", terr.Error()
+		} else {
+			ch.ConnectionStatus, ch.ConnectionError = "connected", ""
+			i = daftarkanWebhook(tctx, ad, ch, cred, i)
+		}
+		info, akhir, credAkhir = i, *ch, cred
+		return nil
 	})
 	if err != nil {
 		return out, err
 	}
-	out = connectionResponse(ctx, ch, cred)
+	out = connectionResponse(ctx, akhir, credAkhir)
 	out.Info = info
 	return out, nil
+}
+
+// AuthorizeChannelConnection: alamat otorisasi toko di penyedia (Shopee),
+// dengan state acak yang dicatat untuk mencocokkan callback-nya.
+func AuthorizeChannelConnection(ctx context.Context, channelID string) (string, error) {
+	var alamat string
+	err := denganKredensialTerkunci(ctx, channelID, func(ch *models.Channel, ad ProviderAdapter, cred ChannelCredentials) error {
+		auth, bisa := ad.(authorizer)
+		if !bisa {
+			return fmt.Errorf("%w: penyedia ini tidak memakai otorisasi toko", helpers.ErrValidation)
+		}
+		if ch.WebhookToken == nil {
+			return fmt.Errorf("%w: simpan kredensialnya dulu", helpers.ErrValidation)
+		}
+		base := webhookURL(ch.Provider, *ch.WebhookToken)
+		if !strings.HasPrefix(base, "http") {
+			return fmt.Errorf("%w: alamat publik server (APP_URL) belum diatur — penyedia tidak bisa mengembalikan toko ke sini", helpers.ErrValidation)
+		}
+		alamat = auth.AuthorizeURL(cred, base+"/oauth/callback")
+		return nil
+	})
+	return alamat, err
+}
+
+// ambilRincianPesanan: rincian pesanan dari API penyedia untuk peristiwa
+// ber-NeedsFetch — dipanggil PEKERJA (token diperbarui & disimpan bila perlu).
+func ambilRincianPesanan(ctx context.Context, channelID, orderID string) (*NormalizedEvent, error) {
+	var ev *NormalizedEvent
+	err := denganKredensialTerkunci(ctx, channelID, func(_ *models.Channel, ad ProviderAdapter, cred ChannelCredentials) error {
+		f, bisa := ad.(orderFetcher)
+		if !bisa {
+			return fmt.Errorf("%w: penyedia tidak mendukung pengambilan rincian pesanan", helpers.ErrValidation)
+		}
+		tctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		defer cancel()
+		var err error
+		ev, err = f.FetchOrder(tctx, cred, orderID)
+		return err
+	})
+	return ev, err
 }
 
 // daftarkanWebhook: untuk penyedia yang mendukungnya, alamat webhook kanal
@@ -288,13 +375,65 @@ func kanalWebhook(ctx context.Context, provider, token string) (models.Channel, 
 	return ch, ad, cred, nil
 }
 
-// ProviderWebhookChallenge menjawab GET verifikasi alamat webhook.
-func ProviderWebhookChallenge(ctx context.Context, provider, token string, q url.Values) (string, bool) {
-	_, ad, cred, err := kanalWebhook(ctx, provider, token)
-	if err != nil {
-		return "", false
+// jalankanAksi: sub-jalur yang ditangani adaptor sendiri. Perubahan kredensial
+// (mis. token hasil otorisasi) disimpan dengan baris kanal terkunci.
+func jalankanAksi(ctx context.Context, ch models.Channel, ad ProviderAdapter, cred ChannelCredentials, p WebhookPermintaan) (*WebhookBalasan, error) {
+	act, bisa := ad.(webhookActor)
+	if !bisa {
+		return nil, nil
 	}
-	return ad.VerifyChallenge(q, cred)
+	sebelum, _ := json.Marshal(cred)
+	balasan, ditangani := act.WebhookAction(ctx, p, cred)
+	if !ditangani {
+		return nil, nil
+	}
+	if sesudah, _ := json.Marshal(cred); string(sebelum) != string(sesudah) {
+		// Hanya SELISIH yang diterapkan ke baris terkunci: kunci yang tidak
+		// disentuh aksi tidak menimpa pembaruan pekerja (token baru), dan kunci
+		// yang dihapus aksi (state otorisasi sekali pakai) ikut terhapus.
+		var awal ChannelCredentials
+		_ = json.Unmarshal(sebelum, &awal)
+		tctx := reqctx.WithTenantID(ctx, ch.TenantID)
+		err := denganKredensialTerkunci(tctx, ch.ID, func(c *models.Channel, _ ProviderAdapter, simpan ChannelCredentials) error {
+			for k, v := range cred {
+				if lama, ada := awal[k]; !ada || lama != v {
+					simpan[k] = v
+				}
+			}
+			for k := range awal {
+				if _, ada := cred[k]; !ada {
+					delete(simpan, k)
+				}
+			}
+			if balasan.Status == http.StatusOK {
+				now := time.Now().UTC()
+				c.ConnectionStatus, c.ConnectionError, c.ConnectionCheckedAt = "connected", "", &now
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &balasan, nil
+}
+
+// ProviderWebhookGet: GET ke alamat webhook — verifikasi alamat (WhatsApp) atau
+// sub-jalur adaptor (callback otorisasi Shopee). ok=false → 403.
+func ProviderWebhookGet(ctx context.Context, provider, token, aksi string, q url.Values, h http.Header) (*WebhookBalasan, string, bool) {
+	ch, ad, cred, err := kanalWebhook(ctx, provider, token)
+	if err != nil {
+		return nil, "", false
+	}
+	p := WebhookPermintaan{Metode: http.MethodGet, Aksi: strings.Trim(aksi, "/"), Query: q, Header: h,
+		Alamat: webhookURL(ch.Provider, token)}
+	if balasan, err := jalankanAksi(ctx, ch, ad, cred, p); err != nil {
+		return &WebhookBalasan{Status: http.StatusInternalServerError, HTML: halamanPesan("Gagal menyimpan", err.Error())}, "", true
+	} else if balasan != nil {
+		return balasan, "", true
+	}
+	body, ok := ad.VerifyChallenge(q, cred)
+	return nil, body, ok
 }
 
 // IngestProviderWebhook: tanda tangan diperiksa dengan rahasia milik kanal itu,
@@ -310,30 +449,41 @@ func IngestProviderWebhook(ctx context.Context, provider, token, aksi string, h 
 	if err != nil {
 		return res, nil, err
 	}
-	if act, bisa := ad.(webhookActor); bisa {
-		if balasan, ditangani := act.WebhookAction(strings.Trim(aksi, "/"), h, body, cred); ditangani {
-			return res, &balasan, nil
-		}
+	alamat := webhookURL(ch.Provider, token)
+	p := WebhookPermintaan{Metode: http.MethodPost, Aksi: strings.Trim(aksi, "/"), Header: h, Body: body, Alamat: alamat}
+	if balasan, err := jalankanAksi(ctx, ch, ad, cred, p); err != nil || balasan != nil {
+		return res, balasan, err
 	}
-	if err := ad.VerifySignature(h, body, cred); err != nil {
+	if err := ad.VerifySignature(h, body, cred, alamat); err != nil {
 		return res, nil, ErrWebhookUnauthorized
+	}
+	var kosong *WebhookBalasan
+	if a, bisa := ad.(ackKosong); bisa && a.AckKosong() {
+		kosong = &WebhookBalasan{Status: http.StatusOK, Kosong: true}
 	}
 	evs, err := ad.Events(body, cred)
 	if err != nil {
 		res.Ignored = "payload tidak dapat diurai: " + err.Error()
-		return res, nil, nil
+		return res, kosong, nil
 	}
 	if len(evs) == 0 {
 		res.Ignored = "bukan pesanan"
-		return res, nil, nil
+		return res, kosong, nil
 	}
 	for _, ev := range evs {
 		payload, err := genericFromEvent(ev, body)
 		if err != nil {
 			return res, nil, err
 		}
-		created, err := repositories.InsertChannelEvent(ctx, ch.TenantID, ch.ID,
-			normalizeEventType(ev.EventType), ev.ExternalOrderID, payload)
+		tipe := normalizeEventType(ev.EventType)
+		// Status berurutan (dikirim, diterima, selesai) untuk pesanan yang
+		// sama adalah peristiwa berbeda — tanpa akhiran status, yang kedua
+		// dan seterusnya dibuang sebagai duplikat.
+		ref := ev.ExternalOrderID
+		if tipe == "order.status" && ev.ExternalStatus != "" {
+			ref += "#" + ev.ExternalStatus
+		}
+		created, err := repositories.InsertChannelEvent(ctx, ch.TenantID, ch.ID, tipe, ref, payload)
 		if err != nil {
 			return res, nil, err
 		}
@@ -343,5 +493,13 @@ func IngestProviderWebhook(ctx context.Context, provider, token, aksi string, h 
 			res.Duplicate++
 		}
 	}
-	return res, nil, nil
+	return res, kosong, nil
+}
+
+// halamanPesan: halaman HTML singkat untuk peramban yang kembali dari penyedia.
+func halamanPesan(judul, isi string) string {
+	return "<!doctype html><html lang=\"id\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
+		"<title>" + html.EscapeString(judul) + "</title><style>body{font-family:system-ui,sans-serif;background:#f7f7f5;color:#1a1a1a;display:grid;place-items:center;min-height:100vh;margin:0;padding:16px}" +
+		"main{background:#fff;border:1px solid #e5e5e0;border-radius:12px;padding:24px;max-width:420px;text-align:center}h1{font-size:20px;margin:0 0 8px}p{margin:0;color:#555;line-height:1.5}</style></head>" +
+		"<body><main><h1>" + html.EscapeString(judul) + "</h1><p>" + html.EscapeString(isi) + "</p></main></body></html>"
 }

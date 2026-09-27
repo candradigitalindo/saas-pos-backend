@@ -107,6 +107,9 @@ func TestPaketGratisMengunciFiturBerbayar(t *testing.T) {
 		t.Fatalf("buat kanal di paket Gratis: kode %d, mau 402", res.Code)
 	}
 	call(t, "GET", "/api/v1/channels", f.token, nil).mustOK(t, "baca kanal tetap boleh")
+	// Otorisasi toko (Shopee) menulis state baru → ikut dikunci walau tanpa isi.
+	call(t, "POST", "/api/v1/channels/01KANALTIDAKADA0000000000/connection/authorize", f.token, nil).
+		mustCode(t, "otorisasi toko di paket Gratis", 402)
 	if res = call(t, "POST", "/api/v1/deals", f.token, map[string]any{"title": "Proyek"}); res.Code != 402 {
 		t.Fatalf("buat deal di paket Gratis: kode %d, mau 402", res.Code)
 	}

@@ -64,10 +64,29 @@ func DeleteChannelConnection(c *gin.Context) {
 	c.JSON(http.StatusOK, structs.SuccessResponse[any]{Success: true, Message: "Sambungan diputus", Data: nil})
 }
 
-// ProviderWebhookChallenge: GET /webhooks/channels/:provider/:token — penyedia
-// (mis. Meta) memverifikasi alamat sebelum mau mengirim. Balasannya teks polos.
+// balasWebhook menulis balasan sub-jalur adaptor: halaman HTML (peramban yang
+// kembali dari otorisasi), 200 tanpa isi (Shopee), atau JSON.
+func balasWebhook(c *gin.Context, b *services.WebhookBalasan) {
+	switch {
+	case b.HTML != "":
+		c.Data(b.Status, "text/html; charset=utf-8", []byte(b.HTML))
+	case b.Kosong:
+		c.Status(b.Status)
+	default:
+		c.JSON(b.Status, b.Body)
+	}
+}
+
+// ProviderWebhookChallenge: GET /webhooks/channels/:provider/:token[/*aksi] —
+// verifikasi alamat oleh penyedia (Meta; balasan teks polos) atau sub-jalur
+// adaptor (callback otorisasi toko Shopee; balasan halaman HTML).
 func ProviderWebhookChallenge(c *gin.Context) {
-	body, ok := services.ProviderWebhookChallenge(c.Request.Context(), c.Param("provider"), c.Param("token"), c.Request.URL.Query())
+	balasan, body, ok := services.ProviderWebhookGet(c.Request.Context(), c.Param("provider"), c.Param("token"),
+		c.Param("aksi"), c.Request.URL.Query(), c.Request.Header)
+	if balasan != nil {
+		balasWebhook(c, balasan)
+		return
+	}
 	if !ok {
 		c.String(http.StatusForbidden, "verifikasi ditolak")
 		return
@@ -89,10 +108,6 @@ func ProviderWebhook(c *gin.Context) {
 	}
 	res, balasan, err := services.IngestProviderWebhook(c.Request.Context(), c.Param("provider"), c.Param("token"),
 		c.Param("aksi"), c.Request.Header, raw)
-	if balasan != nil {
-		c.JSON(balasan.Status, balasan.Body)
-		return
-	}
 	if errors.Is(err, services.ErrWebhookUnauthorized) {
 		c.JSON(http.StatusUnauthorized, structs.ErrorResponse{
 			Success: false, Message: "Webhook tidak sah", Errors: map[string]string{"signature": "tidak cocok"},
@@ -106,7 +121,26 @@ func ProviderWebhook(c *gin.Context) {
 		})
 		return
 	}
+	if balasan != nil {
+		balasWebhook(c, balasan)
+		return
+	}
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.ProviderWebhookResult]{
 		Success: true, Message: "Diterima", Data: res,
+	})
+}
+
+// AuthorizeChannelConnection: POST /api/v1/channels/:id/connection/authorize —
+// alamat halaman otorisasi toko di penyedia (dibuka tenant di tab baru). POST,
+// bukan GET: setiap panggilan menulis state otorisasi baru, jadi ikut kunci
+// paket untuk penulisan seperti simpan & tes.
+func AuthorizeChannelConnection(c *gin.Context) {
+	alamat, err := services.AuthorizeChannelConnection(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		notFoundOr(c, err, repositories.ErrChannelNotFound, "Kanal tidak ditemukan")
+		return
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[map[string]string]{
+		Success: true, Message: "Alamat otorisasi", Data: map[string]string{"url": alamat},
 	})
 }

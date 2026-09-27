@@ -76,6 +76,8 @@ export interface PenyediaKanal {
   note?: string
   /** Nama alamat webhook utama di konsol penyedia (bawaan "Callback URL"). */
   webhook_label?: string
+  /** Toko harus memberi izin lewat peramban (OAuth) setelah kredensial disimpan — mis. Shopee. */
+  requires_authorization?: boolean
 }
 
 /** GET /channels/:id/connection — rahasia hanya pratinjau 4 karakter terakhir. */
@@ -90,6 +92,10 @@ export interface SambunganKanal {
   last_event_at?: string
   /** Dari tes yang baru dijalankan, mis. nama bisnis & nomor. */
   info?: string
+  /** Penyedia ini butuh izin toko lewat peramban (Otorisasi Toko). */
+  needs_authorization?: boolean
+  /** Toko yang sudah memberi izin; kosong = belum. */
+  authorized?: string
 }
 
 /** Hasil impor CSV laporan kanal (services.ChannelOrderImportResult). */
@@ -120,9 +126,9 @@ export const kanalApi = {
     api.get<Halaman<PesananKanal>>('/channel-orders', { query: { channel_id, page, limit } }),
 
   /**
-   * Entri pesanan manual — untuk pesanan yang datang lewat WhatsApp atau
-   * Instagram. Adaptor API per-provider belum ada (menunggu kemitraan), jadi
-   * inilah jalur utamanya, bukan jalan darurat.
+   * Entri pesanan manual — untuk kanal yang tidak disambungkan ke API (chat
+   * Instagram, WhatsApp pribadi, penyedia yang adaptornya belum ada). Bagi
+   * kanal seperti itu inilah jalur utamanya, bukan jalan darurat.
    */
   catatPesanan: (input: {
     channel_id: string
@@ -142,6 +148,8 @@ export const kanalApi = {
     api.put<SambunganKanal>(`/channels/${id}/connection`, { provider, fields }),
   tesSambungan: (id: string) => api.post<SambunganKanal>(`/channels/${id}/connection/test`),
   putusSambungan: (id: string) => api.hapus<null>(`/channels/${id}/connection`),
+  /** Alamat halaman izin toko di penyedia; setiap panggilan membuat state baru. */
+  otorisasi: (id: string) => api.post<{ url: string }>(`/channels/${id}/connection/authorize`),
 
   /** Impor laporan harian dari marketplace sebagai CSV. */
   imporPesanan: (channelId: string, csv: string) =>

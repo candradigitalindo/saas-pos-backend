@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Copy, ExternalLink, PlugZap, TriangleAlert, Unplug } from 'lucide-react'
+import { Check, Copy, ExternalLink, Loader2, PlugZap, Store, TriangleAlert, Unplug } from 'lucide-react'
 import { Kolom } from '@/bersama/ui/kolom'
 import { Tombol } from '@/bersama/ui/tombol'
 import { AksiDialog, Dialog, IsiDialog } from '@/bersama/ui/dialog'
@@ -29,14 +29,24 @@ export const kodePenyedia = (k: Kanal) =>
  * pesan asli penyedia), dan apa yang harus ditempel balik di konsol penyedia
  * (alamat webhook). Rahasia tidak pernah dikirim balik; yang tampil hanya
  * empat karakter terakhir.
+ *
+ * Penyedia ber-OAuth (Shopee) menambah satu langkah: setelah kredensial
+ * aplikasi tersimpan, pemilik toko memberi izin di tab baru. Dialog ini
+ * menunggu sendiri (memeriksa sambungan tiap 3 detik) sampai izinnya tercatat.
  */
 export function DialogSambungan({ kanal, onTutup }: { kanal: Kanal; onTutup: () => void }) {
   const toast = useToast()
   const qc = useQueryClient()
   const penyedia = useQuery({ queryKey: ['penyedia-kanal'], queryFn: kanalApi.penyedia, staleTime: 5 * 60_000 })
+  // Menunggu izin toko: `sejak` = checked_at saat tab izin dibuka. Callback
+  // yang berhasil memperbaruinya — begitu pula saat otorisasi ULANG, ketika
+  // nama toko sudah terisi sejak awal.
+  const [menunggu, setMenunggu] = useState<{ sejak: string } | null>(null)
+  const [tautanIzin, setTautanIzin] = useState<string | null>(null)
   const sambungan = useQuery({
     queryKey: ['sambungan-kanal', kanal.id],
     queryFn: () => kanalApi.sambungan(kanal.id),
+    refetchInterval: () => (menunggu ? 3000 : false),
   })
   const [kodePilihan, setKode] = useState<string | undefined>(undefined)
   const [isian, setIsian] = useState<Record<string, string>>({})
@@ -54,10 +64,50 @@ export function DialogSambungan({ kanal, onTutup }: { kanal: Kanal; onTutup: () 
     penyedia.data?.find((p) => p.available)?.code
   const dipilih = useMemo(() => penyedia.data?.find((p) => p.code === kode), [penyedia.data, kode])
   const tersimpan = !!s?.provider && s.provider === kode
+  const perluIzin = !!dipilih?.requires_authorization
+  const belumIzin = perluIzin && !s?.authorized
+
+  const diizinkan = sambungan.data?.authorized
+  const dicek = sambungan.data?.checked_at ?? ''
+  useEffect(() => {
+    if (!menunggu || !diizinkan || dicek === menunggu.sejak) return
+    setMenunggu(null)
+    setTautanIzin(null)
+    setHasil(null)
+    qc.invalidateQueries({ queryKey: ['kanal'] })
+    toast.berhasil(`${diizinkan} sudah memberi izin — pesanan baru akan masuk otomatis.`)
+  }, [menunggu, diizinkan, dicek, qc, toast])
+
+  const izin = useMutation({ mutationFn: () => kanalApi.otorisasi(kanal.id) })
+  const mulaiIzin = () => {
+    setGalat(null)
+    setTautanIzin(null)
+    // Tab dibuka SEBELUM menunggu server: peramban hanya mengizinkan jendela
+    // baru langsung dari klik. Bila tetap diblokir, tautannya ditampilkan.
+    const tab = window.open('', '_blank')
+    izin.mutate(undefined, {
+      onSuccess: ({ url }) => {
+        if (tab && !tab.closed) {
+          tab.opener = null
+          tab.location.href = url
+        } else {
+          setTautanIzin(url)
+        }
+        setHasil(null)
+        setMenunggu({ sejak: sambungan.data?.checked_at ?? '' })
+      },
+      onError: (e) => {
+        tab?.close()
+        setGalat(e instanceof GalatAPI ? e.pesan : 'Gagal membuka halaman izin.')
+      },
+    })
+  }
 
   const simpan = useMutation({
     mutationFn: async () => {
-      await kanalApi.simpanSambungan(kanal.id, kode!, isian)
+      const r = await kanalApi.simpanSambungan(kanal.id, kode!, isian)
+      // Belum ada izin toko → tes pasti gagal; jangan catat sebagai galat.
+      if (r.needs_authorization && !r.authorized) return r
       return kanalApi.tesSambungan(kanal.id)
     },
     onSuccess: (r) => {
@@ -82,6 +132,10 @@ export function DialogSambungan({ kanal, onTutup }: { kanal: Kanal; onTutup: () 
 
   const kurang = dipilih?.fields.some(
     (f) => !f.optional && !(isian[f.key] ?? '').trim() && !(tersimpan && s?.fields[f.key]?.set),
+  )
+  // Izin memakai kredensial TERSIMPAN — isian yang belum disimpan harus disimpan dulu.
+  const adaUbahan = Object.entries(isian).some(
+    ([k, v]) => v.trim() !== '' && v !== (tersimpan ? s?.fields[k]?.value : undefined),
   )
 
   return (
@@ -124,7 +178,7 @@ export function DialogSambungan({ kanal, onTutup }: { kanal: Kanal; onTutup: () 
 
             {dipilih?.available && (
               <>
-                {tersimpan && s && <StatusSambungan s={s} />}
+                {tersimpan && s && !belumIzin && <StatusSambungan s={s} />}
 
                 <ul className="flex flex-col gap-1.5 rounded-kontrol bg-permukaan-2 px-3 py-2.5 text-label">
                   {dipilih.capabilities.map((c) => (
@@ -216,6 +270,18 @@ export function DialogSambungan({ kanal, onTutup }: { kanal: Kanal; onTutup: () 
                   <AlamatWebhook s={s} label={dipilih.webhook_label ?? 'Callback URL'} />
                 )}
 
+                {tersimpan && perluIzin && (
+                  <IzinToko
+                    penyedia={dipilih.name}
+                    toko={s?.authorized}
+                    menunggu={!!menunggu}
+                    tautan={tautanIzin}
+                    memuat={izin.isPending}
+                    terkunci={adaUbahan}
+                    onMulai={mulaiIzin}
+                  />
+                )}
+
                 {galat && (
                   <p role="alert" className="text-label text-bahaya-teks">
                     {galat}
@@ -241,16 +307,24 @@ export function DialogSambungan({ kanal, onTutup }: { kanal: Kanal; onTutup: () 
 
                 <AksiDialog>
                   <Tombol
+                    // Saat menunggu izin toko, tombol utamanya ada di kotak izin.
+                    jenis={tersimpan && belumIzin && !adaUbahan ? 'kedua' : 'utama'}
                     onClick={() => {
                       setGalat(null)
                       simpan.mutate()
                     }}
                     disabled={kurang}
                     memuat={simpan.isPending}
-                    labelMemuat="Menyimpan & mengetes…"
+                    labelMemuat={belumIzin ? 'Menyimpan…' : 'Menyimpan & mengetes…'}
                   >
                     <PlugZap className="h-5 w-5" aria-hidden />
-                    {tersimpan ? 'Simpan & Tes Ulang' : 'Simpan & Tes Koneksi'}
+                    {belumIzin
+                      ? tersimpan
+                        ? 'Simpan Perubahan'
+                        : 'Simpan Kredensial'
+                      : tersimpan
+                        ? 'Simpan & Tes Ulang'
+                        : 'Simpan & Tes Koneksi'}
                   </Tombol>
                   {tersimpan && !yakinPutus && (
                     <Tombol jenis="kedua" onClick={() => setYakinPutus(true)}>
@@ -302,6 +376,112 @@ function StatusSambungan({ s }: { s: SambunganKanal }) {
   )
 }
 
+/**
+ * Langkah izin toko (OAuth). Belum diizinkan: ajakan utama dengan pengingat
+ * Redirect URL Domain — penyebab gagal paling umum. Sudah: nama tokonya, plus
+ * jalan otorisasi ulang (ganti toko / izin dicabut / kedaluwarsa 1 tahun).
+ */
+function IzinToko({
+  penyedia,
+  toko,
+  menunggu,
+  tautan,
+  memuat,
+  terkunci,
+  onMulai,
+}: {
+  penyedia: string
+  toko?: string
+  menunggu: boolean
+  tautan: string | null
+  memuat: boolean
+  terkunci: boolean
+  onMulai: () => void
+}) {
+  const tunggu = (
+    <>
+      {menunggu && (
+        <p role="status" className="flex items-center gap-2 text-label text-teks-sekunder">
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none" aria-hidden />
+          Menunggu izin dari {penyedia}… layar ini diperbarui sendiri.
+        </p>
+      )}
+      {tautan && (
+        <a
+          href={tautan}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex w-fit items-center gap-1 text-label font-medium text-utama hover:underline"
+        >
+          Peramban memblokir tab baru — buka halaman izin {penyedia}
+          <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+        </a>
+      )}
+      {terkunci && (
+        <p className="text-keterangan text-teks-redup">Simpan dulu perubahan kredensial sebelum memberi izin.</p>
+      )}
+    </>
+  )
+  if (toko) {
+    return (
+      <div className="flex flex-col gap-2 rounded-kontrol border border-garis p-3">
+        {/* Layar sempit: tombol turun ke baris sendiri — nama toko Shopee
+            sering panjang ("… Official Store") dan tidak boleh terpotong. */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex min-w-0 flex-1 basis-56 items-center gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sorot text-utama">
+              <Store className="h-5 w-5" aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <p className="text-keterangan text-teks-redup">Toko yang memberi izin</p>
+              <p className="text-label font-semibold break-words text-teks-utama">{toko}</p>
+            </div>
+          </div>
+          <Tombol
+            jenis="kedua"
+            ukuran="padat"
+            className="w-full sm:w-auto"
+            onClick={onMulai}
+            disabled={terkunci}
+            memuat={memuat}
+          >
+            Otorisasi Ulang
+          </Tombol>
+        </div>
+        {tunggu}
+      </div>
+    )
+  }
+  return (
+    <div className="flex flex-col gap-3 rounded-kontrol border border-utama/40 bg-sorot p-3">
+      <div className="flex items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-permukaan text-utama">
+          <Store className="h-5 w-5" aria-hidden />
+        </span>
+        <div className="flex min-w-0 flex-col gap-0.5 text-label">
+          <p className="font-semibold text-teks-utama">Langkah terakhir: izin toko {penyedia}</p>
+          <p className="text-teks-sekunder">
+            Pastikan Redirect URL Domain di atas sudah diisi di aplikasi {penyedia}. Halaman izin terbuka di
+            tab baru — masuk dengan akun penjual, lalu setujui.
+          </p>
+        </div>
+      </div>
+      {tunggu}
+      <Tombol
+        jenis={menunggu ? 'kedua' : 'utama'}
+        lebarPenuh
+        onClick={onMulai}
+        disabled={terkunci}
+        memuat={memuat}
+        labelMemuat="Membuka…"
+      >
+        <ExternalLink className="h-5 w-5" aria-hidden />
+        {menunggu ? 'Buka Lagi Halaman Izin' : `Otorisasi Toko ${penyedia}`}
+      </Tombol>
+    </div>
+  )
+}
+
 /** Yang harus ditempel balik di konsol penyedia. */
 function AlamatWebhook({ s, label }: { s: SambunganKanal; label: string }) {
   const relatif = s.webhook_url?.startsWith('/')
@@ -330,15 +510,17 @@ function SalinNilai({ label, nilai }: { label: string; nilai: string }) {
       <div className="flex items-center gap-2">
         {/* Yang terpotong bagian DEPAN (elipsis), 18 karakter terakhir selalu
             tampak: alamat-alamat webhook sama awalnya dan berbeda di ujung
-            (".../oauth/token"). Tombol salin tetap menyalin nilai utuh. */}
+            (".../oauth/token"). Kepalanya inline-block, BUKAN butir flex —
+            butir flex membuat blok teks yang disalin manual berisi baris baru
+            di tengah alamat. Tombol salin tetap menyalin nilai utuh. */}
         <code
           title={nilai}
-          className="flex min-w-0 flex-1 rounded-kontrol bg-permukaan-2 px-2.5 py-2 text-keterangan whitespace-nowrap text-teks-utama"
+          className="block min-w-0 flex-1 overflow-hidden rounded-kontrol bg-permukaan-2 px-2.5 py-2 font-mono text-keterangan whitespace-nowrap text-teks-utama"
         >
           {nilai.length > 24 ? (
             <>
-              <span className="min-w-0 truncate">{nilai.slice(0, -18)}</span>
-              <span className="shrink-0">{nilai.slice(-18)}</span>
+              <span className="inline-block max-w-[calc(100%-18ch)] truncate align-bottom">{nilai.slice(0, -18)}</span>
+              {nilai.slice(-18)}
             </>
           ) : (
             nilai

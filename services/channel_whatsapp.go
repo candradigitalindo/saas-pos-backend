@@ -92,7 +92,7 @@ func (whatsappAdapter) VerifyChallenge(q url.Values, cred ChannelCredentials) (s
 
 var errTandaTangan = errors.New("tanda tangan webhook tidak cocok")
 
-func (whatsappAdapter) VerifySignature(h http.Header, body []byte, cred ChannelCredentials) error {
+func (whatsappAdapter) VerifySignature(h http.Header, body []byte, cred ChannelCredentials, _ string) error {
 	sig := strings.TrimPrefix(h.Get("X-Hub-Signature-256"), "sha256=")
 	want, err := hex.DecodeString(sig)
 	if err != nil || len(want) == 0 || cred["app_secret"] == "" {

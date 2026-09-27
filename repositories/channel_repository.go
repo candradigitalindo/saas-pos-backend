@@ -397,3 +397,15 @@ func LastChannelEventAt(ctx context.Context, channelID string) (*time.Time, erro
 		Where("channel_id = ?", channelID).Select("MAX(received_at)").Scan(&t).Error
 	return t, err
 }
+
+// FindChannelForUpdate memuat kanal & MENGUNCI barisnya (FOR UPDATE) sampai tx
+// selesai — dipakai saat token penyedia diperbarui: refresh token Shopee hanya
+// bisa dipakai sekali, jadi dua pembaruan bersamaan harus antre.
+func FindChannelForUpdate(ctx context.Context, tx *gorm.DB, id string) (models.Channel, error) {
+	var c models.Channel
+	err := scopeTenant(ctx, tenantDB(ctx, tx)).Clauses(lockForUpdate()).First(&c, "id = ?", id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return c, ErrChannelNotFound
+	}
+	return c, err
+}

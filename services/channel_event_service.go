@@ -70,6 +70,9 @@ type NormalizedEvent struct {
 	// wajar — pesanan yang ditolak/kedaluwarsa sebelum diterima toko tetap
 	// mengirim "cancelled".
 	IgnoreIfMissing bool
+	// NeedsFetch: rincian pesanan diambil dari API penyedia oleh pekerja
+	// (orderFetcher) — webhook-nya hanya membawa nomor & status.
+	NeedsFetch bool
 }
 
 // NormalizedItem adalah satu baris pesanan ternormalisasi. `ProductID` boleh
@@ -112,6 +115,7 @@ type genericPayload struct {
 	Reason          string `json:"reason"`
 	OccurredAt      string `json:"occurred_at"` // RFC3339
 	IgnoreIfMissing bool   `json:"ignore_if_missing"`
+	NeedsFetch      bool   `json:"_fetch"`
 	Items           []struct {
 		SKU       string `json:"sku"`
 		ProductID string `json:"product_id"`
@@ -142,6 +146,7 @@ func (genericAdapter) Normalize(raw []byte) (NormalizedEvent, error) {
 		Courier:         p.Courier,
 		Reason:          p.Reason,
 		IgnoreIfMissing: p.IgnoreIfMissing,
+		NeedsFetch:      p.NeedsFetch,
 	}
 	if s := strings.TrimSpace(p.OccurredAt); s != "" {
 		if t, err := time.Parse(time.RFC3339, s); err == nil {
@@ -370,6 +375,16 @@ func dispatchChannelEvent(ctx context.Context, ev models.ChannelEvent) (status, 
 	}
 	if strings.TrimSpace(norm.ExternalOrderID) == "" {
 		return "dead", "external_order_id kosong di payload"
+	}
+	if norm.NeedsFetch {
+		lengkap, err := ambilRincianPesanan(ectx, ch.ID, norm.ExternalOrderID)
+		if err != nil {
+			return classifyEventError(err, next)
+		}
+		if lengkap == nil {
+			return "done", "" // belum dibayar / sudah batal — tidak dicatat
+		}
+		norm = *lengkap
 	}
 
 	switch normalizeEventType(norm.EventType) {
