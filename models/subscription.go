@@ -158,3 +158,36 @@ func (p *SubscriptionPayment) BeforeCreate(tx *gorm.DB) (err error) {
 	}
 	return
 }
+
+// SubClaimStatuses: status konfirmasi pembayaran (cermin CHECK migrasi 000039).
+var SubClaimStatuses = []string{"pending", "approved", "rejected"}
+
+// SubscriptionPaymentClaim adalah KONFIRMASI pembayaran dari tenant ("sudah
+// saya transfer"), yang menunggu diverifikasi staf keuangan platform. Baru
+// saat disetujui pembayaran sungguhan (SubscriptionPayment) dicatat dan paket
+// aktif — tenant tidak lagi bisa menandai tagihannya sendiri lunas.
+type SubscriptionPaymentClaim struct {
+	ID                    string     `json:"id" gorm:"primaryKey;type:char(26)"`
+	TenantID              string     `json:"tenant_id" gorm:"type:char(26);not null"`
+	SubscriptionInvoiceID string     `json:"subscription_invoice_id" gorm:"type:char(26);not null"`
+	Amount                int64      `json:"amount" gorm:"not null"`
+	Method                string     `json:"method" gorm:"not null"`
+	Reference             string     `json:"reference" gorm:"not null;default:''"`
+	Note                  string     `json:"note" gorm:"not null;default:''"`
+	Status                string     `json:"status" gorm:"not null;default:pending"`
+	SubmittedBy           *string    `json:"submitted_by" gorm:"type:char(26)"`
+	ReviewedBy            *string    `json:"reviewed_by" gorm:"type:char(26)"`
+	ReviewedAt            *time.Time `json:"reviewed_at"`
+	RejectReason          string     `json:"reject_reason" gorm:"not null;default:''"`
+	SubscriptionPaymentID *string    `json:"subscription_payment_id" gorm:"type:char(26)"`
+	CreatedAt             time.Time  `json:"created_at"`
+	UpdatedAt             time.Time  `json:"updated_at"`
+}
+
+// BeforeCreate meng-generate ULID bila ID belum diisi.
+func (c *SubscriptionPaymentClaim) BeforeCreate(tx *gorm.DB) (err error) {
+	if c.ID == "" {
+		c.ID = ulid.New()
+	}
+	return
+}

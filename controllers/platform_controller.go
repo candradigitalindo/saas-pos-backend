@@ -413,3 +413,49 @@ func PlatformUpsertTemplate(c *gin.Context) {
 		Success: true, Message: "Template pesan disimpan", Data: nil,
 	})
 }
+
+// ── Konfirmasi pembayaran langganan ───────────────────────────────────────
+
+// PlatformListPaymentClaims: GET /platform/subscription-payment-claims
+// ?status=pending|approved|rejected|all — antrean verifikasi lintas tenant.
+func PlatformListPaymentClaims(c *gin.Context) {
+	rows, err := services.PlatformListPaymentClaims(c.Request.Context(), c.Query("status"))
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[[]structs.PlatformPaymentClaimResponse]{
+		Success: true, Message: "Konfirmasi pembayaran langganan", Data: rows,
+	})
+}
+
+// PlatformApprovePaymentClaim: POST /platform/subscription-payment-claims/:id/approve
+// — pembayaran dicatat, tagihan lunas → paket aktif. Mengembalikan tagihan
+// sesudahnya (201: pembayaran baru tercatat).
+func PlatformApprovePaymentClaim(c *gin.Context) {
+	inv, err := services.PlatformApprovePaymentClaim(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		notFoundOr(c, err, repositories.ErrSubClaimNotFound, "Konfirmasi pembayaran tidak ditemukan")
+		return
+	}
+	c.JSON(http.StatusCreated, structs.SuccessResponse[structs.SubInvoiceResponse]{
+		Success: true, Message: "Pembayaran disetujui", Data: inv,
+	})
+}
+
+// PlatformRejectPaymentClaim: POST /platform/subscription-payment-claims/:id/reject
+// — dengan alasan yang dibaca tenant.
+func PlatformRejectPaymentClaim(c *gin.Context) {
+	var req structs.PaymentClaimRejectRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		validationFailed(c, err)
+		return
+	}
+	if err := services.PlatformRejectPaymentClaim(c.Request.Context(), c.Param("id"), req.Reason); err != nil {
+		notFoundOr(c, err, repositories.ErrSubClaimNotFound, "Konfirmasi pembayaran tidak ditemukan")
+		return
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[any]{
+		Success: true, Message: "Konfirmasi ditolak", Data: nil,
+	})
+}

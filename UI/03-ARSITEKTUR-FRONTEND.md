@@ -205,7 +205,7 @@ const qty: string = item.qty;                 // "1.5"
 ## Idempotency-Key
 
 Aksi yang menciptakan uang atau stok **wajib** mengirim header ini:
-`POST /sales`, `POST /purchases`, `POST /invoice-payments`, `POST /subscription-payments`.
+`POST /sales`, `POST /purchases`, `POST /invoice-payments`, `POST /subscription-payment-claims`.
 
 ```ts
 const kunci = ulid();            // dibuat SEKALI saat pengguna menekan Bayar

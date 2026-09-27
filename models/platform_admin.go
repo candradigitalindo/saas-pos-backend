@@ -46,13 +46,17 @@ const (
 	CapPartnerDispute = "partner.dispute" // putuskan sengketa atribusi
 	CapPlatformAdmin  = "platform.admin"  // kelola akun admin lain
 	CapPlatformRead   = "platform.read"   // membaca seluruh panel
+	// CapBillingVerify: memverifikasi konfirmasi pembayaran langganan tenant
+	// (menyetujui = mengaktifkan paket berbayar). Wewenang keuangan — bukan
+	// operator yang memverifikasi mitra.
+	CapBillingVerify = "billing.verify"
 )
 
 // platformCaps memetakan peran → kemampuan.
 var platformCaps = map[string][]string{
-	"superadmin": {CapPartnerVerify, CapPartnerFinance, CapPartnerDispute, CapPlatformAdmin, CapPlatformRead},
+	"superadmin": {CapPartnerVerify, CapPartnerFinance, CapPartnerDispute, CapPlatformAdmin, CapPlatformRead, CapBillingVerify},
 	"operator":   {CapPartnerVerify, CapPartnerDispute, CapPlatformRead},
-	"finance":    {CapPartnerFinance, CapPlatformRead},
+	"finance":    {CapPartnerFinance, CapPlatformRead, CapBillingVerify},
 	"support":    {CapPlatformRead},
 }
 

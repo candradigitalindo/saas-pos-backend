@@ -15,6 +15,8 @@ export const KEMAMPUAN = {
   sengketa: 'partner.dispute',
   kelolaAdmin: 'platform.admin',
   baca: 'platform.read',
+  /** Memverifikasi konfirmasi pembayaran langganan (finance & superadmin). */
+  verifikasiBayar: 'billing.verify',
 } as const
 
 export interface AdminPanel {
@@ -59,6 +61,27 @@ export interface PeristiwaOutbox {
   created_at: string
 }
 
+/** Konfirmasi pembayaran langganan dari tenant, dengan konteksnya. */
+export interface KonfirmasiBayarPanel {
+  id: string
+  invoice_id: string
+  invoice_number: string
+  amount: number
+  method: string
+  reference: string
+  note?: string
+  status: 'pending' | 'approved' | 'rejected'
+  reject_reason?: string
+  created_at: string
+  reviewed_at?: string
+  tenant_id: string
+  business_name: string
+  tenant_phone?: string
+  invoice_total: number
+  invoice_paid: number
+  plan_name?: string
+}
+
 export interface HasilJalankanKomisi {
   from: string
   to: string
@@ -92,4 +115,16 @@ export const panelApi = {
     api.get<PeristiwaOutbox[]>('/platform/outbox', { ...PANEL, query: { status } }),
 
   ulangiOutbox: (id: string) => api.post<null>(`/platform/outbox/${id}/retry`, {}, PANEL),
+
+  /** Konfirmasi pembayaran langganan. status: pending (bawaan) | approved | rejected | all. */
+  konfirmasiBayar: (status?: string) =>
+    api.get<KonfirmasiBayarPanel[]>('/platform/subscription-payment-claims', {
+      ...PANEL,
+      query: { status },
+    }),
+  /** Menyetujui = mencatat pembayaran & mengaktifkan paket tenant. */
+  setujuiBayar: (id: string) =>
+    api.post<unknown>(`/platform/subscription-payment-claims/${id}/approve`, {}, PANEL),
+  tolakBayar: (id: string, reason: string) =>
+    api.post<null>(`/platform/subscription-payment-claims/${id}/reject`, { reason }, PANEL),
 }

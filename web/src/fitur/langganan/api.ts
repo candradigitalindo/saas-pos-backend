@@ -50,9 +50,35 @@ export interface TagihanLangganan {
   paid_at?: string
 }
 
+/** Konfirmasi pembayaran dari tenant — menunggu diverifikasi staf platform. */
+export interface KonfirmasiBayar {
+  id: string
+  invoice_id: string
+  invoice_number?: string
+  amount: number
+  method: string
+  reference: string
+  note?: string
+  status: 'pending' | 'approved' | 'rejected'
+  reject_reason?: string
+  created_at: string
+  reviewed_at?: string
+}
+
+/** Rekening tujuan pembayaran langganan. */
+export interface InfoBayar {
+  bank_name: string
+  account_number: string
+  account_holder?: string
+}
+
 export interface RingkasanLangganan {
   subscription: Langganan
   open_invoice?: TagihanLangganan
+  /** Konfirmasi TERBARU untuk tagihan terbuka (menunggu / ditolak). */
+  payment_claim?: KonfirmasiBayar
+  /** Kosong bila rekening tujuan belum dikonfigurasi di server. */
+  payment_instructions?: InfoBayar
 }
 
 export const langgananApi = {
@@ -88,9 +114,15 @@ export const langgananApi = {
     query: { limit: 50 },
   }),
 
-  /** Wajib Idempotency-Key: ini pembayaran uang sungguhan. */
-  bayar: (
-    input: { invoice_id: string; amount: number; method: string; reference?: string },
+  /**
+   * KONFIRMASI pembayaran ("sudah saya transfer"). Paket baru aktif setelah
+   * staf keuangan platform memverifikasinya — tenant tidak lagi bisa menandai
+   * tagihannya sendiri lunas. Wajib Idempotency-Key: tombol "Kirim" yang
+   * tertekan dua kali tidak membuat dua konfirmasi.
+   */
+  konfirmasi: (
+    input: { invoice_id: string; amount: number; method: string; reference: string; note?: string },
     kunci: string,
-  ) => api.post<TagihanLangganan>('/subscription-payments', input, { idempotencyKey: kunci }),
+  ) =>
+    api.post<KonfirmasiBayar>('/subscription-payment-claims', input, { idempotencyKey: kunci }),
 }

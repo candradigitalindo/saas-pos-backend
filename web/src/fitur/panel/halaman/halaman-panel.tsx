@@ -8,7 +8,8 @@ import {
   type ReactNode,
 } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Coins, LogOut, RefreshCw, ShieldCheck, Users } from 'lucide-react'
+import { AlertTriangle, Coins, LogOut, ReceiptText, RefreshCw, ShieldCheck, Users } from 'lucide-react'
+import { AksiDialog, Dialog, IsiDialog } from '@/bersama/ui/dialog'
 import { Kartu } from '@/bersama/ui/kartu'
 import { Kolom } from '@/bersama/ui/kolom'
 import { Tombol } from '@/bersama/ui/tombol'
@@ -19,7 +20,8 @@ import { adaSesi, hapusSesi, langganSesi, simpanSesi } from '@/lib/penyimpanan-s
 import { GalatAPI } from '@/lib/api-client'
 import { formatTanggalJam, tanggalISO } from '@/bersama/util/tanggal'
 import { cn } from '@/bersama/util/cn'
-import { KEMAMPUAN, panelApi, type AdminPanel } from '../api'
+import { formatRupiah } from '@/bersama/util/uang'
+import { KEMAMPUAN, panelApi, type AdminPanel, type KonfirmasiBayarPanel } from '../api'
 import { SegmenPilihan } from '@/bersama/ui/segmen'
 import { keDate } from '@/bersama/util/tanggal'
 
@@ -113,7 +115,7 @@ function usePanel(): NilaiSesiPanel {
 
 // ── Kerangka ───────────────────────────────────────────────────────────────
 
-type Tab = 'mitra' | 'komisi' | 'outbox'
+type Tab = 'mitra' | 'pembayaran' | 'komisi' | 'outbox'
 
 function IsiPanel() {
   const { sudahMasuk, memuat, admin, keluar, bisa } = usePanel()
@@ -123,6 +125,16 @@ function IsiPanel() {
     queryKey: ['panel-outbox-mati'],
     queryFn: () => panelApi.outbox('dead'),
     enabled: sudahMasuk,
+    refetchInterval: 60_000,
+  })
+
+  // Antrean verifikasi pembayaran — lencananya menyebut berapa tenant sedang
+  // menunggu paketnya aktif.
+  const bolehBayar = sudahMasuk && bisa(KEMAMPUAN.verifikasiBayar)
+  const menungguBayar = useQuery({
+    queryKey: ['panel-bayar', 'pending'],
+    queryFn: () => panelApi.konfirmasiBayar('pending'),
+    enabled: bolehBayar,
     refetchInterval: 60_000,
   })
 
@@ -140,6 +152,16 @@ function IsiPanel() {
 
   const menu: { kunci: Tab; label: string; ikon: typeof Users; lencana?: number }[] = [
     { kunci: 'mitra', label: 'Mitra', ikon: Users },
+    ...(bisa(KEMAMPUAN.verifikasiBayar)
+      ? [
+          {
+            kunci: 'pembayaran' as const,
+            label: 'Konfirmasi Pembayaran',
+            ikon: ReceiptText,
+            lencana: menungguBayar.data?.length ?? 0,
+          },
+        ]
+      : []),
     ...(bisa(KEMAMPUAN.keuanganMitra)
       ? [{ kunci: 'komisi' as const, label: 'Komisi & Pencairan', ikon: Coins }]
       : []),
@@ -208,6 +230,7 @@ function IsiPanel() {
 
         <main className="min-w-0 flex-1">
           {tab === 'mitra' && <PanelMitra />}
+          {tab === 'pembayaran' && <PanelPembayaran />}
           {tab === 'komisi' && <PanelKomisi />}
           {tab === 'outbox' && <PanelOutbox />}
         </main>
@@ -357,6 +380,195 @@ function PanelMitra() {
             </div>
           ))}
         </Kartu>
+      )}
+    </section>
+  )
+}
+
+// ── Konfirmasi pembayaran langganan ────────────────────────────────────────
+
+const NAMA_CARA: Record<string, string> = {
+  transfer: 'Transfer bank',
+  qris: 'QRIS',
+  ewallet: 'Dompet digital',
+  card: 'Kartu',
+  cash: 'Tunai',
+}
+
+/**
+ * Antrean verifikasi uang masuk langganan. Staf keuangan mencocokkan setiap
+ * konfirmasi dengan mutasi rekening, lalu MENYETUJUI (pembayaran dicatat,
+ * paket tenant aktif, tenant diberi tahu lewat WhatsApp) atau MENOLAK dengan
+ * alasan yang dibaca tenant.
+ *
+ * Menyetujui memakai dialog yang menyebut angkanya — ini aksi uang yang tidak
+ * bisa dibatalkan dari layar ini, dan dialog "Anda yakin?" tanpa angka akan
+ * diklik tanpa dibaca.
+ */
+function PanelPembayaran() {
+  const toast = useToast()
+  const qc = useQueryClient()
+  const [saring, setSaring] = useState<'pending' | 'approved' | 'rejected' | 'all'>('pending')
+  const [setujuiUntuk, setSetujuiUntuk] = useState<KonfirmasiBayarPanel | null>(null)
+  const [tolakUntuk, setTolakUntuk] = useState<KonfirmasiBayarPanel | null>(null)
+  const [alasan, setAlasan] = useState('')
+
+  const daftar = useQuery({
+    queryKey: ['panel-bayar', saring],
+    queryFn: () => panelApi.konfirmasiBayar(saring),
+  })
+
+  const segarkan = () => qc.invalidateQueries({ queryKey: ['panel-bayar'] })
+  const setujui = useMutation({
+    mutationFn: (k: KonfirmasiBayarPanel) => panelApi.setujuiBayar(k.id),
+    onSuccess: (_d, k) => {
+      segarkan()
+      setSetujuiUntuk(null)
+      toast.berhasil(`Pembayaran ${k.business_name} disetujui.`)
+    },
+    onError: (e) => toast.gagal(e instanceof GalatAPI ? e.pesan : 'Terjadi kesalahan.'),
+  })
+  const tolak = useMutation({
+    mutationFn: (v: { k: KonfirmasiBayarPanel; alasan: string }) => panelApi.tolakBayar(v.k.id, v.alasan),
+    onSuccess: (_d, v) => {
+      segarkan()
+      setTolakUntuk(null)
+      setAlasan('')
+      toast.berhasil(`Konfirmasi ${v.k.business_name} ditolak.`)
+    },
+    onError: (e) => toast.gagal(e instanceof GalatAPI ? e.pesan : 'Terjadi kesalahan.'),
+  })
+
+  const isi = daftar.data ?? []
+
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-judul font-bold text-teks-utama">Konfirmasi Pembayaran</h2>
+        <SegmenPilihan
+          label="Saring konfirmasi"
+          nilai={saring}
+          onPilih={setSaring}
+          pilihan={[
+            ['pending', 'Menunggu'],
+            ['approved', 'Disetujui'],
+            ['rejected', 'Ditolak'],
+            ['all', 'Semua'],
+          ]}
+        />
+      </div>
+      <p className="text-label text-teks-sekunder">
+        Cocokkan nominal dan nama pengirim dengan mutasi rekening sebelum menyetujui — menyetujui
+        langsung mengaktifkan paket tenant.
+      </p>
+
+      {daftar.isLoading ? (
+        <KerangkaBaris jumlah={3} />
+      ) : isi.length === 0 ? (
+        <p className="text-isi text-teks-redup">
+          {saring === 'pending' ? 'Tidak ada konfirmasi yang menunggu.' : 'Belum ada data.'}
+        </p>
+      ) : (
+        <Kartu className="divide-y divide-garis">
+          {isi.map((k) => (
+            <div key={k.id} className="flex flex-wrap items-start justify-between gap-3 p-4">
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-teks-utama">
+                  {k.business_name}
+                  {k.plan_name && <span className="font-normal text-teks-sekunder"> · paket {k.plan_name}</span>}
+                </p>
+                <p className="text-label text-teks-sekunder">
+                  <span className="font-semibold tabular-nums text-teks-utama">{formatRupiah(k.amount)}</span>
+                  {' · '}
+                  {NAMA_CARA[k.method] ?? k.method} · pengirim/ref:{' '}
+                  <span className="font-medium text-teks-utama">{k.reference}</span>
+                </p>
+                {k.note && <p className="text-keterangan text-teks-redup">Catatan: {k.note}</p>}
+                <p className="text-keterangan text-teks-redup">
+                  Tagihan {k.invoice_number} ·{' '}
+                  {/* Sisa tagihan hanya bermakna untuk yang masih menunggu; untuk
+                      riwayat, angka "sisa" hari ini membingungkan. */}
+                  {k.status === 'pending'
+                    ? `sisa ${formatRupiah(k.invoice_total - k.invoice_paid)} dari ${formatRupiah(k.invoice_total)}`
+                    : `total ${formatRupiah(k.invoice_total)}`}{' '}
+                  · dikirim {formatTanggalJam(k.created_at)}
+                  {k.reviewed_at && ` · diputus ${formatTanggalJam(k.reviewed_at)}`}
+                  {k.tenant_phone && ` · ${k.tenant_phone}`}
+                </p>
+                {k.status === 'rejected' && k.reject_reason && (
+                  <p className="text-keterangan text-bahaya-teks">Ditolak: {k.reject_reason}</p>
+                )}
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                {k.status === 'pending' ? (
+                  <>
+                    <Tombol jenis="kedua" ukuran="padat" onClick={() => setTolakUntuk(k)}>
+                      Tolak
+                    </Tombol>
+                    <Tombol ukuran="padat" onClick={() => setSetujuiUntuk(k)}>
+                      Setujui
+                    </Tombol>
+                  </>
+                ) : k.status === 'approved' ? (
+                  <LencanaStatus nada="berhasil" anak="Disetujui" />
+                ) : (
+                  <LencanaStatus nada="bahaya" anak="Ditolak" />
+                )}
+              </div>
+            </div>
+          ))}
+        </Kartu>
+      )}
+
+      {setujuiUntuk && (
+        <Dialog open onOpenChange={(o) => !o && !setujui.isPending && setSetujuiUntuk(null)}>
+          <IsiDialog judul="Setujui pembayaran?">
+            <p className="text-isi text-teks-sekunder">
+              <strong className="text-teks-utama">{formatRupiah(setujuiUntuk.amount)}</strong> dari{' '}
+              <strong className="text-teks-utama">{setujuiUntuk.business_name}</strong> (pengirim/ref:{' '}
+              {setujuiUntuk.reference}) untuk tagihan {setujuiUntuk.invoice_number}.
+            </p>
+            <p className="text-label text-teks-sekunder">
+              Pastikan uangnya SUDAH masuk ke rekening. Pembayaran dicatat, paket tenant aktif, dan
+              tenant diberi tahu lewat WhatsApp.
+            </p>
+            <AksiDialog>
+              <Tombol memuat={setujui.isPending} onClick={() => setujui.mutate(setujuiUntuk)}>
+                Setujui {formatRupiah(setujuiUntuk.amount)}
+              </Tombol>
+              <Tombol jenis="kedua" disabled={setujui.isPending} onClick={() => setSetujuiUntuk(null)}>
+                Batal
+              </Tombol>
+            </AksiDialog>
+          </IsiDialog>
+        </Dialog>
+      )}
+
+      {tolakUntuk && (
+        <Dialog open onOpenChange={(o) => !o && !tolak.isPending && setTolakUntuk(null)}>
+          <IsiDialog judul={`Tolak konfirmasi ${tolakUntuk.business_name}?`}>
+            <Kolom
+              label="Alasan (dibaca tenant)"
+              placeholder="Mis. nominal tidak ditemukan di mutasi rekening"
+              value={alasan}
+              onChange={(e) => setAlasan(e.target.value)}
+              autoFocus
+            />
+            <AksiDialog>
+              <Tombol
+                jenis="bahaya"
+                memuat={tolak.isPending}
+                disabled={alasan.trim().length < 3}
+                onClick={() => tolak.mutate({ k: tolakUntuk, alasan: alasan.trim() })}
+              >
+                Tolak Konfirmasi
+              </Tombol>
+              <Tombol jenis="kedua" disabled={tolak.isPending} onClick={() => setTolakUntuk(null)}>
+                Batal
+              </Tombol>
+            </AksiDialog>
+          </IsiDialog>
+        </Dialog>
       )}
     </section>
   )

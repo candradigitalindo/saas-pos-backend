@@ -24,13 +24,23 @@ type SubscriptionCancelRequest struct {
 	Reason string `json:"reason" binding:"omitempty,max=255"`
 }
 
-// SubscriptionPaymentRequest membayar sebuah tagihan langganan. Wajib header
-// Idempotency-Key (§8).
-type SubscriptionPaymentRequest struct {
+// PaymentClaimRequest: tenant MENGONFIRMASI pembayaran tagihan langganan
+// ("sudah saya transfer"). Wajib header Idempotency-Key (§8). Paket baru
+// aktif setelah staf keuangan platform menyetujuinya — lihat
+// services.SubmitPaymentClaim.
+type PaymentClaimRequest struct {
 	InvoiceID string `json:"invoice_id" binding:"required,ulid"`
 	Amount    int64  `json:"amount" binding:"required,gt=0"`
-	Method    string `json:"method" binding:"required,oneof=cash transfer card qris ewallet"`
-	Reference string `json:"reference" binding:"omitempty,max=100"`
+	Method    string `json:"method" binding:"required,oneof=transfer qris ewallet card cash"`
+	// Nama pengirim / nomor referensi — yang dicocokkan staf keuangan dengan
+	// mutasi rekening. Wajib: tanpa ini konfirmasi tidak bisa diverifikasi.
+	Reference string `json:"reference" binding:"required,min=2,max=100"`
+	Note      string `json:"note" binding:"omitempty,max=300"`
+}
+
+// PaymentClaimRejectRequest: alasan penolakan konfirmasi (dibaca tenant).
+type PaymentClaimRejectRequest struct {
+	Reason string `json:"reason" binding:"required,min=3,max=300"`
 }
 
 // ── Response ──────────────────────────────────────────────────────────────
@@ -93,6 +103,11 @@ type SubInvoiceResponse struct {
 type SubscriptionOverviewResponse struct {
 	Subscription SubscriptionResponse `json:"subscription"`
 	OpenInvoice  *SubInvoiceResponse  `json:"open_invoice,omitempty"`
+	// PaymentClaim: konfirmasi TERBARU untuk tagihan terbuka — menunggu
+	// verifikasi, atau ditolak (beserta alasannya).
+	PaymentClaim *PaymentClaimResponse `json:"payment_claim,omitempty"`
+	// PaymentInstructions: rekening tujuan; nil bila belum dikonfigurasi.
+	PaymentInstructions *PaymentInstructions `json:"payment_instructions,omitempty"`
 }
 
 // SubscriptionCancelResponse melaporkan hasil pembatalan.
@@ -101,4 +116,39 @@ type SubscriptionCancelResponse struct {
 	EarnedAmount int64                `json:"earned_amount"`
 	MonthsUsed   int                  `json:"months_used"`
 	Subscription SubscriptionResponse `json:"subscription"`
+}
+
+// PaymentClaimResponse: satu konfirmasi pembayaran langganan.
+type PaymentClaimResponse struct {
+	ID            string `json:"id"`
+	InvoiceID     string `json:"invoice_id"`
+	InvoiceNumber string `json:"invoice_number,omitempty"`
+	Amount        int64  `json:"amount"`
+	Method        string `json:"method"`
+	Reference     string `json:"reference"`
+	Note          string `json:"note,omitempty"`
+	Status        string `json:"status"` // pending | approved | rejected
+	RejectReason  string `json:"reject_reason,omitempty"`
+	CreatedAt     string `json:"created_at"`
+	ReviewedAt    string `json:"reviewed_at,omitempty"`
+}
+
+// PlatformPaymentClaimResponse: konfirmasi beserta konteks untuk panel
+// internal — usaha pemiliknya, tagihannya, dan paketnya.
+type PlatformPaymentClaimResponse struct {
+	PaymentClaimResponse
+	TenantID     string `json:"tenant_id"`
+	BusinessName string `json:"business_name"`
+	TenantPhone  string `json:"tenant_phone,omitempty"`
+	InvoiceTotal int64  `json:"invoice_total"`
+	InvoicePaid  int64  `json:"invoice_paid"`
+	PlanName     string `json:"plan_name,omitempty"`
+}
+
+// PaymentInstructions: rekening tujuan pembayaran langganan (konfigurasi
+// SUBSCRIPTION_BANK_*).
+type PaymentInstructions struct {
+	BankName      string `json:"bank_name"`
+	AccountNumber string `json:"account_number"`
+	AccountHolder string `json:"account_holder,omitempty"`
 }

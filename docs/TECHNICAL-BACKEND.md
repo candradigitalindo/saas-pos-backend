@@ -344,6 +344,7 @@ CREATE SEQUENCE sync_version_seq AS BIGINT START 1;
 PLATFORM (tanpa tenant_id)
   plans ──< subscriptions >── tenants
   subscriptions ──< subscription_invoices ──< subscription_payments
+                                         └──< subscription_payment_claims (tenant, RLS)
                 └──< deferred_revenue_entries
   partners ──< partner_users
            ├──< partner_leads
@@ -1808,7 +1809,32 @@ CREATE TABLE deferred_revenue_entries (  -- uang di muka BUKAN pendapatan bulan 
   UNIQUE (subscription_invoice_id, recognition_month)
 );
 CREATE INDEX idx_deferred_pending ON deferred_revenue_entries (recognition_month) WHERE recognized_at IS NULL;
+
+-- 000039: tenant MENGONFIRMASI, staf keuangan platform MEMUTUS. subscription_payments hanya
+-- dibuat saat persetujuan — tenant tidak lagi bisa mencatat pembayarannya sendiri.
+CREATE TABLE subscription_payment_claims (
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+  subscription_invoice_id CHAR(26) NOT NULL REFERENCES subscription_invoices(id) ON DELETE RESTRICT,
+  amount BIGINT NOT NULL CHECK (amount > 0),
+  method TEXT NOT NULL CHECK (method IN ('transfer','qris','ewallet','card','cash')),
+  reference TEXT NOT NULL DEFAULT '',    -- nama pengirim / nomor referensi transfer
+  note TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+  submitted_by CHAR(26),                 -- FK komposit (tenant_id, submitted_by) → users, SET NULL (submitted_by)
+  reviewed_by CHAR(26) REFERENCES platform_admins(id) ON DELETE SET NULL,
+  reviewed_at TIMESTAMPTZ, reject_reason TEXT NOT NULL DEFAULT '',
+  subscription_payment_id CHAR(26) REFERENCES subscription_payments(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- satu konfirmasi menunggu per tagihan: staf tidak menyetujui dua klaim atas uang yang sama
+CREATE UNIQUE INDEX uq_sub_claims_pending_invoice
+  ON subscription_payment_claims (subscription_invoice_id) WHERE status = 'pending';
 ```
+
+Persetujuan mengunci baris klaim (`FOR UPDATE`) lalu memeriksa `status = 'pending'` di dalam
+transaksi yang sama dengan pencatatan pembayaran — dua staf yang menekan "Setujui" bersamaan
+menghasilkan tepat satu pembayaran; yang kalah mendapat 409.
 
 ### 5.14 Tabel sistem
 
@@ -2136,7 +2162,7 @@ disiapkan, sedangkan detailnya masuk log bersama request ID.
 
 Wajib pada semua endpoint yang menciptakan uang atau memindahkan stok:
 `POST /sales`, `POST /sales/:id/refund`, `POST /stock-adjustments`, `POST /purchases`,
-`POST /receivable-payments`, `POST /invoice-payments`, `POST /subscription-payments`.
+`POST /receivable-payments`, `POST /invoice-payments`, `POST /subscription-payment-claims`.
 (Retur idempoten lewat `return_of_sale_id` — satu retur per penjualan.)
 
 ```

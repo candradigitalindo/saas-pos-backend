@@ -2,9 +2,8 @@ package services
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"net/http"
 	"time"
 
 	"candra/backend-api/config"
@@ -30,7 +29,7 @@ import (
 //     sisanya dikembalikan.
 //  4. Naik paket di tengah masa memakai prorata; sisa nilai jadi kredit.
 
-const idempotencyScopeSubPayment = "subscription.payment"
+const idempotencyScopeSubClaim = "subscription.payment_claim"
 
 func subscriptionTrialDays() int { return config.GetIntEnv("SUBSCRIPTION_TRIAL_DAYS", 14) }
 func subscriptionDueDays() int   { return config.GetIntEnv("SUBSCRIPTION_INVOICE_DUE_DAYS", 7) }
@@ -247,112 +246,70 @@ func firstOfDay(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 }
 
-// PaySubInput adalah masukan pembayaran tagihan.
-type PaySubInput struct {
-	InvoiceID      string
-	Amount         int64
-	Method         string
-	Reference      string
-	IdempotencyKey string
-	RequestHash    string
-}
-
-// PaySubscriptionInvoice mencatat pembayaran tagihan langganan. Idempoten lewat
-// Idempotency-Key. Saat tagihan LUNAS: langganan menjadi 'active', periode maju,
-// dan N baris deferred_revenue_entries dibuat (§13.4).
+// terapkanPembayaran mencatat SATU pembayaran atas tagihan milik tenant
+// konteks, di dalam tx pemanggil. Saat tagihan LUNAS: langganan menjadi
+// 'active', periodenya maju ke periode tagihan, dan N baris
+// deferred_revenue_entries dibuat (§13.4).
 //
-// Mengembalikan (status HTTP, body JSON, error).
-func PaySubscriptionInvoice(ctx context.Context, in PaySubInput) (int, []byte, error) {
-	if in.IdempotencyKey == "" {
-		return 0, nil, fmt.Errorf("%w: header Idempotency-Key wajib", helpers.ErrValidation)
+// Sengaja tidak diekspor dan tidak punya rute tenant: dulu tenant sendiri yang
+// memanggil jalur ini (POST /subscription-payments) — menandai tagihannya
+// lunas tanpa uang yang diterima siapa pun. Kini satu-satunya pemanggilnya
+// adalah persetujuan konfirmasi pembayaran oleh staf keuangan platform
+// (PlatformApprovePaymentClaim); jalur gerbang pembayaran kelak memakainya juga.
+func terapkanPembayaran(ctx context.Context, tx *gorm.DB, invoiceID string, amount int64, method, reference string) (models.SubscriptionInvoice, models.SubscriptionPayment, error) {
+	var bayar models.SubscriptionPayment
+	if amount <= 0 {
+		return models.SubscriptionInvoice{}, bayar, fmt.Errorf("%w: nominal pembayaran harus > 0", helpers.ErrValidation)
 	}
-	if in.Amount <= 0 {
-		return 0, nil, fmt.Errorf("%w: nominal pembayaran harus > 0", helpers.ErrValidation)
+	inv, err := repositories.FindSubInvoiceForTenant(ctx, tx, invoiceID)
+	if err != nil {
+		return inv, bayar, err
+	}
+	if inv.Status != "open" && inv.Status != "overdue" {
+		return inv, bayar, fmt.Errorf("%w: tagihan tidak dalam status yang bisa dibayar", helpers.ErrConflict)
+	}
+	if remaining := inv.TotalAmount - inv.PaidAmount; amount > remaining {
+		return inv, bayar, fmt.Errorf("%w: pembayaran melebihi sisa tagihan (%s)", helpers.ErrConflict, helpers.FormatRupiah(remaining))
 	}
 
-	var (
-		outStatus int
-		outBody   []byte
-	)
-	txErr := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
-		m, err := repositories.LookupIdempotency(ctx, tx, idempotencyScopeSubPayment, in.IdempotencyKey, in.RequestHash)
-		if err != nil {
-			return err
-		}
-		if m.Found {
-			if !m.SameRequest {
-				return fmt.Errorf("%w: Idempotency-Key sudah dipakai untuk permintaan berbeda", helpers.ErrConflict)
-			}
-			outStatus, outBody = m.ResponseStatus, m.ResponseBody
-			return nil
-		}
-
-		inv, err := repositories.FindSubInvoiceForTenant(ctx, tx, in.InvoiceID)
-		if err != nil {
-			return err
-		}
-		if inv.Status != "open" && inv.Status != "overdue" {
-			return fmt.Errorf("%w: tagihan tidak dalam status yang bisa dibayar", helpers.ErrConflict)
-		}
-		remaining := inv.TotalAmount - inv.PaidAmount
-		if in.Amount > remaining {
-			return fmt.Errorf("%w: pembayaran melebihi sisa tagihan (%d)", helpers.ErrValidation, remaining)
-		}
-
-		now := time.Now().UTC()
-		if err := repositories.CreateSubPayment(ctx, tx, &models.SubscriptionPayment{
-			SubscriptionInvoiceID: inv.ID,
-			Amount:                in.Amount,
-			Method:                in.Method,
-			Reference:             in.Reference,
-			PaidAt:                now,
-		}); err != nil {
-			return err
-		}
-
-		inv.PaidAmount += in.Amount
-		if inv.PaidAmount >= inv.TotalAmount {
-			inv.Status = "paid"
-			inv.PaidAt = &now
-
-			sub, err := repositories.FindSubscriptionByTenant(ctx, tx)
-			if err != nil {
-				return err
-			}
-			sub.Status = "active"
-			sub.CurrentPeriodStart = inv.PeriodStart
-			sub.CurrentPeriodEnd = inv.PeriodEnd
-			if err := repositories.SaveSubscription(ctx, tx, &sub); err != nil {
-				return err
-			}
-			if err := repositories.CreateDeferredEntries(ctx, tx, deferredEntriesFor(inv)); err != nil {
-				return err
-			}
-			if err := setTenantStatus(ctx, tx, "active"); err != nil {
-				return err
-			}
-		}
-		if err := repositories.SaveSubInvoice(ctx, tx, &inv); err != nil {
-			return err
-		}
-
-		body, err := json.Marshal(structs.SuccessResponse[structs.SubInvoiceResponse]{
-			Success: true, Message: "Pembayaran diterima", Data: subInvoiceToResponse(inv),
-		})
-		if err != nil {
-			return err
-		}
-		if err := repositories.SaveIdempotency(ctx, tx, idempotencyScopeSubPayment, in.IdempotencyKey, in.RequestHash,
-			http.StatusCreated, body, idempotencyTTL()); err != nil {
-			return err
-		}
-		outStatus, outBody = http.StatusCreated, body
-		return nil
-	})
-	if txErr != nil {
-		return 0, nil, txErr
+	now := time.Now().UTC()
+	bayar = models.SubscriptionPayment{
+		SubscriptionInvoiceID: inv.ID,
+		Amount:                amount,
+		Method:                method,
+		Reference:             reference,
+		PaidAt:                now,
 	}
-	return outStatus, outBody, nil
+	if err := repositories.CreateSubPayment(ctx, tx, &bayar); err != nil {
+		return inv, bayar, err
+	}
+
+	inv.PaidAmount += amount
+	if inv.PaidAmount >= inv.TotalAmount {
+		inv.Status = "paid"
+		inv.PaidAt = &now
+
+		sub, err := repositories.FindSubscriptionByTenant(ctx, tx)
+		if err != nil {
+			return inv, bayar, err
+		}
+		sub.Status = "active"
+		sub.CurrentPeriodStart = inv.PeriodStart
+		sub.CurrentPeriodEnd = inv.PeriodEnd
+		if err := repositories.SaveSubscription(ctx, tx, &sub); err != nil {
+			return inv, bayar, err
+		}
+		if err := repositories.CreateDeferredEntries(ctx, tx, deferredEntriesFor(inv)); err != nil {
+			return inv, bayar, err
+		}
+		if err := setTenantStatus(ctx, tx, "active"); err != nil {
+			return inv, bayar, err
+		}
+	}
+	if err := repositories.SaveSubInvoice(ctx, tx, &inv); err != nil {
+		return inv, bayar, err
+	}
+	return inv, bayar, nil
 }
 
 // deferredEntriesFor memecah total tagihan menjadi N baris pengakuan bulanan
@@ -580,7 +537,16 @@ func GetSubscriptionOverview(ctx context.Context) (structs.SubscriptionOverviewR
 	} else if open {
 		r := subInvoiceToResponse(inv)
 		out.OpenInvoice = &r
+		k, err := repositories.LatestSubClaimForInvoice(ctx, nil, inv.ID)
+		switch {
+		case err == nil:
+			kr := claimToResponse(k, inv.Number)
+			out.PaymentClaim = &kr
+		case !errors.Is(err, repositories.ErrSubClaimNotFound):
+			return out, err
+		}
 	}
+	out.PaymentInstructions = PaymentInstructions()
 	return out, nil
 }
 

@@ -209,6 +209,13 @@ func registerPlatformRoutes(v1 *gin.RouterGroup) {
 	pf.GET("/partner-disputes", baca, controllers.PlatformListDisputes)
 	pf.POST("/partner-disputes/:id/resolve", middlewares.RequirePlatform(models.CapPartnerDispute), controllers.PlatformResolveDispute)
 
+	// Konfirmasi pembayaran langganan — verifikasi uang masuk (billing.verify:
+	// finance & superadmin). Menyetujui = mencatat pembayaran & mengaktifkan paket.
+	tagihan := middlewares.RequirePlatform(models.CapBillingVerify)
+	pf.GET("/subscription-payment-claims", tagihan, controllers.PlatformListPaymentClaims)
+	pf.POST("/subscription-payment-claims/:id/approve", tagihan, controllers.PlatformApprovePaymentClaim)
+	pf.POST("/subscription-payment-claims/:id/reject", tagihan, controllers.PlatformRejectPaymentClaim)
+
 	// Outbox notifikasi (§5.14): antrean, antrean mati, dan template pesan.
 	pf.GET("/outbox", baca, controllers.PlatformListOutbox)
 	pf.POST("/outbox/:id/retry", kelola, controllers.PlatformRetryOutbox)
@@ -375,7 +382,11 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	sub.GET("/invoices", controllers.ListSubInvoices)
 	sub.POST("/cancel", controllers.CancelSubscription)
 	sub.POST("/change-plan", controllers.ChangeSubscriptionPlan)
-	t.POST("/subscription-payments", middlewares.Require("billing.manage"), controllers.PaySubscription)
+	// Tenant hanya MENGONFIRMASI pembayaran; yang mencatat pembayaran & mengaktifkan
+	// paket adalah staf keuangan platform (panel). Dulu di sini ada
+	// POST /subscription-payments — tenant menandai tagihannya sendiri lunas.
+	t.POST("/subscription-payment-claims", middlewares.Require("billing.manage"), controllers.SubmitPaymentClaim)
+	t.GET("/subscription-payment-claims", middlewares.Require("billing.manage"), controllers.ListPaymentClaims)
 
 	// CRM tenant (Fase 9, §5.9). Baca butuh salah satu izin lihat prospek;
 	// tulis butuh crm.deal.edit. Visibilitas kepemilikan (lapis 3) dijaga repo.

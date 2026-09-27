@@ -2,6 +2,8 @@ package tests
 
 import (
 	"context"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,14 +24,45 @@ func startBasic12(t *testing.T, f tenantFixture) map[string]any {
 		mustCode(t, "generate invoice", 201).data(t)
 }
 
-// paySub membayar sebuah tagihan (dengan Idempotency-Key).
-func paySub(t *testing.T, token, key, invoiceID string, amount int64) apiResp {
+// kirimKonfirmasi: tenant mengonfirmasi pembayaran tagihan (Idempotency-Key).
+func kirimKonfirmasi(t *testing.T, token, key, invoiceID string, amount int64) apiResp {
 	t.Helper()
-	req := jsonRequest(t, "POST", "/api/v1/subscription-payments", token, map[string]any{
-		"invoice_id": invoiceID, "amount": amount, "method": "transfer",
+	req := jsonRequest(t, "POST", "/api/v1/subscription-payment-claims", token, map[string]any{
+		"invoice_id": invoiceID, "amount": amount, "method": "transfer", "reference": "Transfer uji",
 	})
 	req.Header.Set("Idempotency-Key", key)
 	return serve(t, req)
+}
+
+var (
+	sekaliKeuangan sync.Once
+	tokenKeuangan  string
+)
+
+// tokenKeuanganPlatform: token staf keuangan panel (billing.verify), dibuat
+// sekali per jalannya tes.
+func tokenKeuanganPlatform(t *testing.T) string {
+	t.Helper()
+	sekaliKeuangan.Do(func() {
+		_, email, pass := makePlatformAdmin(t, "keuangan-uji-"+strings.ToLower(ulid.New()), "finance")
+		tokenKeuangan = platformToken(t, email, pass)
+	})
+	return tokenKeuangan
+}
+
+// paySub membayar sebuah tagihan lewat JALUR SUNGGUHAN: tenant mengirim
+// konfirmasi, staf keuangan platform menyetujuinya. Mengembalikan balasan
+// persetujuan (tagihan sesudahnya, 201) — atau balasan konfirmasi bila
+// konfirmasinya sendiri sudah ditolak (mis. 422 melebihi sisa, 404 tagihan
+// tenant lain).
+func paySub(t *testing.T, token, key, invoiceID string, amount int64) apiResp {
+	t.Helper()
+	klaim := kirimKonfirmasi(t, token, key, invoiceID, amount)
+	if klaim.Code != 201 {
+		return klaim
+	}
+	id := klaim.data(t)["id"].(string)
+	return call(t, "POST", "/api/v1/platform/subscription-payment-claims/"+id+"/approve", tokenKeuanganPlatform(t), nil)
 }
 
 // TestSubscriptionPrepaidCancelRefund — DoD Fase 7: daftar → trial → bayar 12
@@ -120,27 +153,37 @@ func TestSubscriptionPaymentIdempotent(t *testing.T) {
 	f := registerTenantPolos(t, "subidem")
 	invID := startBasic12(t, f)["id"].(string)
 
+	// Konfirmasi yang dikirim ulang dengan kunci sama → konfirmasi yang SAMA.
 	key := "K-" + ulid.New()
-	a := paySub(t, f.token, key, invID, 789684).mustCode(t, "pay #1", 201).data(t)
-	b := paySub(t, f.token, key, invID, 789684).mustCode(t, "pay #2 (replay)", 201).data(t)
-	if a["id"] != b["id"] || a["paid_amount"] != b["paid_amount"] {
-		t.Fatalf("replay berbeda: %v vs %v", a, b)
+	a := kirimKonfirmasi(t, f.token, key, invID, 789684).mustCode(t, "konfirmasi #1", 201).data(t)
+	b := kirimKonfirmasi(t, f.token, key, invID, 789684).mustCode(t, "konfirmasi #2 (replay)", 201).data(t)
+	if a["id"] != b["id"] {
+		t.Fatalf("replay membuat konfirmasi baru: %v vs %v", a["id"], b["id"])
 	}
+	// Kunci sama, body beda → 409.
+	req := jsonRequest(t, "POST", "/api/v1/subscription-payment-claims", f.token, map[string]any{
+		"invoice_id": invID, "amount": 1000, "method": "cash", "reference": "lain",
+	})
+	req.Header.Set("Idempotency-Key", key)
+	serve(t, req).mustCode(t, "kunci sama body beda", 409)
+	// Konfirmasi kedua (kunci lain) selagi yang pertama menunggu → 409.
+	kirimKonfirmasi(t, f.token, "K2-"+ulid.New(), invID, 789684).mustCode(t, "konfirmasi ganda", 409)
+
+	// Disetujui sekali → lunas; disetujui lagi → 409, pembayaran TIDAK dobel.
+	setujui := func() apiResp {
+		return call(t, "POST", "/api/v1/platform/subscription-payment-claims/"+a["id"].(string)+"/approve",
+			tokenKeuanganPlatform(t), nil)
+	}
+	setujui().mustCode(t, "setujui", 201)
+	setujui().mustCode(t, "setujui lagi", 409)
 
 	var payCount int
 	var invPaid int64
 	database.DB.Raw(`SELECT count(*) FROM subscription_payments WHERE subscription_invoice_id = ?`, invID).Row().Scan(&payCount)
 	database.DB.Raw(`SELECT paid_amount FROM subscription_invoices WHERE id = ?`, invID).Row().Scan(&invPaid)
 	if payCount != 1 || invPaid != 789684 {
-		t.Fatalf("replay mengubah state: %d pembayaran, paid_amount %d", payCount, invPaid)
+		t.Fatalf("setelah dua persetujuan: %d pembayaran, paid_amount %d; mau 1 & 789684", payCount, invPaid)
 	}
-
-	// Kunci sama, body beda → 409.
-	req := jsonRequest(t, "POST", "/api/v1/subscription-payments", f.token, map[string]any{
-		"invoice_id": invID, "amount": 1000, "method": "cash",
-	})
-	req.Header.Set("Idempotency-Key", key)
-	serve(t, req).mustCode(t, "kunci sama body beda", 409)
 }
 
 // TestSubscriptionPartialPayment — pembayaran sebagian lalu pelunasan.

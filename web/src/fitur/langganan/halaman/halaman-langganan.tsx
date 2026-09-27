@@ -1,20 +1,21 @@
 import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ulid } from 'ulid'
-import { Check, CreditCard, Lock, Minus, Sparkles } from 'lucide-react'
+import { Check, Clock, CreditCard, Lock, Minus, Sparkles } from 'lucide-react'
 import { Kartu } from '@/bersama/ui/kartu'
-import { Pilihan } from '@/bersama/ui/kolom'
+import { Kolom, Pilihan } from '@/bersama/ui/kolom'
 import { Tombol } from '@/bersama/ui/tombol'
 import { AksiDialog, Dialog, IsiDialog } from '@/bersama/ui/dialog'
 import { LencanaStatus } from '@/bersama/komponen/lencana-status'
 import { KerangkaBaris, KerangkaKartuAngka } from '@/bersama/komponen/kerangka'
+import { KeadaanGagal } from '@/bersama/komponen/keadaan-kosong'
 import { useToast } from '@/bersama/komponen/toast'
 import { GalatAPI } from '@/lib/api-client'
 import { useSesi } from '@/bersama/hooks/use-sesi'
 import { formatRupiah } from '@/bersama/util/uang'
 import { formatTanggal } from '@/bersama/util/tanggal'
 import { cn } from '@/bersama/util/cn'
-import { langgananApi, type Paket, type TagihanLangganan } from '../api'
+import { langgananApi, type InfoBayar, type Paket, type TagihanLangganan } from '../api'
 
 /**
  * Langganan aplikasi.
@@ -37,7 +38,14 @@ export function HalamanLangganan() {
 
   const langganan = ringkasan.data?.subscription
   const tagihanTerbuka = ringkasan.data?.open_invoice
-  const belumBerlangganan = ringkasan.isError || !langganan
+  // Konfirmasi terbaru untuk tagihan terbuka: menunggu verifikasi atau ditolak.
+  const konfirmasi = ringkasan.data?.payment_claim
+  // 404 = memang belum pernah berlangganan (paket Gratis). Galat LAIN jangan
+  // disamarkan sebagai "Anda memakai paket Gratis" — pemilik yang baru
+  // membayar akan mengira pembayarannya hilang.
+  const belumBerlangganan =
+    (ringkasan.error instanceof GalatAPI && ringkasan.error.status === 404) ||
+    (ringkasan.isSuccess && !langganan)
 
   // Paket yang BERLAKU menurut server (GET /me) — bisa berbeda dari paket
   // yang dipilih: masa coba yang habis, atau masa bayar yang lewat tenggang,
@@ -86,6 +94,15 @@ export function HalamanLangganan() {
               paket berbayar dimulai dengan masa coba gratis.
             </p>
           </Kartu>
+        ) : !langganan ? (
+          <KeadaanGagal
+            pesan={
+              ringkasan.error instanceof GalatAPI
+                ? ringkasan.error.pesan
+                : 'Status langganan belum bisa dimuat.'
+            }
+            onCobaLagi={() => ringkasan.refetch()}
+          />
         ) : berlaku && berlaku.code !== langganan.plan_code ? (
           // Langganan tercatat tapi TIDAK berlaku lagi (masa coba habis, lewat
           // tenggang, atau dihentikan): katakan terus terang, dan beri jalan
@@ -179,10 +196,31 @@ export function HalamanLangganan() {
               Nomor {tagihanTerbuka.number} · jatuh tempo{' '}
               {formatTanggal(tagihanTerbuka.due_date)}
             </p>
-            <Tombol className="mt-3" onClick={() => setBayarUntuk(tagihanTerbuka)}>
-              <CreditCard className="h-5 w-5" aria-hidden />
-              Bayar Sekarang
-            </Tombol>
+            {konfirmasi?.status === 'pending' ? (
+              // Sudah dikonfirmasi: jangan tawarkan membayar lagi — tombol
+              // "Bayar" di sini mengundang transfer dua kali.
+              <div className="mt-3 flex items-start gap-2 rounded-kontrol border border-garis bg-permukaan px-3 py-2">
+                <Clock className="mt-0.5 h-4 w-4 shrink-0 text-jingga-700" aria-hidden />
+                <p className="text-label text-teks-sekunder">
+                  <strong className="text-teks-utama">Menunggu verifikasi.</strong> Konfirmasi{' '}
+                  {formatRupiah(konfirmasi.amount)} ({namaCara(konfirmasi.method)}) terkirim{' '}
+                  {formatTanggal(konfirmasi.created_at)}. Paket aktif setelah pembayarannya kami
+                  verifikasi.
+                </p>
+              </div>
+            ) : (
+              <>
+                {konfirmasi?.status === 'rejected' && (
+                  <p className="mt-3 rounded-kontrol border border-bahaya bg-bahaya-teks/10 px-3 py-2 text-label text-bahaya-teks">
+                    Konfirmasi sebelumnya belum bisa diterima: {konfirmasi.reject_reason}
+                  </p>
+                )}
+                <Tombol className="mt-3" onClick={() => setBayarUntuk(tagihanTerbuka)}>
+                  <CreditCard className="h-5 w-5" aria-hidden />
+                  {konfirmasi?.status === 'rejected' ? 'Kirim Konfirmasi Baru' : 'Bayar Sekarang'}
+                </Tombol>
+              </>
+            )}
           </Kartu>
         )}
 
@@ -243,7 +281,11 @@ export function HalamanLangganan() {
       )}
 
       {bayarUntuk && (
-        <DialogBayar tagihan={bayarUntuk} onTutup={() => setBayarUntuk(null)} />
+        <DialogKonfirmasi
+          tagihan={bayarUntuk}
+          info={ringkasan.data?.payment_instructions}
+          onTutup={() => setBayarUntuk(null)}
+        />
       )}
     </div>
   )
@@ -482,56 +524,126 @@ function Batas({ label, nilai }: { label: string; nilai: number | null }) {
   )
 }
 
-function DialogBayar({
+/** Nama cara bayar dalam bahasa pemilik warung. */
+function namaCara(m: string): string {
+  return ({ transfer: 'transfer bank', qris: 'QRIS', ewallet: 'dompet digital', card: 'kartu', cash: 'tunai' } as Record<string, string>)[m] ?? m
+}
+
+/**
+ * Konfirmasi pembayaran tagihan langganan.
+ *
+ * Pemilik membayar di luar aplikasi (transfer/QRIS), lalu MENGONFIRMASI di
+ * sini: lewat apa, dan nama pengirim / nomor referensi yang akan dicocokkan
+ * staf keuangan dengan mutasi rekening. Paket baru aktif setelah
+ * diverifikasi. Dulu tombol di dialog ini ("Bayar Rp …") langsung menandai
+ * tagihan lunas dan mengaktifkan paket — tanpa uang yang diterima siapa pun.
+ */
+function DialogKonfirmasi({
   tagihan,
+  info,
   onTutup,
 }: {
   tagihan: TagihanLangganan
+  info?: InfoBayar
   onTutup: () => void
 }) {
   const toast = useToast()
   const qc = useQueryClient()
   const [cara, setCara] = useState('transfer')
+  const [referensi, setReferensi] = useState('')
+  const [catatan, setCatatan] = useState('')
   const [galat, setGalat] = useState<string | null>(null)
+  const [galatReferensi, setGalatReferensi] = useState<string | undefined>()
 
   // Dibuat sekali saat dialog terbuka dan dipertahankan selama percobaan —
-  // pembayaran langganan tidak boleh tercatat dua kali.
+  // kiriman ulang tidak boleh membuat dua konfirmasi.
   const kunci = useRef(ulid())
   const sisa = tagihan.total_amount - tagihan.paid_amount
 
-  const bayar = useMutation({
+  const kirim = useMutation({
     mutationFn: () =>
-      langgananApi.bayar(
-        { invoice_id: tagihan.id, amount: sisa, method: cara },
+      langgananApi.konfirmasi(
+        {
+          invoice_id: tagihan.id,
+          amount: sisa,
+          method: cara,
+          reference: referensi.trim(),
+          note: catatan.trim() || undefined,
+        },
         kunci.current,
       ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['langganan'] })
-      qc.invalidateQueries({ queryKey: ['tagihan'] })
-      qc.invalidateQueries({ queryKey: ['me'] })
-      toast.berhasil('Pembayaran tercatat. Terima kasih.')
+      toast.berhasil('Konfirmasi terkirim. Paket aktif setelah pembayarannya kami verifikasi.')
       onTutup()
     },
     onError: (e) => setGalat(e instanceof GalatAPI ? e.pesan : 'Terjadi kesalahan.'),
   })
 
+  function salin(teks: string) {
+    navigator.clipboard?.writeText(teks).then(
+      () => toast.berhasil('Nomor rekening disalin.'),
+      () => {},
+    )
+  }
+
   return (
-    <Dialog open onOpenChange={(o) => !o && !bayar.isPending && onTutup()}>
-      <IsiDialog judul={`Bayar tagihan ${tagihan.number}`}>
+    <Dialog open onOpenChange={(o) => !o && !kirim.isPending && onTutup()}>
+      <IsiDialog judul={`Konfirmasi pembayaran ${tagihan.number}`}>
         <div className="flex items-baseline justify-between border-b border-garis pb-3">
-          <span className="text-isi text-teks-sekunder">Jumlah yang harus dibayar</span>
+          <span className="text-isi text-teks-sekunder">Jumlah yang dibayar</span>
           <span className="text-judul font-extrabold tabular-nums text-teks-utama">
             {formatRupiah(sisa)}
           </span>
         </div>
 
-        <Pilihan label="Cara bayar" value={cara} onChange={(e) => setCara(e.target.value)}>
+        {info ? (
+          <div className="rounded-kontrol border border-garis bg-permukaan-2 p-3 text-label text-teks-sekunder">
+            <p>Transfer ke:</p>
+            <div className="mt-1 flex items-center justify-between gap-3">
+              <p className="font-semibold text-teks-utama">
+                {info.bank_name} · <span className="tabular-nums">{info.account_number}</span>
+              </p>
+              <Tombol jenis="teks" ukuran="padat" onClick={() => salin(info.account_number)}>
+                Salin
+              </Tombol>
+            </div>
+            {info.account_holder && <p>a.n. {info.account_holder}</p>}
+            <p className="mt-1">
+              Tulis <strong className="text-teks-utama">{tagihan.number}</strong> di berita transfer.
+            </p>
+          </div>
+        ) : (
+          <p className="rounded-kontrol border border-garis bg-permukaan-2 p-3 text-label text-teks-sekunder">
+            {/* Rekening belum diatur di server (SUBSCRIPTION_BANK_*). Pesan
+                WhatsApp tagihan TIDAK memuat rekening, jadi jangan menjanjikannya. */}
+            Hubungi tim kami untuk nomor rekening tujuan, lalu kirim konfirmasi di sini setelah
+            membayar.
+          </p>
+        )}
+
+        <Pilihan label="Dibayar lewat" value={cara} onChange={(e) => setCara(e.target.value)}>
           <option value="transfer">Transfer bank</option>
           <option value="qris">QRIS</option>
           <option value="ewallet">Dompet digital</option>
-          <option value="card">Kartu</option>
-          <option value="cash">Tunai</option>
         </Pilihan>
+        <Kolom
+          label="Nama pengirim atau nomor referensi"
+          bantuan="Yang tertulis di bukti transfer — kami mencocokkannya dengan mutasi rekening."
+          value={referensi}
+          onChange={(e) => {
+            setReferensi(e.target.value)
+            setGalatReferensi(undefined)
+          }}
+          galat={galatReferensi}
+          required
+        />
+        <Kolom
+          label="Catatan (boleh kosong)"
+          placeholder="Mis. transfer dari BCA pukul 14.05"
+          value={catatan}
+          onChange={(e) => setCatatan(e.target.value)}
+        />
 
         {galat && (
           <p className="rounded-kontrol border border-bahaya bg-bahaya-teks/10 px-3 py-2 text-label text-bahaya-teks">
@@ -541,16 +653,20 @@ function DialogBayar({
 
         <AksiDialog>
           <Tombol
-            memuat={bayar.isPending}
-            labelMemuat="Mencatat…"
+            memuat={kirim.isPending}
+            labelMemuat="Mengirim…"
             onClick={() => {
               setGalat(null)
-              bayar.mutate()
+              if (referensi.trim().length < 2) {
+                setGalatReferensi('Isi nama pengirim atau nomor referensi transfer.')
+                return
+              }
+              kirim.mutate()
             }}
           >
-            Bayar {formatRupiah(sisa)}
+            Kirim Konfirmasi
           </Tombol>
-          <Tombol jenis="kedua" onClick={onTutup} disabled={bayar.isPending}>
+          <Tombol jenis="kedua" onClick={onTutup} disabled={kirim.isPending}>
             Nanti saja
           </Tombol>
         </AksiDialog>
@@ -563,12 +679,16 @@ function StatusLangganan({ status }: { status: string }) {
   switch (status) {
     case 'active':
       return <LencanaStatus nada="berhasil" anak="Aktif" />
-    case 'trialing':
+    // Nilai dari CHECK subscriptions.status (000015): trial, active,
+    // past_due, canceled, expired.
+    case 'trial':
       return <LencanaStatus nada="berhasil" anak="Masa coba" />
     case 'past_due':
       return <LencanaStatus nada="menunggu" anak="Lewat jatuh tempo" />
     case 'canceled':
       return <LencanaStatus nada="bahaya" anak="Berhenti" />
+    case 'expired':
+      return <LencanaStatus nada="bahaya" anak="Berakhir" />
     default:
       return <LencanaStatus nada="netral" anak={status} />
   }

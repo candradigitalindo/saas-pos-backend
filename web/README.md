@@ -55,7 +55,7 @@ berbagi, naikkan ke `bersama/`.
    lokal, dan mesin sinkronisasi yang menyegarkan di belakang.
 
 4. **`Idempotency-Key` wajib** pada `POST /sales`, `/purchases`,
-   `/invoice-payments`, dan `/subscription-payments`. Kuncinya dibuat SEKALI
+   `/invoice-payments`, dan `/subscription-payment-claims`. Kuncinya dibuat SEKALI
    saat pengguna menekan Bayar, dan kunci yang sama dipakai untuk semua
    percobaan ulang — inilah yang membuat tombol tertekan dua kali tidak
    menghasilkan dua transaksi.

@@ -87,24 +87,27 @@ func ListSubInvoices(c *gin.Context) {
 	})
 }
 
-// PaySubscription: POST /api/v1/subscription-payments — bayar tagihan (idempoten).
-func PaySubscription(c *gin.Context) {
+// SubmitPaymentClaim: POST /api/v1/subscription-payment-claims — tenant
+// mengonfirmasi pembayaran tagihan (idempoten). Paket aktif setelah staf
+// keuangan platform menyetujuinya; tenant tidak lagi bisa menandai tagihannya
+// sendiri lunas.
+func SubmitPaymentClaim(c *gin.Context) {
 	raw, err := io.ReadAll(io.LimitReader(c.Request.Body, 1<<20))
 	if err != nil {
 		badRequest(c, "body", "Gagal membaca body")
 		return
 	}
-	var req structs.SubscriptionPaymentRequest
+	var req structs.PaymentClaimRequest
 	if err := bindJSONBytes(raw, &req); err != nil {
 		validationFailed(c, err)
 		return
 	}
-
-	status, body, err := services.PaySubscriptionInvoice(c.Request.Context(), services.PaySubInput{
+	status, body, err := services.SubmitPaymentClaim(c.Request.Context(), services.SubmitClaimInput{
 		InvoiceID:      req.InvoiceID,
 		Amount:         req.Amount,
 		Method:         req.Method,
 		Reference:      req.Reference,
+		Note:           req.Note,
 		IdempotencyKey: c.GetHeader("Idempotency-Key"),
 		RequestHash:    helpers.SHA256Hex(raw),
 	})
@@ -113,6 +116,19 @@ func PaySubscription(c *gin.Context) {
 		return
 	}
 	c.Data(status, "application/json; charset=utf-8", body)
+}
+
+// ListPaymentClaims: GET /api/v1/subscription-payment-claims — riwayat
+// konfirmasi pembayaran milik tenant.
+func ListPaymentClaims(c *gin.Context) {
+	rows, err := services.ListPaymentClaims(c.Request.Context())
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[[]structs.PaymentClaimResponse]{
+		Success: true, Message: "Daftar konfirmasi pembayaran", Data: rows,
+	})
 }
 
 // CancelSubscription: POST /api/v1/subscription/cancel — batal + hitung refund.

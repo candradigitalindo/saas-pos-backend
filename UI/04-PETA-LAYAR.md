@@ -220,9 +220,15 @@ menu aktif selalu digulir ke dalam pandangan.
 | Status langganan saya | `GET /subscription` | `billing.manage` |
 | Mulai berlangganan | `POST /subscription` | `billing.manage` |
 | Tagihan | `GET\|POST /subscription/invoices` | `billing.manage` |
-| Bayar | `POST /subscription-payments` + `Idempotency-Key` | `billing.manage` |
+| Konfirmasi sudah bayar | `POST /subscription-payment-claims` + `Idempotency-Key` | `billing.manage` |
 | Ganti paket / berhenti | `POST /subscription/change-plan` · `POST /subscription/cancel` | `billing.manage` |
-| Bayar sekarang (masa coba / habis / tenggang) | `POST /subscription/invoices` lalu bayar | `billing.manage` |
+| Bayar sekarang (masa coba / habis / tenggang) | `POST /subscription/invoices` lalu konfirmasi | `billing.manage` |
+
+**Pembayaran langganan diverifikasi, bukan dinyatakan sendiri.** Dialog "Konfirmasi Pembayaran"
+menampilkan rekening tujuan (`payment_instructions`; bila kosong, arahan menghubungi lewat
+WhatsApp), lalu meminta cara bayar + nama pengirim/nomor referensi. Setelah terkirim, kartu tagihan
+berganti "Menunggu verifikasi" (tanpa tombol bayar); bila ditolak, alasan dari staf tampil beserta
+tombol "Kirim Konfirmasi Baru". Paket berubah HANYA setelah staf keuangan menyetujui di panel.
 
 **Kunci paket di layar** (dari `plan` di `GET /me`; penegakannya tetap di server, 402):
 
@@ -347,6 +353,7 @@ staf hanya melihat yang boleh ia kerjakan.
 | Materi jualan | `GET\|POST /platform/partner-materials` | baca: semua · tulis: operator |
 | Pelatihan | `GET\|POST /platform/partner-trainings` | baca: semua · tulis: operator |
 | Sengketa atribusi | `GET /platform/partner-disputes` · `POST /platform/partner-disputes/:id/resolve` | baca: semua · putus: operator |
+| Konfirmasi pembayaran langganan | `GET /platform/subscription-payment-claims` · `POST …/:id/approve` · `POST …/:id/reject` | superadmin, finance (`billing.verify`) |
 | Antrean notifikasi | `GET /platform/outbox` · `POST /platform/outbox/:id/retry` | baca: semua · ulang: superadmin |
 | Template pesan | `POST /platform/notification-templates` | superadmin |
 
@@ -359,6 +366,10 @@ staf hanya melihat yang boleh ia kerjakan.
 2. **Antrean mati harus mencolok.** Notifikasi yang gagal 10 kali hanya
    terlihat di sini. Beri lencana berisi jumlahnya di menu, lengkap dengan
    alasan gagal dan tombol "Coba kirim lagi".
+3. **Konfirmasi pembayaran yang menunggu juga berlencana**, dan dialog "Setujui"
+   menyebut nominal, nama usaha, dan nama pengirim — staf mencocokkannya
+   dengan mutasi rekening sebelum menekan. Menolak wajib beralasan karena
+   tenant membacanya.
 
 ---
 
