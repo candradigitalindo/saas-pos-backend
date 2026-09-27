@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import type { Produk } from '@/bersama/tipe/katalog'
 import { db, type ProdukLokal } from './db'
+import { petaWarnaKategori } from '@/bersama/util/warna-kategori'
 
 /**
  * Katalog kasir dibaca dari Dexie, BUKAN dari server tiap ketikan.
@@ -20,6 +21,8 @@ export interface HasilKatalogLokal {
   petaStok: Map<string, string>
   /** Kategori yang benar-benar dipakai barang aktif. */
   kategori: { id: string; nama: string }[]
+  /** id kategori → kelas warna petak, dihitung dari SEMUA kategori. */
+  warnaKategori: Map<string, string>
   /** true bila Dexie masih kosong — belum pernah menarik master data. */
   kosong: boolean
   memuat: boolean
@@ -53,18 +56,24 @@ export function useKatalogLokal(
     // Kategori yang benar-benar dipakai barang aktif — bukan seluruh katalog,
     // supaya kasir tidak melihat tab kategori yang isinya selalu kosong.
     const idTerpakai = new Set(semuaProduk.map((p) => p.category_id).filter(Boolean))
-    const kategori = (await db.kategori.toArray())
+    const semuaKategori = await db.kategori.toArray()
+    const kategori = semuaKategori
       .filter((k) => idTerpakai.has(k.id))
       .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'id'))
       .map((k) => ({ id: k.id, nama: k.name }))
+    // Warna petak dihitung dari SEMUA kategori, bukan hanya yang terpakai —
+    // daftar Barang juga menghitungnya dari semua, jadi satu kategori
+    // berwarna sama di kedua layar (lihat warna-kategori.ts).
+    const warnaKategori = petaWarnaKategori(semuaKategori)
 
-    return { produk, petaStok, kategori, kosong: semuaProduk.length === 0 }
+    return { produk, petaStok, kategori, warnaKategori, kosong: semuaProduk.length === 0 }
   }, [cari, outletId, kategoriId])
 
   return {
     produk: hasil?.produk ?? [],
     petaStok: hasil?.petaStok ?? new Map(),
     kategori: hasil?.kategori ?? [],
+    warnaKategori: hasil?.warnaKategori ?? new Map<string, string>(),
     kosong: hasil?.kosong ?? false,
     memuat: hasil === undefined,
   }

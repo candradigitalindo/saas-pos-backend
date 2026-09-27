@@ -55,7 +55,7 @@ export function HalamanKunjungan() {
   const berjalan = daftar.filter((k) => k.checkin_at && !k.checkout_at)
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+    <div className="flex w-full max-w-2xl flex-col gap-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-judul font-bold text-teks-utama">Kunjungan</h1>
         <Tombol onClick={() => setCheckinUntuk(true)}>

@@ -70,7 +70,7 @@ export function HalamanKartuStok() {
   const daftar = q.data?.data ?? []
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+    <div className="flex w-full max-w-2xl flex-col gap-4">
       <header>
         <h1 className="text-judul font-bold text-teks-utama">
           {produk.data?.name ?? 'Riwayat Stok'}

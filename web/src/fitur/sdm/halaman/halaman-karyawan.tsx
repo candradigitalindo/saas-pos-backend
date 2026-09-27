@@ -38,7 +38,7 @@ export function HalamanKaryawan() {
   const bolehLihatUpah = boleh(IZIN.hrSalaryView)
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+    <div className="flex w-full max-w-2xl flex-col gap-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-judul font-bold text-teks-utama">Karyawan</h1>
         {boleh(IZIN.hrEmployeeEdit) && (

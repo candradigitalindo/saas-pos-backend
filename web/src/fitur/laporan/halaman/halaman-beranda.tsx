@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -10,7 +11,9 @@ import {
   TriangleAlert,
 } from 'lucide-react'
 import { Kartu } from '@/bersama/ui/kartu'
+import { SegmenPilihan } from '@/bersama/ui/segmen'
 import { KartuAngka } from '@/bersama/komponen/kartu-angka'
+import { KartuBagian, TautanBagian } from '@/bersama/komponen/kartu-bagian'
 import { KartuSorotan } from '@/bersama/komponen/kartu-sorotan'
 import { KerangkaKartuAngka } from '@/bersama/komponen/kerangka'
 import { StatusKoneksi } from '@/bersama/komponen/status-koneksi'
@@ -19,15 +22,41 @@ import { useSinkron } from '@/lib/offline/mesin'
 import { api } from '@/lib/api-client'
 import { IZIN } from '@/lib/izin'
 import { formatRupiah } from '@/bersama/util/uang'
-import { tanggalISO } from '@/bersama/util/tanggal'
+import { formatHariPanjang, tanggalISO } from '@/bersama/util/tanggal'
 import { formatSisaStok } from '@/bersama/util/desimal'
 import { cn } from '@/bersama/util/cn'
 import type { Halaman } from '@/lib/api-client'
 import type { SaldoStok } from '@/bersama/tipe/katalog'
 import { laporanApi } from '../api'
+import { KartuTren, type PanjangPeriode } from '../komponen/kartu-tren'
+import { DaftarTerlaris } from '../komponen/daftar-terlaris'
+import { TransaksiTerakhir } from '../komponen/transaksi-terakhir'
 
 /** Berapa hari terakhir yang digambar di grafik mungil kartu sorotan. */
 const HARI_RIWAYAT = 7
+
+/** Kunci localStorage pilihan periode bagian "Penjualan" (7/30 hari). */
+const KUNCI_PERIODE = 'beranda.periode'
+
+/**
+ * Periode yang terakhir dipilih di perangkat ini. Hanya kenyamanan: bila
+ * penyimpanan diblokir (mode privat, data situs dihapus) kembali ke 7 hari.
+ */
+function periodeTersimpan(): PanjangPeriode {
+  try {
+    return localStorage.getItem(KUNCI_PERIODE) === '30' ? 30 : 7
+  } catch {
+    return 7
+  }
+}
+
+function simpanPeriode(h: PanjangPeriode) {
+  try {
+    localStorage.setItem(KUNCI_PERIODE, String(h))
+  } catch {
+    /* tidak tersimpan — pilihan tetap berlaku sampai halaman ditutup */
+  }
+}
 
 /**
  * Beranda pemilik.
@@ -40,9 +69,21 @@ const HARI_RIWAYAT = 7
  * sebelumnya menaruh semuanya di kartu putih seragam — tidak ada yang menonjol,
  * dan satu-satunya warna kuat di layar adalah merah "turun" dan jingga "habis".
  * Lihat KartuSorotan untuk alasan lengkapnya.
+ *
+ * Di bawahnya bagian yang lazim di dasbor SaaS kasir: tren uang masuk 7/30
+ * hari dengan pembanding periode sebelumnya, barang terlaris, transaksi
+ * terakhir, dan stok hampir habis — masing-masing kartu berjudul sendiri
+ * (KartuBagian). Tanpa itu, Beranda di hari yang belum ada penjualannya hanya
+ * berisi deretan "Rp 0" dan tidak memberi tahu apa pun; kini hari yang sepi
+ * tetap menunjukkan bagaimana pekan ini berjalan.
  */
 export function HalamanBeranda() {
-  const { profil, boleh, tokoAktif } = useSesi()
+  const { profil, boleh, tokoAktif, rincianToko } = useSesi()
+  const [periode, setPeriode] = useState<PanjangPeriode>(periodeTersimpan)
+  const gantiPeriode = (h: PanjangPeriode) => {
+    setPeriode(h)
+    simpanPeriode(h)
+  }
   const sinkron = useSinkron()
   const nama = profil?.user.name?.split(' ')[0] ?? ''
 
@@ -98,17 +139,35 @@ export function HalamanBeranda() {
   // berbohong — hari sepi akan terlihat seperti hari yang tidak ada.
   const deretHarian = deretTujuhHari(riwayat.data?.rows, HARI_RIWAYAT)
 
+  const bolehLihatTransaksi = boleh(IZIN.saleCreate)
+  const bolehLihatStok = boleh(IZIN.stockView)
+  const adaStokMenipis = (stokMenipis.data?.data.length ?? 0) > 0
+  // Toko lebih dari satu: sebut toko yang sedang ditampilkan angkanya.
+  const banyakToko = (profil?.outlets?.length ?? 0) > 1
+
   return (
     <div className="flex flex-col gap-4">
       <header>
+        {/* Tanggal lengkap di atas sapaan — konteks "angka hari apa ini"
+            yang di dasbor mana pun selalu ada di kepala halaman. */}
+        <p className="text-label font-medium text-teks-redup">
+          {formatHariPanjang(new Date(), rincianToko?.timezone)}
+        </p>
         <h1 className="text-judul font-bold text-teks-utama">
           {sapaan()}
           {nama && `, ${nama}`}
         </h1>
-        <p className="text-label text-teks-sekunder">{profil?.tenant.business_name}</p>
+        <p className="text-label text-teks-sekunder">
+          {profil?.tenant.business_name}
+          {banyakToko && rincianToko && rincianToko.name !== profil?.tenant.business_name
+            ? ` · ${rincianToko.name}`
+            : ''}
+        </p>
       </header>
 
-      <StatusKoneksi menunggu={sinkron.menunggu} />
+      {/* Di layar lebar status yang sama sudah ada di kaki navigasi samping —
+          dua kalimat "Semua data tersimpan" di satu layar hanya derau. */}
+      <StatusKoneksi menunggu={sinkron.menunggu} className="lg:hidden" />
 
       {sinkron.perluDiperiksa > 0 && (
         <Link to="/kasir/belum-terkirim">
@@ -210,58 +269,92 @@ export function HalamanBeranda() {
         </section>
       )}
 
-      {(stokMenipis.data?.data.length ?? 0) > 0 && (
-        <section className="flex flex-col gap-2">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-judul-kartu font-semibold text-teks-utama">Hampir habis</h2>
-            <Link
-              to="/stok"
-              className="-m-2 flex min-h-12 items-center gap-1 rounded-kontrol p-2 text-label font-semibold text-utama underline-offset-4 hover:underline"
-            >
-              Lihat semua
-              <ChevronRight className="h-4 w-4" aria-hidden />
-            </Link>
+      {bolehLihatLaporan && (
+        <section aria-labelledby="judul-penjualan" className="flex flex-col gap-3 pt-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 id="judul-penjualan" className="text-judul-kartu font-bold text-teks-utama">
+              Penjualan
+            </h2>
+            <SegmenPilihan
+              label="Periode"
+              nilai={String(periode) as '7' | '30'}
+              onPilih={(v) => gantiPeriode(v === '30' ? 30 : 7)}
+              pilihan={[['7', '7 hari'], ['30', '30 hari']] as const}
+            />
           </div>
-          <Kartu className="divide-y divide-garis">
-            {stokMenipis.data?.data.map((s) => {
-              // Yang benar-benar nol diberi lencana; yang tinggal sedikit cukup
-              // teks. Tanpa pembedaan ini, lima baris jingga berderet membuat
-              // "tinggal 4" terbaca segenting "habis" — dan kalau semuanya
-              // mendesak, tidak ada yang mendesak.
-              const habis = Number(s.qty) <= 0
-              return (
-                <Link
-                  key={s.product_id}
-                  to="/stok"
-                  className="flex min-h-14 items-center justify-between gap-3 px-4 hover:bg-permukaan-2"
-                >
-                  <span className="min-w-0 truncate text-isi text-teks-utama">
-                    {s.product_name}
-                  </span>
-                  <span
-                    className={cn(
-                      'shrink-0 text-label tabular-nums',
-                      habis
-                        ? 'rounded-full bg-permukaan-2 px-2 py-0.5 font-semibold text-jingga-700'
-                        : 'text-teks-sekunder',
-                    )}
-                  >
-                    {formatSisaStok(s.qty, s.unit_name)}
-                  </span>
-                </Link>
-              )
-            })}
-          </Kartu>
+          {/* Tiga kolom baru mulai 1280px. Di 1024px navigasi samping memakan
+              256px, dan sepertiga sisanya tinggal ±236px — judul "Barang
+              terlaris" patah jadi dua baris dan keterangannya jadi tiga. */}
+          <div className="grid gap-3 xl:grid-cols-3">
+            <div className="min-w-0 xl:col-span-2">
+              <KartuTren
+                tokoAktif={tokoAktif}
+                hariIni={hariIni}
+                hari={periode}
+                onGantiHari={gantiPeriode}
+              />
+            </div>
+            <DaftarTerlaris tokoAktif={tokoAktif} hariIni={hariIni} hari={periode} />
+          </div>
         </section>
       )}
 
-      {bolehLihatLaporan && (hari?.sales_count ?? 0) === 0 && !dashboard.isLoading && (
-        <Kartu className="p-4">
-          <p className="text-label text-teks-sekunder">
-            Belum ada penjualan hari ini. Angkanya akan muncul di sini begitu ada
-            transaksi pertama.
-          </p>
-        </Kartu>
+      {(bolehLihatTransaksi || (bolehLihatStok && adaStokMenipis)) && (
+        <div
+          className={cn(
+            'grid gap-3',
+            // Berdampingan hanya bila keduanya ada; sendirian, satu kartu
+            // mengambil lebar penuh alih-alih menyisakan lubang di kanan.
+            bolehLihatTransaksi && bolehLihatStok && adaStokMenipis && 'md:grid-cols-2 xl:grid-cols-3',
+          )}
+        >
+          {bolehLihatTransaksi && (
+            <div className={cn('min-w-0', adaStokMenipis && bolehLihatStok && 'xl:col-span-2')}>
+              <TransaksiTerakhir tokoAktif={tokoAktif} zona={rincianToko?.timezone} />
+            </div>
+          )}
+
+          {bolehLihatStok && adaStokMenipis && (
+            <KartuBagian
+              judul="Hampir habis"
+              keterangan="Saatnya belanja ulang"
+              aksi={<TautanBagian ke="/stok">Lihat semua</TautanBagian>}
+              isiClassName="px-0 pb-1 pt-2 sm:px-0"
+            >
+              <ul className="divide-y divide-garis border-t border-garis">
+                {stokMenipis.data?.data.map((s) => {
+                  // Yang benar-benar nol diberi lencana; yang tinggal sedikit
+                  // cukup teks. Tanpa pembedaan ini, lima baris jingga berderet
+                  // membuat "tinggal 4" terbaca segenting "habis" — dan kalau
+                  // semuanya mendesak, tidak ada yang mendesak.
+                  const habis = Number(s.qty) <= 0
+                  return (
+                    <li key={s.product_id}>
+                      <Link
+                        to="/stok"
+                        className="flex min-h-12 items-center justify-between gap-3 px-4 hover:bg-permukaan-2 sm:px-5"
+                      >
+                        <span className="min-w-0 truncate text-label text-teks-utama">
+                          {s.product_name}
+                        </span>
+                        <span
+                          className={cn(
+                            'shrink-0 text-label tabular-nums',
+                            habis
+                              ? 'rounded-full bg-permukaan-2 px-2 py-0.5 font-semibold text-jingga-700'
+                              : 'text-teks-sekunder',
+                          )}
+                        >
+                          {formatSisaStok(s.qty, s.unit_name)}
+                        </span>
+                      </Link>
+                    </li>
+                  )
+                })}
+              </ul>
+            </KartuBagian>
+          )}
+        </div>
       )}
     </div>
   )

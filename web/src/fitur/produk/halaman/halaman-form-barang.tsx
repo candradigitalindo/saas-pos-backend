@@ -147,7 +147,7 @@ export function HalamanFormBarang() {
   const belumAdaSatuan = !satuan.isLoading && (satuan.data?.data.length ?? 0) === 0
 
   return (
-    <div className="mx-auto flex w-full max-w-lg flex-col gap-4">
+    <div className="flex w-full max-w-lg flex-col gap-4">
       <h1 className="text-judul font-bold text-teks-utama">
         {sedangUbah ? 'Ubah Barang' : 'Tambah Barang'}
       </h1>

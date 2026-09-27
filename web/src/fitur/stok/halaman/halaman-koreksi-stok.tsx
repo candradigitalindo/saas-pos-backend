@@ -84,7 +84,7 @@ export function HalamanKoreksiStok() {
   })
 
   return (
-    <div className="mx-auto flex w-full max-w-lg flex-col gap-4">
+    <div className="flex w-full max-w-lg flex-col gap-4">
       <header>
         <h1 className="text-judul font-bold text-teks-utama">
           {onboarding ? 'Isi Stok Awal' : 'Koreksi Stok'}

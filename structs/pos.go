@@ -38,6 +38,19 @@ type CustomerResponse struct {
 	Note        string `json:"note,omitempty"`
 	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
+	// Ringkasan belanja — hanya diisi GET /customers (daftar).
+	Stats *CustomerStats `json:"stats,omitempty"`
+}
+
+// CustomerStats merangkum hubungan pelanggan dengan toko: berapa kali datang,
+// total belanja bersih (retur mengurangi, void tidak ikut), kapan terakhir
+// datang, dan sisa kasbon. ReceivableOutstanding hanya dikirim kepada yang
+// memegang izin receivable.manage — izin yang sama dengan halaman Kasbon.
+type CustomerStats struct {
+	VisitCount            int64  `json:"visit_count"`
+	TotalSpent            int64  `json:"total_spent"`
+	LastVisitAt           string `json:"last_visit_at,omitempty"`
+	ReceivableOutstanding *int64 `json:"receivable_outstanding,omitempty"`
 }
 
 // ── Shift ──────────────────────────────────────────────────────────────────
@@ -156,6 +169,17 @@ type StockResponse struct {
 	ReservedQty string `json:"reserved_qty"`
 	MinStock    string `json:"min_stock"`
 	Low         bool   `json:"low"`
+}
+
+// StockSummaryResponse menjawab GET /stocks/summary — hitungan atas SELURUH
+// barang (lihat repositories.StockSummary untuk batas tiap keadaan).
+type StockSummaryResponse struct {
+	Total      int64 `json:"total"`
+	Safe       int64 `json:"safe"`        // qty > min_stock
+	Low        int64 `json:"low"`         // 0 < qty ≤ min_stock
+	Out        int64 `json:"out"`         // qty = 0
+	Negative   int64 `json:"negative"`    // qty < 0 — perlu dicocokkan
+	StockValue int64 `json:"stock_value"` // Σ max(qty,0) × harga modal
 }
 
 type StockMovementResponse struct {

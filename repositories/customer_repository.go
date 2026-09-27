@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"errors"
+	"time"
 
 	"candra/backend-api/models"
 
@@ -107,4 +108,75 @@ func OutstandingReceivableTotal(ctx context.Context, tx *gorm.DB, customerID str
 		Select("COALESCE(SUM(amount - paid_amount), 0)").
 		Scan(&total).Error
 	return total, err
+}
+
+// CustomerSpendRow adalah ringkasan belanja satu pelanggan.
+type CustomerSpendRow struct {
+	CustomerID string
+	VisitCount int64      // jumlah nota 'completed' (retur bukan kedatangan)
+	TotalSpent int64      // Σ total nota 'completed' + 'returned' (retur negatif)
+	LastVisit  *time.Time // occurred_at nota 'completed' terakhir
+}
+
+// CustomerSpending merangkum belanja pelanggan-pelanggan `ids`: berapa kali
+// datang, total belanja bersih, dan kapan terakhir datang.
+//
+// Aturannya SAMA dengan laporan (lihat RefreshDailySummary): uang dijumlahkan
+// atas 'completed' DAN 'returned' — baris retur bernilai negatif sehingga
+// mengurangi totalnya — sedangkan kedatangan hanya menghitung 'completed'.
+// Void ('canceled') tidak ikut sama sekali.
+//
+// Mengikuti lingkup toko pengguna (scopeOutlet): staf cabang A melihat belanja
+// pelanggan DI CABANG A, bukan omzet cabang lain yang tidak boleh ia lihat.
+// Satu query untuk satu halaman daftar, bukan satu query per pelanggan.
+func CustomerSpending(ctx context.Context, ids []string) (map[string]CustomerSpendRow, error) {
+	out := make(map[string]CustomerSpendRow, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	q := tenantDB(ctx, nil).Table("sales").
+		Where("tenant_id = ? AND customer_id IN ? AND status IN ('completed', 'returned')",
+			currentTenantID(ctx), ids)
+	q = scopeOutlet(ctx, q, "outlet_id")
+	var rows []CustomerSpendRow
+	err := q.Select(`
+		customer_id,
+		COUNT(*) FILTER (WHERE status = 'completed')           AS visit_count,
+		COALESCE(SUM(total), 0)                                AS total_spent,
+		MAX(occurred_at) FILTER (WHERE status = 'completed')   AS last_visit`).
+		Group("customer_id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		out[r.CustomerID] = r
+	}
+	return out, nil
+}
+
+// CustomerReceivableOutstanding menjumlahkan sisa kasbon terbuka per pelanggan
+// (amount − paid_amount atas piutang berstatus 'open'). Piutang tidak berlapis
+// toko — kasbon melekat pada pelanggan, bukan pada cabang tempat ia berutang.
+func CustomerReceivableOutstanding(ctx context.Context, ids []string) (map[string]int64, error) {
+	out := make(map[string]int64, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var rows []struct {
+		CustomerID  string
+		Outstanding int64
+	}
+	err := tenantDB(ctx, nil).Table("receivables").
+		Where("tenant_id = ? AND customer_id IN ? AND status = 'open'", currentTenantID(ctx), ids).
+		Select("customer_id, COALESCE(SUM(amount - paid_amount), 0) AS outstanding").
+		Group("customer_id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		out[r.CustomerID] = r.Outstanding
+	}
+	return out, nil
 }

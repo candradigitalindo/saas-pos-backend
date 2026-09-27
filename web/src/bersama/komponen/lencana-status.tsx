@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { Ban, Check, CircleDot, CloudOff, Clock, TriangleAlert } from 'lucide-react'
+import { Ban, Check, CircleDot, CloudOff, Clock, RotateCcw, TriangleAlert } from 'lucide-react'
 import { cn } from '@/bersama/util/cn'
 
 /**
@@ -46,7 +46,14 @@ export function LencanaStatus({
   )
 }
 
-/** Peta status transaksi backend → lencana berbahasa manusia. */
+/**
+ * Peta status transaksi backend → lencana berbahasa manusia.
+ *
+ * Status yang benar-benar dikirim server untuk penjualan: `completed`,
+ * `canceled` (void), `returned` (baris retur, bernilai negatif), dan `open`
+ * (tagihan meja yang belum dibayar). Dua yang terakhir dulu tidak dipetakan,
+ * sehingga riwayat menampilkan kata Inggris mentah "returned".
+ */
 export function LencanaTransaksi({ status }: { status: string }) {
   switch (status) {
     case 'paid':
@@ -54,7 +61,13 @@ export function LencanaTransaksi({ status }: { status: string }) {
       return <LencanaStatus nada="berhasil" anak="Lunas" />
     case 'void':
     case 'voided':
+    case 'canceled':
       return <LencanaStatus nada="bahaya" anak="Dibatalkan" />
+    case 'returned':
+      // Baris retur bukan kegagalan — uang dikembalikan dengan sengaja.
+      return <LencanaStatus nada="netral" anak="Retur" ikon={RotateCcw} />
+    case 'open':
+      return <LencanaStatus nada="menunggu" anak="Belum dibayar" />
     case 'refunded':
       return <LencanaStatus nada="bahaya" anak="Diretur" ikon={TriangleAlert} />
     case 'partial':

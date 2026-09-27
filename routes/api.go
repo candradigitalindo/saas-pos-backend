@@ -542,6 +542,7 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 
 	// Stok: baca + penyesuaian manual (saldo awal / koreksi).
 	t.GET("/stocks", middlewares.Require("stock.view"), controllers.ListStocks)
+	t.GET("/stocks/summary", middlewares.Require("stock.view"), controllers.StockSummary)
 	t.GET("/stock-movements", middlewares.Require("stock.view"), controllers.ListStockMovements)
 	t.POST("/stock-adjustments", middlewares.Require("stock.adjust"), controllers.AdjustStock)
 	t.POST("/stock-reconcile", middlewares.Require("stock.opname"), controllers.ReconcileStocks)

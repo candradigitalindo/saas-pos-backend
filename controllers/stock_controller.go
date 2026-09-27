@@ -3,6 +3,7 @@ package controllers
 import (
 	"io"
 	"net/http"
+	"strings"
 
 	"candra/backend-api/helpers"
 	"candra/backend-api/repositories"
@@ -70,9 +71,18 @@ func AdjustStock(c *gin.Context) {
 // di bawah min_stock via ?low=true).
 func ListStocks(c *gin.Context) {
 	page, limit, offset := helpers.ParsePaginationParams(c)
-	low := c.Query("low") == "true" || c.Query("low") == "1"
+	f := repositories.StockFilter{
+		OutletID: c.Query("outlet_id"),
+		LowOnly:  c.Query("low") == "true" || c.Query("low") == "1",
+		Search:   strings.TrimSpace(c.Query("q")),
+	}
+	for _, id := range strings.Split(c.Query("product_ids"), ",") {
+		if id = strings.TrimSpace(id); id != "" {
+			f.ProductIDs = append(f.ProductIDs, id)
+		}
+	}
 
-	rows, total, err := repositories.ListStocks(c.Request.Context(), c.Query("outlet_id"), low, limit, offset)
+	rows, total, err := repositories.ListStocks(c.Request.Context(), f, limit, offset)
 	if err != nil {
 		respondServiceError(c, err)
 		return
@@ -84,6 +94,23 @@ func ListStocks(c *gin.Context) {
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.PaginatedResponse[structs.StockResponse]]{
 		Success: true, Message: "Berhasil mengambil saldo stok",
 		Data: helpers.BuildPaginationResponse(c, page, limit, total, items),
+	})
+}
+
+// StockSummary merangkum saldo stok seluruh barang satu outlet (atau semua
+// outlet yang boleh dilihat): aman / hampir habis / habis / minus + nilai stok.
+func StockSummary(c *gin.Context) {
+	r, err := repositories.StockSummary(c.Request.Context(), c.Query("outlet_id"))
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[structs.StockSummaryResponse]{
+		Success: true, Message: "Berhasil mengambil ringkasan stok",
+		Data: structs.StockSummaryResponse{
+			Total: r.Total, Safe: r.Safe, Low: r.Low, Out: r.Out,
+			Negative: r.Negative, StockValue: r.StockValue,
+		},
 	})
 }
 

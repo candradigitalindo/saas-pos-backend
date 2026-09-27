@@ -35,21 +35,36 @@ func ExportReportCSV(ctx context.Context, reportType, outletID, from, to, groupB
 			return "", nil, err
 		}
 		filename = fmt.Sprintf("laporan-penjualan-%s_%s.csv", rep.From, rep.To)
-		_ = w.Write([]string{
-			"key", "sales_count", "gross_amount", "discount_amount", "tax_amount",
+		// Per barang: key-nya ULID yang tak berarti di spreadsheet, jadi nama,
+		// satuan, dan jumlah terjual ikut sebagai kolom setelah key.
+		perBarang := rep.GroupBy == "product"
+		kolom := []string{"key"}
+		if perBarang {
+			kolom = append(kolom, "product_name", "unit", "qty")
+		}
+		_ = w.Write(append(kolom,
+			"sales_count", "gross_amount", "discount_amount", "tax_amount",
 			"net_amount", "cost_amount", "fee_amount", "gross_profit",
-		})
+		))
 		for _, r := range rep.Rows {
-			_ = w.Write([]string{
-				r.Key, i64(r.SalesCount), i64(r.GrossAmount), i64(r.DiscountAmount), i64(r.TaxAmount),
+			sel := []string{r.Key}
+			if perBarang {
+				sel = append(sel, r.Label, r.Unit, r.Qty)
+			}
+			_ = w.Write(append(sel,
+				i64(r.SalesCount), i64(r.GrossAmount), i64(r.DiscountAmount), i64(r.TaxAmount),
 				i64(r.NetAmount), i64(r.CostAmount), i64(r.FeeAmount), i64(r.GrossProfit),
-			})
+			))
 		}
 		tt := rep.Totals
-		_ = w.Write([]string{
-			"TOTAL", i64(tt.SalesCount), i64(tt.GrossAmount), i64(tt.DiscountAmount), i64(tt.TaxAmount),
+		total := []string{"TOTAL"}
+		if perBarang {
+			total = append(total, "", "", "")
+		}
+		_ = w.Write(append(total,
+			i64(tt.SalesCount), i64(tt.GrossAmount), i64(tt.DiscountAmount), i64(tt.TaxAmount),
 			i64(tt.NetAmount), i64(tt.CostAmount), i64(tt.FeeAmount), i64(tt.GrossProfit),
-		})
+		))
 
 	case "profit":
 		rep, err := ProfitReport(ctx, outletID, from, to)

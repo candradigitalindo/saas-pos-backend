@@ -87,6 +87,16 @@ export interface Transaksi {
   created_at: string
 }
 
+/** Ringkasan belanja pelanggan — hanya ada di daftar (GET /customers). */
+export interface StatistikPelanggan {
+  visit_count: number
+  /** Belanja bersih: retur mengurangi, void tidak ikut. */
+  total_spent: number
+  last_visit_at?: string
+  /** Hanya dikirim kepada pemegang izin receivable.manage. */
+  receivable_outstanding?: number
+}
+
 export interface Pelanggan {
   id: string
   code?: string
@@ -99,4 +109,5 @@ export interface Pelanggan {
   note?: string
   created_at: string
   updated_at: string
+  stats?: StatistikPelanggan
 }

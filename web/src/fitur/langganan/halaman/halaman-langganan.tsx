@@ -39,7 +39,7 @@ export function HalamanLangganan() {
   const belumBerlangganan = ringkasan.isError || !langganan
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+    <div className="flex w-full max-w-2xl flex-col gap-4">
       <h1 className="text-judul font-bold text-teks-utama">Langganan</h1>
 
       {ringkasan.isLoading ? (

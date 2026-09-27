@@ -88,7 +88,7 @@ export function HalamanOpname() {
   // ── Langkah 1: pilih barang ──────────────────────────────────────────────
   if (langkah === 1) {
     return (
-      <div className="mx-auto flex w-full max-w-lg flex-col gap-4">
+      <div className="flex w-full max-w-lg flex-col gap-4">
         <Kepala langkah={1} judul="Pilih barang yang mau dihitung" />
 
         {saldo.isLoading ? (
@@ -192,7 +192,7 @@ export function HalamanOpname() {
     }
 
     return (
-      <div className="mx-auto flex w-full max-w-lg flex-col gap-4">
+      <div className="flex w-full max-w-lg flex-col gap-4">
         <Kepala langkah={2} judul="Hitung" />
 
         <Kartu className="flex flex-col gap-4 p-5">
@@ -274,7 +274,7 @@ export function HalamanOpname() {
   const berubah = dipakai.filter((h) => bandingQty(h.dihitung, h.sistem) !== 0)
 
   return (
-    <div className="mx-auto flex w-full max-w-lg flex-col gap-4">
+    <div className="flex w-full max-w-lg flex-col gap-4">
       <Kepala langkah={3} judul="Tinjau & simpan" />
 
       {berubah.length === 0 ? (

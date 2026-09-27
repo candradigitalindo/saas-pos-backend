@@ -1,6 +1,7 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { ReceiptText } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ReceiptText } from 'lucide-react'
 import { Kartu } from '@/bersama/ui/kartu'
 import { Tombol } from '@/bersama/ui/tombol'
 import { Kolom } from '@/bersama/ui/kolom'
@@ -14,30 +15,74 @@ import { GalatAPI } from '@/lib/api-client'
 import { IZIN } from '@/lib/izin'
 import { formatRupiah } from '@/bersama/util/uang'
 import { formatQty } from '@/bersama/util/desimal'
-import { formatJam, tanggalISO } from '@/bersama/util/tanggal'
+import { formatJam, formatTanggalPanjang, geserTanggal, tanggalISO } from '@/bersama/util/tanggal'
 import type { Transaksi } from '@/bersama/tipe/pos'
 import { kasirApi } from '../api'
 import { useRiwayatTransaksi } from '../hooks'
 
-/** Riwayat transaksi hari ini, dengan pembatalan dan retur. */
+const POLA_TANGGAL = /^\d{4}-\d{2}-\d{2}$/
+
+/**
+ * Riwayat transaksi per hari, dengan pembatalan dan retur.
+ *
+ * Tanggalnya ikut di alamat (`?tanggal=2026-09-18`): tautan dari "Transaksi
+ * terakhir" di Beranda membuka hari nota itu, dan memuat ulang halaman tidak
+ * melempar kembali ke hari ini. Tombol ‹ › menggeser sehari — cara tercepat
+ * menelusuri "kemarin, lusa" tanpa membuka kalender.
+ */
 export function HalamanRiwayat() {
   const { tokoAktif, boleh } = useSesi()
-  const [tanggal, setTanggal] = useState(() => tanggalISO())
+  const [params, setParams] = useSearchParams()
+  const hariIni = tanggalISO()
+  const dariAlamat = params.get('tanggal')
+  const tanggal = dariAlamat && POLA_TANGGAL.test(dariAlamat) ? dariAlamat : hariIni
+  const setTanggal = (t: string) => {
+    if (!POLA_TANGGAL.test(t)) return
+    setParams(t === hariIni ? {} : { tanggal: t }, { replace: true })
+  }
   const [dibatalkan, setDibatalkan] = useState<Transaksi | null>(null)
 
   const q = useRiwayatTransaksi({ outlet_id: tokoAktif, business_date: tanggal })
 
   return (
     <div className="flex flex-col gap-4">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <h1 className="text-judul font-bold text-teks-utama">Riwayat Penjualan</h1>
-        <div className="w-44">
-          <Kolom
-            label="Tanggal"
+      {/* Judul & kendali tanggal sejajar di tengah. Dulu kolom tanggal
+          berlabel di atasnya menurunkan kotaknya, dan judul ikut turun
+          (items-end) sehingga kepala halaman ini lebih rendah dari semua
+          halaman lain. */}
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-judul font-bold text-teks-utama">Riwayat Penjualan</h1>
+          <p className="text-label text-teks-sekunder">
+            {tanggal === hariIni ? 'Hari ini' : formatTanggalPanjang(tanggal)}
+          </p>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Tombol
+            jenis="kedua"
+            ukuran="ikon"
+            aria-label="Hari sebelumnya"
+            onClick={() => setTanggal(geserTanggal(tanggal, -1))}
+          >
+            <ChevronLeft className="h-5 w-5" aria-hidden />
+          </Tombol>
+          <input
             type="date"
+            aria-label="Tanggal"
             value={tanggal}
+            max={hariIni}
             onChange={(e) => setTanggal(e.target.value)}
+            className="h-12 rounded-kontrol border border-garis bg-permukaan px-3 text-isi tabular-nums text-teks-utama focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-utama"
           />
+          <Tombol
+            jenis="kedua"
+            ukuran="ikon"
+            aria-label="Hari berikutnya"
+            disabled={tanggal >= hariIni}
+            onClick={() => setTanggal(geserTanggal(tanggal, 1))}
+          >
+            <ChevronRight className="h-5 w-5" aria-hidden />
+          </Tombol>
         </div>
       </header>
 
@@ -102,7 +147,7 @@ function BarisTransaksi({
     <Kartu className="flex items-center justify-between gap-3 p-4">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="font-semibold tabular-nums text-teks-utama">
+          <p className="whitespace-nowrap font-semibold tabular-nums text-teks-utama">
             {transaksi.receipt_no}
           </p>
           <LencanaTransaksi status={sudahBatal ? 'void' : transaksi.status} />
@@ -113,7 +158,9 @@ function BarisTransaksi({
         </p>
       </div>
 
-      <div className="flex shrink-0 items-center gap-3">
+      {/* Di HP tombol turun ke bawah angkanya: berdampingan, nomor nota
+          "01M2-260918-0009" patah jadi dua baris di layar 390px. */}
+      <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center sm:gap-3">
         <p className="text-judul-kartu font-bold tabular-nums text-teks-utama">
           {formatRupiah(transaksi.total)}
         </p>

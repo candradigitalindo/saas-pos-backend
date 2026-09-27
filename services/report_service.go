@@ -109,7 +109,8 @@ func DashboardReport(ctx context.Context, outletID, date string) (structs.Dashbo
 
 // SalesReport mengembalikan laporan penjualan terkelompok pada rentang tanggal.
 // groupBy: "day" (default) & "channel" dari tabel ringkasan; "cashier",
-// "payment" & "hour" dari tabel sales/sale_payments.
+// "payment" & "hour" dari tabel sales/sale_payments; "product" dari
+// sale_items (baris membawa label, satuan, dan qty — lihat SalesByProduct).
 func SalesReport(ctx context.Context, outletID, from, to, groupBy string) (structs.SalesReportResponse, error) {
 	var out structs.SalesReportResponse
 
@@ -123,6 +124,9 @@ func SalesReport(ctx context.Context, outletID, from, to, groupBy string) (struc
 		groupBy = "day"
 	}
 	var rows []repositories.SummaryGroupRow
+	// Hanya terisi untuk group_by=product: nama, satuan & qty per baris,
+	// sejajar indeksnya dengan `rows`.
+	var perBarang []repositories.ProductSalesRow
 	switch groupBy {
 	case "day":
 		rows, err = repositories.SummaryByDate(ctx, outletID, fromStr, toStr)
@@ -136,8 +140,13 @@ func SalesReport(ctx context.Context, outletID, from, to, groupBy string) (struc
 		// Jam dinding di zona outlet — lihat catatan panjang di SalesByHour
 		// soal kenapa UTC akan menjawab pertanyaan yang salah.
 		rows, err = repositories.SalesByHour(ctx, outletID, fromStr, toStr)
+	case "product":
+		perBarang, err = repositories.SalesByProduct(ctx, outletID, fromStr, toStr)
+		for _, b := range perBarang {
+			rows = append(rows, b.SummaryGroupRow)
+		}
 	default:
-		return out, fmt.Errorf("%w: group_by harus salah satu dari day, hour, channel, cashier, payment", helpers.ErrValidation)
+		return out, fmt.Errorf("%w: group_by harus salah satu dari day, hour, channel, cashier, payment, product", helpers.ErrValidation)
 	}
 	if err != nil {
 		return out, err
@@ -151,8 +160,8 @@ func SalesReport(ctx context.Context, outletID, from, to, groupBy string) (struc
 	out.From, out.To, out.GroupBy = fromStr, toStr, groupBy
 	out.Totals = aggToTotals(totals)
 	out.Rows = make([]structs.SalesReportRow, 0, len(rows))
-	for _, r := range rows {
-		out.Rows = append(out.Rows, structs.SalesReportRow{
+	for i, r := range rows {
+		baris := structs.SalesReportRow{
 			Key:            r.Key,
 			SalesCount:     r.SalesCount,
 			GrossAmount:    r.GrossAmount,
@@ -162,7 +171,13 @@ func SalesReport(ctx context.Context, outletID, from, to, groupBy string) (struc
 			CostAmount:     r.CostAmount,
 			FeeAmount:      r.FeeAmount,
 			GrossProfit:    r.GrossProfit,
-		})
+		}
+		if perBarang != nil {
+			baris.Label = perBarang[i].Label
+			baris.Unit = perBarang[i].Unit
+			baris.Qty = perBarang[i].Qty.String()
+		}
+		out.Rows = append(out.Rows, baris)
 	}
 	return out, nil
 }

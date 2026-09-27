@@ -183,23 +183,49 @@ func CurrentStockQty(ctx context.Context, tx *gorm.DB, outletID, productID, vari
 	return row.Qty, nil
 }
 
-// ListStocks mengembalikan saldo stok satu outlet (opsional hanya yang di bawah
-// min_stock), berpaginasi, dengan nama produk & satuan.
-func ListStocks(ctx context.Context, outletID string, lowOnly bool, limit, offset int) ([]StockRow, int64, error) {
+// StockFilter adalah penyaring daftar saldo stok.
+type StockFilter struct {
+	OutletID string
+	LowOnly  bool // hanya yang qty ≤ min_stock
+	// Search mencocokkan nama, SKU, atau barcode barang (tanpa peduli huruf
+	// besar). Dulu tidak ada: halaman Stok hanya menerima 100 baris per
+	// halaman, jadi mencari di sisi klien diam-diam melewatkan sisanya.
+	Search string
+	// ProductIDs membatasi ke barang tertentu — daftar Barang memakainya untuk
+	// kolom stok halaman yang sedang tampil saja.
+	ProductIDs []string
+}
+
+// stockBase menyusun query dasar saldo stok (JOIN produk, bertenant, sesuai
+// lingkup toko pengguna) untuk satu outlet atau semua outlet yang boleh.
+func stockBase(ctx context.Context, outletID string) *gorm.DB {
+	q := tenantDB(ctx, nil).
+		Table("stocks").
+		Joins("JOIN products p ON p.tenant_id = stocks.tenant_id AND p.id = stocks.product_id AND p.deleted_at IS NULL").
+		Where("stocks.tenant_id = ?", reqctx.TenantID(ctx))
+	if outletID != "" {
+		q = q.Where("stocks.outlet_id = ?", outletID)
+	}
+	return scopeOutlet(ctx, q, "stocks.outlet_id")
+}
+
+// ListStocks mengembalikan saldo stok (lihat StockFilter), berpaginasi, dengan
+// nama produk & satuan.
+func ListStocks(ctx context.Context, f StockFilter, limit, offset int) ([]StockRow, int64, error) {
 	// build menyusun query dasar (JOIN produk & satuan) yang sama untuk count
 	// maupun ambil-halaman.
 	build := func() *gorm.DB {
-		q := tenantDB(ctx, nil).
-			Table("stocks").
-			Joins("JOIN products p ON p.tenant_id = stocks.tenant_id AND p.id = stocks.product_id AND p.deleted_at IS NULL").
-			Joins("JOIN units u ON u.tenant_id = p.tenant_id AND u.id = p.unit_id").
-			Where("stocks.tenant_id = ?", reqctx.TenantID(ctx))
-		if outletID != "" {
-			q = q.Where("stocks.outlet_id = ?", outletID)
-		}
-		q = scopeOutlet(ctx, q, "stocks.outlet_id")
-		if lowOnly {
+		q := stockBase(ctx, f.OutletID).
+			Joins("JOIN units u ON u.tenant_id = p.tenant_id AND u.id = p.unit_id")
+		if f.LowOnly {
 			q = q.Where("stocks.qty <= p.min_stock")
+		}
+		if f.Search != "" {
+			pola := "%" + escapeLike(f.Search) + "%"
+			q = q.Where("(p.name ILIKE ? OR p.sku ILIKE ? OR p.barcode ILIKE ?)", pola, pola, pola)
+		}
+		if len(f.ProductIDs) > 0 {
+			q = q.Where("stocks.product_id IN ?", f.ProductIDs)
 		}
 		return q
 	}
@@ -258,4 +284,41 @@ func ListStockMovements(ctx context.Context, productID, outletID string, limit, 
 	}
 	where, args = whereOutlet(ctx, where, args, "outlet_id")
 	return paginateTenant[models.StockMovement](ctx, where, args, "occurred_at DESC, id DESC", limit, offset)
+}
+
+// StockSummaryRow adalah hasil StockSummary: jumlah baris saldo per keadaan
+// dan nilai stok (rupiah, harga modal).
+type StockSummaryRow struct {
+	Total      int64
+	Safe       int64
+	Low        int64
+	Out        int64
+	Negative   int64
+	StockValue int64
+}
+
+// StockSummary merangkum saldo stok SELURUH barang (bukan satu halaman):
+// berapa yang aman, hampir habis, habis, dan minus, plus nilai stok menurut
+// harga modal.
+//
+// Batasannya sama persis dengan lencana di halaman Stok:
+//   - negative (perlu dicocokkan): qty < 0 — penjualan tidak pernah diblokir
+//     stok, jadi saldo minus itu sah dan menandakan catatan yang perlu dicek;
+//   - out (habis): qty = 0;
+//   - low (hampir habis): 0 < qty ≤ min_stock;
+//   - safe: sisanya.
+//
+// Nilai stok memakai GREATEST(qty, 0): saldo minus tidak "mengurangi" nilai
+// barang yang ada di rak — ia hanya berarti catatannya belum cocok.
+func StockSummary(ctx context.Context, outletID string) (StockSummaryRow, error) {
+	var r StockSummaryRow
+	err := stockBase(ctx, outletID).Select(`
+		COUNT(*)                                                         AS total,
+		COUNT(*) FILTER (WHERE stocks.qty > p.min_stock AND stocks.qty > 0) AS safe,
+		COUNT(*) FILTER (WHERE stocks.qty > 0 AND stocks.qty <= p.min_stock) AS low,
+		COUNT(*) FILTER (WHERE stocks.qty = 0)                           AS out,
+		COUNT(*) FILTER (WHERE stocks.qty < 0)                           AS negative,
+		COALESCE(ROUND(SUM(GREATEST(stocks.qty, 0) * p.cost_price)), 0)::bigint AS stock_value`).
+		Scan(&r).Error
+	return r, err
 }

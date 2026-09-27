@@ -11,11 +11,13 @@ import { useOnline } from '@/bersama/hooks/use-online'
 import { GalatAPI } from '@/lib/api-client'
 import { IZIN } from '@/lib/izin'
 import { formatRupiah } from '@/bersama/util/uang'
+import { formatQtySatuan } from '@/bersama/util/desimal'
 import { tanggalISO } from '@/bersama/util/tanggal'
 import { cn } from '@/bersama/util/cn'
 import { BarChart3, CloudOff, ReceiptText, TicketPercent, Wallet } from 'lucide-react'
 import { api, type Halaman } from '@/lib/api-client'
 import { laporanApi, type Pengelompokan } from '../api'
+import { lengkapiHari } from '../deret'
 import { BatangKanal, type BarisBatang } from '../komponen/batang-kanal'
 import { GrafikJam } from '../komponen/grafik-jam'
 import { KartuSorotan } from '@/bersama/komponen/kartu-sorotan'
@@ -28,6 +30,13 @@ const GrafikHarian = lazy(async () => ({
 }))
 
 type Rentang = 'hari-ini' | '7-hari' | '30-hari' | 'bulan-ini' | 'pilih'
+
+/**
+ * Berapa barang yang digambar di rincian "Per barang". Toko kelontong bisa
+ * punya ratusan barang; ratusan batang bukan lagi ringkasan. Sisanya ada di
+ * berkas unduhan, yang memuat semuanya.
+ */
+const BATAS_BARANG = 20
 
 const RENTANG: Record<Rentang, string> = {
   'hari-ini': 'Hari ini',
@@ -263,6 +272,7 @@ export function HalamanLaporan() {
                   [
                     ['day', 'Per hari'],
                     ['hour', 'Jam ramai'],
+                    ['product', 'Per barang'],
                     ['payment', 'Cara bayar'],
                     ['cashier', 'Kasir'],
                     ['channel', 'Kanal'],
@@ -279,10 +289,30 @@ export function HalamanLaporan() {
               />
             ) : kelompok === 'day' ? (
               <Suspense fallback={<Kerangka className="h-56 w-full" />}>
-                <GrafikHarian rows={penjualan.data!.rows} />
+                {/* Hari tanpa penjualan tetap digambar (batang nol) — tanpa
+                    itu tiga hari berjualan sebulan tampil berdempetan. */}
+                <GrafikHarian rows={lengkapiHari(penjualan.data!.rows, dari, sampai)} />
               </Suspense>
             ) : kelompok === 'hour' ? (
               <GrafikJam rows={penjualan.data!.rows} />
+            ) : kelompok === 'product' ? (
+              <>
+                <BatangKanal
+                  satuWarna
+                  baris={penjualan.data!.rows.slice(0, BATAS_BARANG).map((r) => ({
+                    kunci: r.key,
+                    label: r.label ?? r.key,
+                    nilai: r.net_amount,
+                    keterangan: formatQtySatuan(r.qty ?? '0', r.unit),
+                  }))}
+                />
+                {penjualan.data!.rows.length > BATAS_BARANG && (
+                  <p className="text-keterangan text-teks-redup">
+                    {BATAS_BARANG} barang teratas dari {penjualan.data!.rows.length}. Daftar
+                    lengkapnya ada di berkas unduhan.
+                  </p>
+                )}
+              </>
             ) : (
               <BatangKanal
                 baris={penjualan.data!.rows.map((r) => ({

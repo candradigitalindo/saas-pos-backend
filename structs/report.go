@@ -34,7 +34,7 @@ type DashboardResponse struct {
 // tidak berlaku untuk sebuah dimensi bernilai 0 (mis. modal/laba pada group_by
 // payment).
 type SalesReportRow struct {
-	Key            string `json:"key"` // tanggal | channel_id | nama kasir | metode bayar
+	Key            string `json:"key"` // tanggal | channel_id | nama kasir | metode bayar | product_id
 	SalesCount     int64  `json:"sales_count"`
 	GrossAmount    int64  `json:"gross_amount"`
 	DiscountAmount int64  `json:"discount_amount"`
@@ -43,6 +43,11 @@ type SalesReportRow struct {
 	CostAmount     int64  `json:"cost_amount"`
 	FeeAmount      int64  `json:"fee_amount"`
 	GrossProfit    int64  `json:"gross_profit"`
+
+	// Hanya untuk group_by=product (kosong & tidak dikirim pada dimensi lain).
+	Label string `json:"label,omitempty"` // nama barang
+	Unit  string `json:"unit,omitempty"`  // satuan barang
+	Qty   string `json:"qty,omitempty"`   // jumlah terjual bersih, desimal string ("3", "0.25")
 }
 
 // SalesReportResponse menjawab GET /api/v1/reports/sales.

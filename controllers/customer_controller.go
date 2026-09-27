@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"context"
 	"net/http"
 
 	"candra/backend-api/helpers"
@@ -25,10 +26,51 @@ func ListCustomers(c *gin.Context) {
 	for i, r := range rows {
 		items[i] = customerToResponse(r)
 	}
+	if err := lampirkanStatistikPelanggan(c.Request.Context(), items); err != nil {
+		respondServiceError(c, err)
+		return
+	}
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.PaginatedResponse[structs.CustomerResponse]]{
 		Success: true, Message: "Berhasil mengambil data pelanggan",
 		Data: helpers.BuildPaginationResponse(c, page, limit, total, items),
 	})
+}
+
+// lampirkanStatistikPelanggan mengisi Stats setiap pelanggan di satu halaman
+// daftar — dua query untuk seluruh halaman, bukan dua per pelanggan.
+//
+// Pelanggan yang belum pernah belanja tetap mendapat Stats bernilai nol:
+// "belum pernah belanja" adalah informasi, bukan data yang hilang. Sisa kasbon
+// hanya dihitung & dikirim bila pengguna memegang receivable.manage.
+func lampirkanStatistikPelanggan(ctx context.Context, items []structs.CustomerResponse) error {
+	ids := make([]string, len(items))
+	for i, it := range items {
+		ids[i] = it.ID
+	}
+	belanja, err := repositories.CustomerSpending(ctx, ids)
+	if err != nil {
+		return err
+	}
+	var kasbon map[string]int64
+	bolehKasbon := reqctx.HasPermission(ctx, "receivable.manage")
+	if bolehKasbon {
+		if kasbon, err = repositories.CustomerReceivableOutstanding(ctx, ids); err != nil {
+			return err
+		}
+	}
+	for i := range items {
+		b := belanja[items[i].ID]
+		st := &structs.CustomerStats{VisitCount: b.VisitCount, TotalSpent: b.TotalSpent}
+		if b.LastVisit != nil {
+			st.LastVisitAt = b.LastVisit.UTC().Format(timeLayout)
+		}
+		if bolehKasbon {
+			sisa := kasbon[items[i].ID]
+			st.ReceivableOutstanding = &sisa
+		}
+		items[i].Stats = st
+	}
+	return nil
 }
 
 // GetCustomer mengembalikan satu pelanggan tenant.

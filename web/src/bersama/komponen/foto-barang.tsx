@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { inisialProduk } from '@/bersama/util/inisial'
+import { inisialPetak } from '@/bersama/util/inisial'
+import { KELAS_PETAK_NETRAL } from '@/bersama/util/warna-kategori'
 import { cn } from '@/bersama/util/cn'
 
 /**
@@ -17,14 +18,26 @@ import { cn } from '@/bersama/util/cn'
  * Gambar yang gagal dimuat jatuh ke penanda huruf, tidak meninggalkan ikon
  * rusak: alamat foto bisa basi setelah pemulihan cadangan, dan kasir tidak
  * seharusnya melihat bekas kerusakan itu.
+ *
+ * Penandanya DUA HURUF di atas warna kategori barang (lihat inisialPetak &
+ * warna-kategori.ts) — pola petak aplikasi kasir pada umumnya. Versi
+ * sebelumnya memakai potongan tiga huruf ("AirMin", "KopSusGul") di atas
+ * satu warna untuk semua barang: terbaca seperti kata salah eja, dan grid
+ * tanpa foto tetap berupa dinding seragam.
  */
 export function FotoBarang({
   nama,
   url,
+  kelasWarna = KELAS_PETAK_NETRAL,
+  kecil = false,
   className,
 }: {
   nama: string
   url?: string | null
+  /** Kelas latar+teks petak dari kelasPetak(); bawaannya netral. */
+  kelasWarna?: string
+  /** Gambar mini persegi (daftar barang): huruf lebih kecil. */
+  kecil?: boolean
   className?: string
 }) {
   const [gagal, setGagal] = useState(false)
@@ -37,8 +50,9 @@ export function FotoBarang({
         // kolom dan memangkas grid kasir dari empat baris terlihat jadi dua
         // setengah — di layar yang dipakai sambil ada antrean, baris yang
         // hilang itu lebih mahal daripada gambar yang lebih besar.
-        'relative aspect-[3/2] w-full shrink-0 overflow-hidden rounded-kontrol',
-        'bg-utama/10',
+        'relative w-full shrink-0 overflow-hidden rounded-kontrol',
+        kecil ? 'aspect-square' : 'aspect-[3/2]',
+        tampilkanFoto ? 'bg-permukaan-2' : kelasWarna,
         className,
       )}
     >
@@ -58,19 +72,13 @@ export function FotoBarang({
         <span
           aria-hidden
           className={cn(
-            'flex h-full w-full items-center justify-center px-1 text-center',
-            // TANPA uppercase: huruf besar di awal tiap potongan justru yang
-            // membuat "KopSusGul" terbaca sebagai tiga kata. Dijadikan kapital
-            // semua, ia berubah jadi "KOPSUSGUL" — tembok huruf yang persis
-            // menghapus pembeda yang dibuat aturan tiga-hurufnya.
-            // `hijau-800`, bukan `utama`. Keping ini duduk di atas kartu putih
-            // MAUPUN kartu `permukaan-2` (barang habis), dan di atas yang
-            // kedua `utama` hanya mencapai 4,36:1 — lulus di satu tempat,
-            // gagal di tempat lain. Yang lebih pekat aman di keduanya.
-            'text-judul-kartu font-extrabold tracking-tight text-hijau-800',
+            'flex h-full w-full items-center justify-center font-extrabold tracking-tight',
+            // Warna teksnya ikut kelasWarna (pasangan terukur per tema), jadi
+            // di sini hanya ukuran yang diatur.
+            kecil ? 'text-label' : 'text-[1.75rem] leading-none',
           )}
         >
-          {inisialProduk(nama)}
+          {inisialPetak(nama)}
         </span>
       )}
     </div>

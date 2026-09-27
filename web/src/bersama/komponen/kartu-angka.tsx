@@ -57,11 +57,6 @@ export function KartuAngka({
   className?: string
 }) {
   const persen = pembanding === undefined ? null : persenSelisih(nilai, pembanding)
-  const naik = persen !== null && persen > 0
-  const turun = persen !== null && persen < 0
-  const bagus = naik ? !naikItuBuruk : turun ? naikItuBuruk : true
-
-  const Panah = naik ? ArrowUp : turun ? ArrowDown : Minus
 
   return (
     <Kartu className={cn('flex flex-col p-4', className)}>
@@ -88,16 +83,7 @@ export function KartuAngka({
 
       {persen !== null ? (
         <p className="mt-2">
-          <span
-            className={cn(
-              'inline-flex items-center gap-1 rounded-full bg-permukaan-2 px-2 py-1',
-              'text-keterangan font-semibold',
-              persen === 0 ? 'text-teks-redup' : bagus ? 'text-hijau-700' : 'text-bahaya-teks',
-            )}
-          >
-            <Panah className="h-3.5 w-3.5" aria-hidden />
-            {Math.abs(persen)}% {labelPembanding}
-          </span>
+          <LencanaSelisih persen={persen} label={labelPembanding} naikItuBuruk={naikItuBuruk} />
         </p>
       ) : (
         /* Angka tanpa pembanding tidak memberi tahu apa pun (ui/01 §4). Kalau
@@ -111,5 +97,39 @@ export function KartuAngka({
         </p>
       )}
     </Kartu>
+  )
+}
+
+/**
+ * Lencana perubahan: panah + persen + pembandingnya, mis. "↑ 12% dari kemarin".
+ *
+ * Berisi (latar `permukaan-2`), bukan teks telanjang berwarna — alasan lengkapnya
+ * di atas KartuAngka. Arah ditandai PANAH, bukan warna saja; warnanya hanya
+ * penegas bagus/buruk.
+ */
+export function LencanaSelisih({
+  persen,
+  label,
+  naikItuBuruk = false,
+}: {
+  persen: number
+  label: string
+  naikItuBuruk?: boolean
+}) {
+  const naik = persen > 0
+  const turun = persen < 0
+  const bagus = naik ? !naikItuBuruk : turun ? naikItuBuruk : true
+  const Panah = naik ? ArrowUp : turun ? ArrowDown : Minus
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 rounded-full bg-permukaan-2 px-2 py-1',
+        'text-keterangan font-semibold',
+        persen === 0 ? 'text-teks-redup' : bagus ? 'text-hijau-700' : 'text-bahaya-teks',
+      )}
+    >
+      <Panah className="h-3.5 w-3.5" aria-hidden />
+      {Math.abs(persen)}% {label}
+    </span>
   )
 }

@@ -25,6 +25,7 @@ import { Struk } from '../komponen/struk'
 import { itemUntukCheckout, useKeranjang } from '../keranjang'
 import { kunciBaru, useCheckout, useKatalogKasir, useShiftAktif } from '../hooks'
 import { HalamanBukaShift } from './halaman-buka-shift'
+import { kelasPetak } from '@/bersama/util/warna-kategori'
 
 /**
  * Layar kasir — yang paling sering dilihat sepanjang hari.
@@ -42,7 +43,7 @@ export function HalamanKasir() {
 
   const [cari, setCari] = useState('')
   const [kategori, setKategori] = useState<string | undefined>(undefined)
-  const { produk, petaStok, kategori: daftarKategori, kosong, memuat } =
+  const { produk, petaStok, kategori: daftarKategori, warnaKategori, kosong, memuat } =
     useKatalogKasir(cari, kategori)
   const keranjang = useKeranjang(rincianToko)
 
@@ -216,6 +217,7 @@ export function HalamanKasir() {
                     produk={p}
                     stok={petaStok.get(p.id)}
                     diKeranjang={keranjang.qtyDari(p.id)}
+                    kelasWarna={kelasPetak(warnaKategori, p.category_id)}
                     onPilih={(x) => {
                       // TIDAK ada toast di sini, sengaja. Ketukannya sudah
                       // dijawab tiga kali dan seketika: lencana jumlah muncul

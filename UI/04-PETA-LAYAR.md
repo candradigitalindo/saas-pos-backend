@@ -60,9 +60,16 @@ Semakin sedikit pintu, semakin kecil peluang tersesat.
 | Bagian | Endpoint | Izin |
 |---|---|---|
 | Kartu uang masuk, untung, jumlah transaksi | `GET /reports/dashboard` | `report.view` |
-| Ringkasan per hari / kanal | `GET /sales-summary?from=&to=` | `report.view` |
+| Tren uang masuk 7/30 hari + pembanding periode sebelumnya | `GET /reports/sales?group_by=day` (satu rentang ganda) | `report.view` |
+| Barang terlaris (5 teratas, periode yang sama) | `GET /reports/sales?group_by=product` | `report.view` |
+| Transaksi terakhir (5 nota, tautan ke Riwayat pada tanggalnya) | `GET /sales?limit=5` | `sale.create` |
 | Peringatan stok menipis | `GET /stocks?low=true` | `stock.view` |
 | Pintasan aksi harian | — | sesuai izin |
+
+Navigasi samping (≥1024px): kepala berisi logo, nama usaha, dan **pemilih
+toko** (muncul sebagai tombol bila cabang > 1); kaki berisi status sinkron dan
+profil pengguna (avatar inisial, nama, peran, tombol keluar). Tepat satu menu
+menyala — yang jalurnya paling spesifik (`menuAktif`).
 
 ---
 
@@ -88,13 +95,14 @@ Semakin sedikit pintu, semakin kecil peluang tersesat.
 
 | Layar | Endpoint | Izin |
 |---|---|---|
-| Daftar & cari barang | `GET /products` | `product.view` |
+| Daftar & cari barang (gambar mini, margin, saring kategori, halaman) | `GET /products` · kolom stok: `GET /stocks?product_ids=` | `product.view` (stok: `stock.view`) |
 | Tambah / ubah barang | `POST /products` · `PUT /products/:id` | `product.edit` |
 | Hapus barang | `DELETE /products/:id` | `product.delete` |
 | Impor dari Excel/CSV | `POST /products/import` (dukung `dry_run`) | `product.import` |
 | Resep (F&B) | `GET\|PUT /products/:id/recipe` | `product.view` / `product.edit` |
 | Kategori, satuan, pemasok | `GET\|POST\|PUT\|DELETE /categories[/:id]` · `/units[/:id]` · `/suppliers[/:id]` | `product.view` / `product.edit` |
-| Saldo stok | `GET /stocks?outlet_id=` | `stock.view` |
+| Saldo stok (cari, tabel di desktop) | `GET /stocks?outlet_id=&q=` | `stock.view` |
+| Ringkasan stok (aman/hampir habis/habis/minus + nilai stok) | `GET /stocks/summary` | `stock.view` |
 | Kartu stok (riwayat keluar-masuk) | `GET /stock-movements?product_id=` | `stock.view` |
 | Koreksi stok | `POST /stock-adjustments` + `Idempotency-Key` | `stock.adjust` |
 | Barang masuk (pembelian) | `POST /purchases` + `Idempotency-Key` · `GET /purchases` · `GET /purchases/:id` | `stock.adjust` / `stock.view` |
@@ -108,7 +116,7 @@ Semakin sedikit pintu, semakin kecil peluang tersesat.
 
 | Layar | Endpoint | Izin |
 |---|---|---|
-| Daftar & detail pelanggan | `GET /customers` · `GET /customers/:id` | `customer.view` |
+| Daftar & detail pelanggan (avatar, kedatangan, belanja, terakhir datang, sisa kasbon) | `GET /customers` (`stats`) · `GET /customers/:id` | `customer.view` (sisa kasbon: `receivable.manage`) |
 | Tambah / ubah / hapus | `POST\|PUT\|DELETE /customers[/:id]` | `customer.edit` |
 | Daftar kasbon | `GET /receivables` · `GET /receivables/:id` | `receivable.manage` |
 | Terima setoran kasbon | `POST /receivable-payments` + `Idempotency-Key` | `receivable.manage` |
@@ -120,7 +128,7 @@ Semakin sedikit pintu, semakin kecil peluang tersesat.
 | Layar | Endpoint | Izin |
 |---|---|---|
 | Ringkasan dashboard | `GET /reports/dashboard` | `report.view` |
-| Laporan penjualan (per hari/jam/kanal/kasir/metode bayar) | `GET /reports/sales?group_by=` | `report.view` |
+| Laporan penjualan (per hari/jam/barang/kanal/kasir/metode bayar) | `GET /reports/sales?group_by=` | `report.view` |
 | Laporan untung-rugi | `GET /reports/profit?from=&to=` | `report.profit` |
 | Unduh CSV | `GET /reports/export?type=` | `report.export` |
 | Hitung ulang ringkasan | `POST /reports/rebuild-summaries` | `report.view` **dan** `outlet.manage` |

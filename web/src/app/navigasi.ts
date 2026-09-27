@@ -166,3 +166,24 @@ export function saringMenu(
 ): ItemMenu[] {
   return menu.filter((m) => !m.izin || boleh(...m.izin))
 }
+
+/**
+ * Tujuan menu yang sedang aktif untuk `pathname`: yang jalurnya PALING PANJANG
+ * dan menjadi awalan pathname (per ruas, bukan per huruf).
+ *
+ * Kenapa bukan `isActive` bawaan NavLink: itu mencocokkan AWALAN, sehingga di
+ * /kasir/riwayat menu "Kasir" DAN "Riwayat Penjualan" menyala bersamaan — dua
+ * penanda "Anda di sini" yang saling membantah. Memberi `end` pada semua menu
+ * juga salah: halaman turunan yang tidak punya menu sendiri (/stok/masuk,
+ * /pengaturan/peran) jadi tidak menyalakan apa pun. Awalan terpanjang memenuhi
+ * keduanya: tepat satu menu menyala, yaitu yang paling spesifik.
+ */
+export function menuAktif(pathname: string, tujuan: string[]): string | undefined {
+  let terbaik: string | undefined
+  for (const ke of tujuan) {
+    const cocok =
+      ke === '/' ? pathname === '/' : pathname === ke || pathname.startsWith(`${ke}/`)
+    if (cocok && (!terbaik || ke.length > terbaik.length)) terbaik = ke
+  }
+  return terbaik
+}

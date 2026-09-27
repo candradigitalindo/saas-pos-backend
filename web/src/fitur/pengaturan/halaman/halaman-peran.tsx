@@ -36,7 +36,7 @@ export function HalamanPeran() {
   const daftar = peran.data?.data ?? []
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+    <div className="flex w-full max-w-3xl flex-col gap-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-judul font-bold text-teks-utama">Peran & Hak Akses</h1>

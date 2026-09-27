@@ -33,7 +33,7 @@ Sebuah framework backend REST API berbasis Golang dan Gin, dengan struktur modul
 - **Pembelian** — stok masuk (idempoten), harga modal = harga beli terakhir
 - **Opname & transfer** — hitung fisik (draft → post), transfer antar outlet (draft → kirim → terima)
 - **Resep F&B** — `PUT /products/:id/recipe`; bahan baku otomatis terpotong saat menu terjual
-- **Dashboard & laporan** — agregat `daily_sales_summaries` (dipelihara inkremental saat checkout, dihitung ulang saat void/retur); dashboard, laporan penjualan (`group_by` day/channel/cashier/payment), laba bersih per kanal, ekspor CSV; dashboard < 1 detik pada 100.000 transaksi
+- **Dashboard & laporan** — agregat `daily_sales_summaries` (dipelihara inkremental saat checkout, dihitung ulang saat void/retur); dashboard, laporan penjualan (`group_by` day/hour/channel/cashier/payment/product), laba bersih per kanal, ekspor CSV; dashboard < 1 detik pada 100.000 transaksi
 - **Sinkronisasi offline** — `POST /sync/push` (batch penjualan dari perangkat offline, idempoten per ULID + Idempotency-Key, satu operasi gagal tidak menjatuhkan batch, `business_date` dihitung ulang di server) + `GET /sync/pull` (master data + stok + batu nisan, kursor `sync_version` lewat pemicu database)
 - **Langganan platform** — paket + tangga diskon prabayar (1/3/6/9/12 bulan), trial, tagihan & pembayaran idempoten, pendapatan diterima di muka diakui bulanan (`deferred_revenue_entries` + `cmd/recognize-revenue`), pembatalan di tengah masa dihitung ulang pada harga bulanan normal, prorata ganti paket
 - **CRM tenant** — pipeline & tahap yang bisa diatur, deal + alasan menang/kalah, aktivitas follow-up; penawaran → proyek otomatis → invoice bertermin → pembayaran parsial; **pelunasan invoice tercatat sebagai satu penjualan di tabel `sales` yang sama dengan POS** (omzet & laba satu pintu). Visibilitas kepemilikan (lapis 3, `scopeVisibility`): sales hanya melihat datanya sendiri
@@ -273,13 +273,13 @@ Semua endpoint bisnis di bawah prefiks `/api/v1`.
 | `POST /api/v1/products` · `PUT /:id` | `product.edit` | Buat / ubah produk |
 | `DELETE /api/v1/products/:id` | `product.delete` | Hapus produk |
 | `POST /api/v1/products/import?dry_run=` | `product.import` | Impor CSV (pratinjau + laporan baris gagal) |
-| `GET/POST/PUT/DELETE /api/v1/customers[/:id]` | `customer.view` / `customer.edit` | CRUD pelanggan |
+| `GET/POST/PUT/DELETE /api/v1/customers[/:id]` | `customer.view` / `customer.edit` | CRUD pelanggan; daftar membawa `stats` (kedatangan, belanja bersih, terakhir datang; `receivable_outstanding` hanya untuk `receivable.manage`) |
 | `POST /api/v1/sales` (header `Idempotency-Key`) | `sale.create` | Checkout |
 | `GET  /api/v1/sales` · `GET /api/v1/sales/:id` | `sale.create` | Daftar / detail transaksi |
 | `POST /api/v1/sales/:id/void` · `.../refund` | `sale.void` / `sale.refund` | Batal / retur penuh |
 | `GET  /api/v1/sales-summary?from=&to=` | `report.view` | Ringkasan omzet/laba (langsung dari `sales`) |
 | `GET  /api/v1/reports/dashboard?outlet_id=&date=` | `report.view` | Ringkasan hari + bulan berjalan + per kanal (dari agregat) |
-| `GET  /api/v1/reports/sales?from=&to=&group_by=` | `report.view` | Laporan penjualan; `group_by` = day\|channel\|cashier\|payment |
+| `GET  /api/v1/reports/sales?from=&to=&group_by=` | `report.view` | Laporan penjualan; `group_by` = day\|hour\|channel\|cashier\|payment\|product (per barang: baris membawa `label`, `unit`, `qty`; bersih dari void & retur) |
 | `GET  /api/v1/reports/profit?from=&to=` | `report.profit` | Laba bersih per kanal (§13.5) |
 | `GET  /api/v1/reports/export?type=&format=csv` | `report.export` | Ekspor CSV (`type` = sales\|profit\|dashboard) |
 | `POST /api/v1/reports/rebuild-summaries?from=&to=&outlet_id=` | `report.view` + `outlet.manage` | Bangun ulang `daily_sales_summaries` dari `sales` |
@@ -322,7 +322,8 @@ Semua endpoint bisnis di bawah prefiks `/api/v1`.
 | `POST /api/v1/employee-advances[/:id/disburse]` | `hr.advance.approve` | Kasbon → cair (kas keluar) → potong bertahap di gaji |
 | `POST /api/v1/shifts/open` · `/shifts/:id/close` | `shift.open` / `shift.close` | Buka / tutup shift |
 | `POST/GET /api/v1/cash-movements` | `cash.movement` | Kas masuk/keluar |
-| `GET  /api/v1/stocks?outlet_id=&low=` | `stock.view` | Saldo stok |
+| `GET  /api/v1/stocks?outlet_id=&low=&q=&product_ids=` | `stock.view` | Saldo stok; `q` cari nama/SKU/barcode, `product_ids` (dipisah koma) untuk barang tertentu |
+| `GET  /api/v1/stocks/summary?outlet_id=` | `stock.view` | Ringkasan SELURUH barang: `total`, `safe`, `low`, `out`, `negative`, `stock_value` (harga modal) |
 | `GET  /api/v1/stock-movements?product_id=` | `stock.view` | Kartu stok |
 | `POST /api/v1/stock-adjustments` | `stock.adjust` | Saldo awal / koreksi stok. Wajib `Idempotency-Key` |
 | `POST /api/v1/stock-reconcile?outlet_id=` | `stock.opname` | Hitung ulang cache stok dari buku besar |

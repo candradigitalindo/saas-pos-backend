@@ -85,7 +85,7 @@ export function HalamanGantiShift() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+    <div className="flex w-full max-w-2xl flex-col gap-4">
       <header>
         <h1 className="text-judul font-bold text-teks-utama">Ganti Shift</h1>
         <p className="text-label text-teks-sekunder">

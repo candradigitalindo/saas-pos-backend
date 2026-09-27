@@ -58,6 +58,21 @@
   --color-grafik-5: #0891b2;
   --color-grafik-6: #be185d;
 
+  /* Petak barang tanpa foto — satu rona per kategori (lihat warna-kategori.ts).
+     Pasangan latar/teks di bawah, per tema; semuanya diukur ≥ 6,3:1. */
+  --color-petak-1-latar: var(--warna-petak-1-latar);
+  --color-petak-1-teks: var(--warna-petak-1-teks);
+  --color-petak-2-latar: var(--warna-petak-2-latar);
+  --color-petak-2-teks: var(--warna-petak-2-teks);
+  --color-petak-3-latar: var(--warna-petak-3-latar);
+  --color-petak-3-teks: var(--warna-petak-3-teks);
+  --color-petak-4-latar: var(--warna-petak-4-latar);
+  --color-petak-4-teks: var(--warna-petak-4-teks);
+  --color-petak-5-latar: var(--warna-petak-5-latar);
+  --color-petak-5-teks: var(--warna-petak-5-teks);
+  --color-petak-6-latar: var(--warna-petak-6-latar);
+  --color-petak-6-teks: var(--warna-petak-6-teks);
+
   /* ── Tipografi ──────────────────────────────────────────────────────── */
   --font-sans: 'Plus Jakarta Sans Variable', -apple-system, 'Segoe UI', Roboto,
     sans-serif;
@@ -128,6 +143,13 @@
   --warna-jingga-teks: #b45309;
   --warna-hijau-teks: #047857; /* 5,48:1 */
   --warna-hijau-teks-pekat: #065f46; /* 7,68:1 */
+  /* Petak barang: tinta pucat + teks pekat serona (rasio pasangan). */
+  --warna-petak-1-latar: #d1fae5; --warna-petak-1-teks: #065f46; /* hijau 6,78:1 */
+  --warna-petak-2-latar: #dbeafe; --warna-petak-2-teks: #1e40af; /* biru 7,15:1 */
+  --warna-petak-3-latar: #fef3c7; --warna-petak-3-teks: #92400e; /* amber 6,37:1 */
+  --warna-petak-4-latar: #ede9fe; --warna-petak-4-teks: #5b21b6; /* ungu 7,57:1 */
+  --warna-petak-5-latar: #cffafe; --warna-petak-5-teks: #155e75; /* sian 6,49:1 */
+  --warna-petak-6-latar: #fce7f3; --warna-petak-6-teks: #9d174d; /* merah muda 6,71:1 */
     color-scheme: light;
 }
 
@@ -153,6 +175,13 @@
   --warna-jingga-teks: #fbbf24; /* 9,09:1 */
   --warna-hijau-teks: #34d399; /* 7,89:1 */
   --warna-hijau-teks-pekat: #6ee7b7; /* 9,95:1 */
+  /* Petak barang versi gelap: latar pekat + teks pucat serona. */
+  --warna-petak-1-latar: #064e3b; --warna-petak-1-teks: #a7f3d0; /* 7,58:1 */
+  --warna-petak-2-latar: #1e3a8a; --warna-petak-2-teks: #bfdbfe; /* 7,29:1 */
+  --warna-petak-3-latar: #78350f; --warna-petak-3-teks: #fde68a; /* 7,28:1 */
+  --warna-petak-4-latar: #4c1d95; --warna-petak-4-teks: #ddd6fe; /* 7,89:1 */
+  --warna-petak-5-latar: #164e63; --warna-petak-5-teks: #a5f3fc; /* 7,30:1 */
+  --warna-petak-6-latar: #831843; --warna-petak-6-teks: #fbcfe8; /* 6,98:1 */
     color-scheme: dark;
 }
 
@@ -177,6 +206,13 @@
     --warna-jingga-teks: #fbbf24; /* 9,09:1 */
     --warna-hijau-teks: #34d399; /* 7,89:1 */
     --warna-hijau-teks-pekat: #6ee7b7; /* 9,95:1 */
+    /* Petak barang versi gelap: latar pekat + teks pucat serona. */
+    --warna-petak-1-latar: #064e3b; --warna-petak-1-teks: #a7f3d0; /* 7,58:1 */
+    --warna-petak-2-latar: #1e3a8a; --warna-petak-2-teks: #bfdbfe; /* 7,29:1 */
+    --warna-petak-3-latar: #78350f; --warna-petak-3-teks: #fde68a; /* 7,28:1 */
+    --warna-petak-4-latar: #4c1d95; --warna-petak-4-teks: #ddd6fe; /* 7,89:1 */
+    --warna-petak-5-latar: #164e63; --warna-petak-5-teks: #a5f3fc; /* 7,30:1 */
+    --warna-petak-6-latar: #831843; --warna-petak-6-teks: #fbcfe8; /* 6,98:1 */
         color-scheme: dark;
   }
 }

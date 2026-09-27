@@ -2173,15 +2173,22 @@ POST   /api/v1/shifts/:id/handover           serah terima: tutup + buka, SATU tr
        # sisanya dianggap disetor) dan tidak boleh melebihi counted_cash.
 POST   /api/v1/cash-movements          kas masuk/keluar non-penjualan
 
-GET    /api/v1/stocks?outlet_id=&low=true
+GET    /api/v1/stocks?outlet_id=&low=true&q=&product_ids=
+       # q: cari nama/SKU/barcode; product_ids: dipisah koma.
+GET    /api/v1/stocks/summary?outlet_id=
+       # hitungan atas SELURUH barang: safe (qty > min), low (0 < qty ≤ min),
+       # out (qty = 0), negative (qty < 0), stock_value = Σ max(qty,0)×modal.
 POST   /api/v1/stock-adjustments       penyesuaian + alasan wajib
 GET    /api/v1/stock-movements?product_id=   kartu stok
 POST   /api/v1/purchases               stok masuk
 POST   /api/v1/stock-opnames/:id/post  posting hasil hitung fisik
 
 GET    /api/v1/reports/dashboard?outlet_id=&date=      dari daily_sales_summaries
-GET    /api/v1/reports/sales?from=&to=&group_by=day|hour|channel|cashier|payment
+GET    /api/v1/reports/sales?from=&to=&group_by=day|hour|channel|cashier|payment|product
        # group_by=hour: jam dinding DI ZONA OUTLET (key "00".."23"), bukan UTC.
+       # group_by=product: key = product_id + label/unit/qty; void tidak ikut,
+       #   retur mengurangi qty & uang; net_amount = Σ line_total (sebelum
+       #   diskon nota & biaya layanan); urut uang masuk terbesar.
        #   occurred_at disimpan UTC (§3.2) dan Indonesia di UTC+7..+9, jadi
        #   dibaca mentah penjualan 07.00 WIB tercatat 00.00 dan grafik "jam
        #   teramai" menunjuk tengah malam. Zona diambil per-outlet lewat join,

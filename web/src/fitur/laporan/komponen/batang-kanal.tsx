@@ -34,9 +34,16 @@ const WARNA = [
 export function BatangKanal({
   baris,
   judul,
+  satuWarna = false,
 }: {
   baris: BarisBatang[]
   judul?: string
+  /**
+   * Semua batang satu warna. Untuk daftar panjang (per barang): enam warna
+   * yang berulang di dua puluh baris tidak lagi menandai entitas apa pun,
+   * hanya membuat daftarnya belang.
+   */
+  satuWarna?: boolean
 }) {
   const tertinggi = Math.max(...baris.map((b) => b.nilai), 1)
 
@@ -65,7 +72,7 @@ export function BatangKanal({
                 aria-label={`${b.label}: ${formatRupiah(b.nilai)}`}
               >
                 <div
-                  className={cn('h-full rounded-full', WARNA[i % WARNA.length])}
+                  className={cn('h-full rounded-full', satuWarna ? 'bg-grafik-1' : WARNA[i % WARNA.length])}
                   style={{ width: `${Math.max(2, (b.nilai / tertinggi) * 100)}%` }}
                 />
               </div>

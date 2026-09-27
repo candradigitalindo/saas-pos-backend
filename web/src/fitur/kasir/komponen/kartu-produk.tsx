@@ -20,11 +20,14 @@ export function KartuProduk({
   produk,
   stok,
   diKeranjang,
+  kelasWarna,
   onPilih,
 }: {
   produk: Produk
   stok?: string
   diKeranjang: string
+  /** Warna petak kategori barang ini (kelasPetak). */
+  kelasWarna?: string
   onPilih: (p: Produk) => void
 }) {
   const habis = produk.track_stock && stok !== undefined && Number.parseFloat(stok) <= 0
@@ -63,6 +66,7 @@ export function KartuProduk({
       <FotoBarang
         nama={produk.name}
         url={produk.image_url}
+        kelasWarna={kelasWarna}
         className={cn(habis && 'opacity-50')}
       />
 

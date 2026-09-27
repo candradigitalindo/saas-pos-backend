@@ -27,8 +27,12 @@ export interface Dashboard {
 }
 
 export interface BarisLaporan extends Total {
-  /** tanggal | channel_id | nama kasir | metode bayar, tergantung group_by. */
+  /** tanggal | channel_id | nama kasir | metode bayar | product_id, tergantung group_by. */
   key: string
+  /** Hanya group_by=product: nama barang, satuannya, dan jumlah terjual bersih. */
+  label?: string
+  unit?: string
+  qty?: string
 }
 
 export interface LaporanPenjualan {
@@ -54,7 +58,7 @@ export interface LaporanUntung {
   totals: BarisUntung
 }
 
-export type Pengelompokan = 'day' | 'hour' | 'channel' | 'cashier' | 'payment'
+export type Pengelompokan = 'day' | 'hour' | 'channel' | 'cashier' | 'payment' | 'product'
 
 export const laporanApi = {
   dashboard: (outlet_id?: string, date?: string) =>

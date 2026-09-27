@@ -13,7 +13,14 @@ import { cn } from '@/bersama/util/cn'
  * Karena itu satu-satunya dialog konfirmasi yang layak di sini adalah yang
  * MENYEBUT BERAPA transaksi akan hilang — bukan "Anda yakin?".
  */
-export function TombolKeluar({ className }: { className?: string }) {
+export function TombolKeluar({
+  className,
+  ringkas = false,
+}: {
+  className?: string
+  /** Ikon saja (48×48), untuk baris profil di kaki navigasi samping. */
+  ringkas?: boolean
+}) {
   const { keluar } = useSesi()
   const navigate = useNavigate()
   const [belumTerkirim, setBelumTerkirim] = useState<number | null>(null)
@@ -34,18 +41,34 @@ export function TombolKeluar({ className }: { className?: string }) {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => void coba()}
-        className={cn(
-          'flex h-12 w-full items-center gap-3 rounded-kontrol px-3',
-          'text-label font-medium text-teks-sekunder hover:bg-permukaan-2',
-          className,
-        )}
-      >
-        <LogOut className="h-5 w-5" aria-hidden />
-        Keluar
-      </button>
+      {ringkas ? (
+        <button
+          type="button"
+          onClick={() => void coba()}
+          aria-label="Keluar"
+          title="Keluar"
+          className={cn(
+            'flex h-12 w-12 shrink-0 items-center justify-center rounded-kontrol',
+            'text-teks-sekunder hover:bg-permukaan-2 hover:text-teks-utama',
+            className,
+          )}
+        >
+          <LogOut className="h-5 w-5" aria-hidden />
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => void coba()}
+          className={cn(
+            'flex h-12 w-full items-center gap-3 rounded-kontrol px-3',
+            'text-label font-medium text-teks-sekunder hover:bg-permukaan-2',
+            className,
+          )}
+        >
+          <LogOut className="h-5 w-5" aria-hidden />
+          Keluar
+        </button>
+      )}
 
       <Dialog
         open={belumTerkirim !== null}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { inisialProduk } from './inisial'
+import { inisialNama, inisialPetak, inisialProduk } from './inisial'
 
 describe('inisialProduk', () => {
   it('mengambil tiga huruf pertama tiap kata', () => {
@@ -36,5 +36,33 @@ describe('inisialProduk', () => {
   it('memperlakukan pemisah selain spasi sebagai batas kata', () => {
     expect(inisialProduk('Kopi/Susu')).toBe('KopSus')
     expect(inisialProduk('Mie-Ayam')).toBe('MieAya')
+  })
+})
+
+describe('inisialNama', () => {
+  it('huruf pertama dua kata pertama, huruf besar', () => {
+    expect(inisialNama('Sari Dewi')).toBe('SD')
+    expect(inisialNama('ahmad bin umar')).toBe('AB')
+    expect(inisialNama('  budi  ')).toBe('B')
+  })
+
+  it('nama kosong tidak menghasilkan avatar kosong', () => {
+    expect(inisialNama('')).toBe('?')
+  })
+})
+
+describe('inisialPetak', () => {
+  it('dua huruf pertama dari dua kata pembeda, tanpa satuan', () => {
+    expect(inisialPetak('Air Mineral 600ml')).toBe('AM')
+    expect(inisialPetak('Kopi Susu Gula Aren')).toBe('KS')
+    expect(inisialPetak('Gula Pasir 1kg')).toBe('GP')
+  })
+
+  it('satu kata: dua huruf pertamanya', () => {
+    expect(inisialPetak('teh')).toBe('Te')
+  })
+
+  it('nama kosong tetap memberi penanda', () => {
+    expect(inisialPetak('')).toBe('?')
   })
 })

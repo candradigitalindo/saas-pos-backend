@@ -82,11 +82,42 @@ export interface Transfer {
   created_at: string
 }
 
+/** GET /stocks/summary — hitungan atas SELURUH barang, bukan satu halaman. */
+export interface RingkasanStok {
+  total: number
+  /** qty > batas minimum */
+  safe: number
+  /** 0 < qty ≤ batas minimum */
+  low: number
+  /** qty = 0 */
+  out: number
+  /** qty < 0 — catatan perlu dicocokkan */
+  negative: number
+  /** Σ max(qty, 0) × harga modal, rupiah */
+  stock_value: number
+}
+
 export const stokApi = {
-  saldo: (outlet_id: string, low?: boolean, page = 1, limit = 100) =>
+  saldo: (
+    outlet_id: string,
+    low?: boolean,
+    page = 1,
+    limit = 100,
+    opsi: { cari?: string; produk?: string[] } = {},
+  ) =>
     api.get<Halaman<SaldoStok>>('/stocks', {
-      query: { outlet_id, low: low ? 'true' : undefined, page, limit },
+      query: {
+        outlet_id,
+        low: low ? 'true' : undefined,
+        q: opsi.cari || undefined,
+        product_ids: opsi.produk?.length ? opsi.produk.join(',') : undefined,
+        page,
+        limit,
+      },
     }),
+
+  ringkasan: (outlet_id: string) =>
+    api.get<RingkasanStok>('/stocks/summary', { query: { outlet_id } }),
 
   kartuStok: (product_id: string, outlet_id?: string, page = 1, limit = 50) =>
     api.get<Halaman<GerakanStok>>('/stock-movements', {

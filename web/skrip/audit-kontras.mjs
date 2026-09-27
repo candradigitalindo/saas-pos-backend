@@ -164,7 +164,9 @@ for (const mode of ['light','dark']) {
   await p.waitForTimeout(1500)
 
   // Halaman dengan keadaan berwarna: galat, lencana, peringatan, kartu sorotan.
-  for (const jalur of ['/', '/laporan', '/kasir', '/stok', '/kasbon', '/pengaturan', '/sdm/gaji']) {
+  // /barang & /kasir: petak warna kategori; /pelanggan: avatar berwarna;
+  // /langganan: daftar fitur paket (✓ dan yang redup).
+  for (const jalur of ['/', '/laporan', '/kasir', '/stok', '/barang', '/pelanggan', '/kasbon', '/langganan', '/pengaturan', '/sdm', '/sdm/gaji']) {
     await p.goto('http://localhost:5173' + jalur, { waitUntil: 'networkidle' })
     await p.waitForTimeout(1200)
     terender.push(...(await bacaTerender()))

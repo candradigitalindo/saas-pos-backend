@@ -7,6 +7,7 @@ import (
 
 	"candra/backend-api/models"
 
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -352,4 +353,72 @@ func SalesByPaymentMethod(ctx context.Context, outletID, from, to string) ([]Sum
 	}
 
 	return rows, nil
+}
+
+// ProductSalesRow adalah satu baris laporan per barang: agregat biasa (Key =
+// product_id) ditambah nama barang, satuannya, dan jumlah yang terjual.
+type ProductSalesRow struct {
+	SummaryGroupRow
+	Label string          // nama barang saat ini (bukan salinan di nota)
+	Unit  string          // satuan barang saat ini
+	Qty   decimal.Decimal // jumlah terjual bersih (retur mengurangi)
+}
+
+// SalesByProduct mengelompokkan penjualan per BARANG — "apa yang paling laku".
+//
+// Angkanya BERSIH, dengan aturan yang sama dengan tabel ringkasan harian:
+// status 'completed' DAN 'returned' dijumlahkan, 'canceled' (void) tidak ikut.
+// Baris retur menyimpan qty POSITIF (CHECK qty > 0) tetapi uangnya negatif,
+// jadi qty, nilai kotor, dan modal diberi tanda minus secara eksplisit untuk
+// baris retur; diskon, pajak, dan line_total sudah negatif dari sananya.
+// Tanpa ini, barang yang sering dikembalikan pembeli justru tampil sebagai
+// "terlaris".
+//
+// net_amount di sini = Σ line_total: uang dari barang itu SEBELUM diskon nota
+// dan biaya layanan (keduanya milik nota, bukan milik barang). Jadi jumlah
+// seluruh baris bisa sedikit berbeda dari total penjualan — itu disengaja.
+// sales_count = jumlah nota 'completed' yang memuat barang itu, sejalan dengan
+// cara tabel ringkasan menghitung transaksi.
+//
+// Nama & satuan diambil dari data barang SAAT INI (join products/units), bukan
+// dari salinan di nota: barang yang pernah diganti namanya tetap satu baris,
+// dengan nama yang dikenali pemiliknya sekarang. Checkout selalu memakai satuan
+// barang itu sendiri, jadi menjumlahkan qty per barang tidak mencampur satuan.
+//
+// Urut menurut uang masuk, terbesar dulu — satuan antarbarang berbeda (kg,
+// pcs, porsi), jadi hanya rupiah yang bisa dibandingkan lintas barang.
+func SalesByProduct(ctx context.Context, outletID, from, to string) ([]ProductSalesRow, error) {
+	tid := currentTenantID(ctx)
+	q := tenantDB(ctx, nil).
+		Table("sale_items si").
+		Joins("JOIN sales s ON s.id = si.sale_id AND s.tenant_id = ?", tid).
+		Joins("JOIN products p ON p.id = si.product_id AND p.tenant_id = ?", tid).
+		Joins("LEFT JOIN units u ON u.id = p.unit_id").
+		Where("si.tenant_id = ? AND s.business_date BETWEEN ? AND ? AND s.status IN ('completed', 'returned')", tid, from, to)
+	if outletID != "" {
+		q = q.Where("s.outlet_id = ?", outletID)
+	}
+	q = scopeOutlet(ctx, q, "s.outlet_id")
+
+	// Tanda untuk kolom yang disimpan positif di baris retur.
+	const tanda = `(CASE WHEN s.status = 'returned' THEN -1 ELSE 1 END)`
+	var rows []ProductSalesRow
+	err := q.Select(`
+		si.product_id                                                   AS key,
+		p.name                                                          AS label,
+		COALESCE(u.name, '')                                            AS unit,
+		COALESCE(SUM(` + tanda + ` * si.qty), 0)                          AS qty,
+		COUNT(DISTINCT s.id) FILTER (WHERE s.status = 'completed')      AS sales_count,
+		COALESCE(SUM(` + tanda + ` * ROUND(si.qty * si.unit_price)), 0)::bigint AS gross_amount,
+		COALESCE(SUM(si.discount_amount), 0)                            AS discount_amount,
+		COALESCE(SUM(si.tax_amount), 0)                                 AS tax_amount,
+		COALESCE(SUM(si.line_total), 0)                                 AS net_amount,
+		COALESCE(SUM(` + tanda + ` * ROUND(si.qty * si.unit_cost)), 0)::bigint AS cost_amount,
+		0                                                               AS fee_amount,
+		(COALESCE(SUM(si.line_total), 0)
+		 - COALESCE(SUM(` + tanda + ` * ROUND(si.qty * si.unit_cost)), 0))::bigint AS gross_profit`).
+		Group("si.product_id, p.name, u.name").
+		Order("net_amount DESC, qty DESC, label").
+		Scan(&rows).Error
+	return rows, err
 }
