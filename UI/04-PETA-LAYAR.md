@@ -222,6 +222,7 @@ menu aktif selalu digulir ke dalam pandangan.
 | Tagihan | `GET\|POST /subscription/invoices` | `billing.manage` |
 | Konfirmasi sudah bayar | `POST /subscription-payment-claims` + `Idempotency-Key` | `billing.manage` |
 | Ganti paket / berhenti | `POST /subscription/change-plan` · `POST /subscription/cancel` | `billing.manage` |
+| Batalkan pindah paket | `POST /subscription/invoices/:id/void` | `billing.manage` |
 | Bayar sekarang (masa coba / habis / tenggang) | `POST /subscription/invoices` lalu konfirmasi | `billing.manage` |
 
 **Pembayaran langganan diverifikasi, bukan dinyatakan sendiri.** Dialog "Konfirmasi Pembayaran"
@@ -232,6 +233,12 @@ tombol "Kirim Konfirmasi Baru". Paket berubah HANYA setelah staf keuangan menyet
 Membayar di tengah masa coba tidak menghanguskan sisanya: masa berbayar dimulai saat masa coba
 berakhir. Kartu status menyebutnya ("Sudah dibayar. Masa berbayar mulai …"), dan kartu tagihan
 menampilkan periode yang dibayar.
+
+**Pindah paket berlaku setelah dibayar.** "Pindah ke Paket Ini" menerbitkan tagihan pindah paket;
+kartu tagihannya berjudul "Tagihan pindah ke paket …", menyebut bahwa paket sekarang tetap
+berjalan sampai pembayarannya diverifikasi (plus potongan sisa masa paket lama), dan punya tombol
+"Batalkan Pindah Paket". Kartu paket tujuannya bertuliskan "Menunggu pembayaran". Kartu Gratis tidak
+punya tombol untuk pelanggan berbayar — toko kembali ke Gratis sendiri bila tidak diperpanjang.
 
 **Kunci paket di layar** (dari `plan` di `GET /me`; penegakannya tetap di server, 402):
 

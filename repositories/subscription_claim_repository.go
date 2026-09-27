@@ -73,7 +73,9 @@ func PlatformListSubClaims(ctx context.Context, status string, limit int) ([]Pla
 		Joins("JOIN tenants t ON t.id = c.tenant_id").
 		Joins("JOIN subscription_invoices i ON i.id = c.subscription_invoice_id").
 		Joins("LEFT JOIN subscriptions s ON s.id = i.subscription_id").
-		Joins("LEFT JOIN plans p ON p.id = s.plan_id")
+		// Paket yang DIBAYAR tagihan itu (000040), bukan paket langganan saat
+		// ini — tagihan ganti paket menagih paket tujuannya.
+		Joins("LEFT JOIN plans p ON p.id = COALESCE(i.plan_id, s.plan_id)")
 	urut := "c.created_at DESC, c.id DESC"
 	if status != "" {
 		q = q.Where("c.status = ?", status)

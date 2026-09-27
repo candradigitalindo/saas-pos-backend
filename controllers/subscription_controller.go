@@ -157,7 +157,24 @@ func ChangeSubscriptionPlan(c *gin.Context) {
 		notFoundOr(c, err, repositories.ErrSubscriptionNotFound, "Tenant belum berlangganan")
 		return
 	}
+	msg := "Tagihan ganti paket diterbitkan — paket berpindah setelah dibayar"
+	if res.Status == "paid" {
+		msg = "Paket berpindah — biayanya tertutup sisa masa paket lama"
+	}
 	c.JSON(http.StatusCreated, structs.SuccessResponse[structs.SubInvoiceResponse]{
-		Success: true, Message: "Tagihan ganti paket diterbitkan", Data: res,
+		Success: true, Message: msg, Data: res,
+	})
+}
+
+// VoidPlanChangeInvoice: POST /api/v1/subscription/invoices/:id/void —
+// membatalkan tagihan ganti paket yang belum dibayar (paket tidak berubah).
+func VoidPlanChangeInvoice(c *gin.Context) {
+	res, err := services.VoidPlanChangeInvoice(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		notFoundOr(c, err, repositories.ErrSubInvoiceNotFound, "Tagihan tidak ditemukan")
+		return
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[structs.SubInvoiceResponse]{
+		Success: true, Message: "Ganti paket dibatalkan", Data: res,
 	})
 }

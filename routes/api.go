@@ -382,6 +382,7 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	sub.GET("/invoices", controllers.ListSubInvoices)
 	sub.POST("/cancel", controllers.CancelSubscription)
 	sub.POST("/change-plan", controllers.ChangeSubscriptionPlan)
+	sub.POST("/invoices/:id/void", controllers.VoidPlanChangeInvoice)
 	// Tenant hanya MENGONFIRMASI pembayaran; yang mencatat pembayaran & mengaktifkan
 	// paket adalah staf keuangan platform (panel). Dulu di sini ada
 	// POST /subscription-payments — tenant menandai tagihannya sendiri lunas.

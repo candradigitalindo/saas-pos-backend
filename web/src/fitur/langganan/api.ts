@@ -48,6 +48,13 @@ export interface TagihanLangganan {
   due_date: string
   status: string
   paid_at?: string
+  /** Paket yang dibayar tagihan ini. */
+  plan_code?: string
+  plan_name?: string
+  /** "plan_change" = pindah paket; paketnya baru berpindah saat lunas. */
+  kind: 'regular' | 'plan_change'
+  /** Potongan sisa masa paket lama (sudah termasuk di discount_amount). */
+  credit_amount: number
 }
 
 /** Konfirmasi pembayaran dari tenant — menunggu diverifikasi staf platform. */
@@ -94,6 +101,10 @@ export const langgananApi = {
   /** Ganti paket mengembalikan TAGIHAN prorata, bukan langganannya. */
   gantiPaket: (plan_code: string, term_months: number) =>
     api.post<TagihanLangganan>('/subscription/change-plan', { plan_code, term_months }),
+
+  /** Membatalkan tagihan ganti paket yang belum dibayar (paket tidak berubah). */
+  batalkanGanti: (invoiceId: string) =>
+    api.post<TagihanLangganan>(`/subscription/invoices/${invoiceId}/void`, {}),
 
   berhenti: (reason?: string) =>
     api.post<{

@@ -127,9 +127,25 @@ type SubscriptionInvoice struct {
 	Status         string     `json:"status" gorm:"not null;default:open"`
 	PaidAt         *time.Time `json:"paid_at"`
 
+	// Paket yang DIBAYAR tagihan ini (000040). Tagihan 'plan_change' baru
+	// memindahkan langganan ke paket ini saat lunas; CreditAmount adalah sisa
+	// nilai tagihan CreditFromInvoiceID yang dipakai sebagai potongan.
+	PlanID              *string `json:"plan_id" gorm:"type:char(26)"`
+	Kind                string  `json:"kind" gorm:"not null;default:regular"`
+	CreditAmount        int64   `json:"credit_amount" gorm:"not null;default:0"`
+	CreditFromInvoiceID *string `json:"credit_from_invoice_id" gorm:"type:char(26)"`
+
+	Plan *Plan `json:"plan,omitempty" gorm:"foreignKey:PlanID;references:ID"`
+
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
+
+// Jenis tagihan langganan.
+const (
+	SubInvoiceRegular    = "regular"     // mulai / perpanjang paket yang sama
+	SubInvoicePlanChange = "plan_change" // pindah paket di tengah masa, berlaku saat lunas
+)
 
 // BeforeCreate meng-generate ULID bila ID belum diisi.
 func (i *SubscriptionInvoice) BeforeCreate(tx *gorm.DB) (err error) {

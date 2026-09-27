@@ -97,6 +97,13 @@ type SubInvoiceResponse struct {
 	DueDate        string `json:"due_date"`
 	Status         string `json:"status"`
 	PaidAt         string `json:"paid_at,omitempty"`
+	// Paket yang dibayar tagihan ini; kind "plan_change" = pindah paket yang
+	// baru berlaku saat lunas. CreditAmount = potongan sisa paket lama (sudah
+	// termasuk di DiscountAmount).
+	PlanCode     string `json:"plan_code,omitempty"`
+	PlanName     string `json:"plan_name,omitempty"`
+	Kind         string `json:"kind"`
+	CreditAmount int64  `json:"credit_amount"`
 }
 
 // SubscriptionOverviewResponse menggabungkan langganan + tagihan terbuka (bila ada).

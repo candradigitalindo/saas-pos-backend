@@ -72,7 +72,9 @@ func SubmitPaymentClaim(ctx context.Context, in SubmitClaimInput) (int, []byte, 
 			return nil
 		}
 
-		inv, err := repositories.FindSubInvoiceForTenant(ctx, tx, in.InvoiceID)
+		// Dikunci: pembatalan tagihan (ganti pilihan paket) melewati kunci yang
+		// sama, jadi konfirmasi tidak pernah tertinggal di tagihan yang batal.
+		inv, err := repositories.LockSubInvoiceForTenant(ctx, tx, in.InvoiceID)
 		if err != nil {
 			return err
 		}

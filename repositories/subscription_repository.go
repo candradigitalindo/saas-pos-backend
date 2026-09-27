@@ -120,16 +120,17 @@ func NextSubInvoiceNumber(ctx context.Context, tx *gorm.DB) (string, error) {
 	return fmt.Sprintf("SUB-%06d", n), nil
 }
 
-// CreateSubInvoice menyimpan tagihan baru.
+// CreateSubInvoice menyimpan tagihan baru. Relasi Plan (bila diisi pemanggil
+// untuk respons) tidak ikut disimpan.
 func CreateSubInvoice(ctx context.Context, tx *gorm.DB, in *models.SubscriptionInvoice) error {
 	in.TenantID = currentTenantID(ctx)
-	return tx.WithContext(ctx).Create(in).Error
+	return tx.WithContext(ctx).Omit("Plan").Create(in).Error
 }
 
 // FindSubInvoiceForTenant memuat satu tagihan milik tenant konteks.
 func FindSubInvoiceForTenant(ctx context.Context, tx *gorm.DB, id string) (models.SubscriptionInvoice, error) {
 	var in models.SubscriptionInvoice
-	err := tenantDB(ctx, tx).
+	err := tenantDB(ctx, tx).Preload("Plan").
 		Where("id = ? AND tenant_id = ?", id, currentTenantID(ctx)).
 		First(&in).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -138,11 +139,35 @@ func FindSubInvoiceForTenant(ctx context.Context, tx *gorm.DB, id string) (model
 	return in, err
 }
 
+// LockSubInvoiceForTenant memuat SEKALIGUS mengunci (FOR UPDATE) satu tagihan
+// milik tenant konteks. Mengirim konfirmasi, menyetujui pembayaran, dan
+// membatalkan tagihan sama-sama melewati kunci ini, jadi tidak ada konfirmasi
+// yang tertinggal pada tagihan yang baru saja dibatalkan.
+func LockSubInvoiceForTenant(ctx context.Context, tx *gorm.DB, id string) (models.SubscriptionInvoice, error) {
+	var in models.SubscriptionInvoice
+	err := tenantDB(ctx, tx).Clauses(lockForUpdate()).
+		Where("id = ? AND tenant_id = ?", id, currentTenantID(ctx)).
+		First(&in).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return in, ErrSubInvoiceNotFound
+	}
+	if err != nil {
+		return in, err
+	}
+	if in.PlanID != nil {
+		var p models.Plan
+		if err := tenantDB(ctx, tx).Where("id = ?", *in.PlanID).First(&p).Error; err == nil {
+			in.Plan = &p
+		}
+	}
+	return in, nil
+}
+
 // OpenSubInvoiceForTenant mengembalikan tagihan terbuka (open/overdue) terbaru
 // milik tenant, bila ada.
 func OpenSubInvoiceForTenant(ctx context.Context, tx *gorm.DB) (models.SubscriptionInvoice, bool, error) {
 	var in models.SubscriptionInvoice
-	err := tenantDB(ctx, tx).
+	err := tenantDB(ctx, tx).Preload("Plan").
 		Where("tenant_id = ? AND status IN ('open','overdue')", currentTenantID(ctx)).
 		Order("created_at DESC").
 		First(&in).Error
@@ -158,7 +183,7 @@ func OpenSubInvoiceForTenant(ctx context.Context, tx *gorm.DB) (models.Subscript
 // LatestPaidSubInvoice mengembalikan tagihan berbayar terbaru milik tenant.
 func LatestPaidSubInvoice(ctx context.Context, tx *gorm.DB) (models.SubscriptionInvoice, error) {
 	var in models.SubscriptionInvoice
-	err := tenantDB(ctx, tx).
+	err := tenantDB(ctx, tx).Preload("Plan").
 		Where("tenant_id = ? AND status = 'paid'", currentTenantID(ctx)).
 		Order("paid_at DESC").
 		First(&in).Error
@@ -177,7 +202,7 @@ func ListSubInvoicesForTenant(ctx context.Context, limit, offset int) ([]models.
 		return nil, 0, err
 	}
 	var rows []models.SubscriptionInvoice
-	err := q.Order("created_at DESC").Limit(limit).Offset(offset).Find(&rows).Error
+	err := q.Preload("Plan").Order("created_at DESC").Limit(limit).Offset(offset).Find(&rows).Error
 	return rows, total, err
 }
 

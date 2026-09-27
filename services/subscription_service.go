@@ -85,6 +85,19 @@ func StartSubscription(ctx context.Context, planCode string, term int) (structs.
 		trialEnds := now.AddDate(0, 0, subscriptionTrialDays())
 
 		existing, ferr := repositories.FindSubscriptionByTenant(ctx, tx)
+		if ferr == nil && (existing.PlanID != plan.ID || existing.TermMonths != term) {
+			// Tagihan terbuka menagih paket/masa yang LAMA; membayarnya setelah
+			// berganti pilihan akan mengaktifkan paket yang tidak dipilih lagi.
+			// Batalkan (kalau belum ada uang/konfirmasi), tenant menerbitkan
+			// tagihan baru untuk pilihan barunya.
+			if open, ada, err := repositories.OpenSubInvoiceForTenant(ctx, tx); err != nil {
+				return err
+			} else if ada {
+				if err := batalkanTagihanBelumDibayar(ctx, tx, open.ID); err != nil {
+					return err
+				}
+			}
+		}
 		switch {
 		case ferr == nil && existing.Status == "trial":
 			// Masih (atau sudah selesai) masa coba: GANTI PAKET TANPA mengubah
@@ -106,13 +119,23 @@ func StartSubscription(ctx context.Context, planCode string, term int) (structs.
 			if existing.Status == "trial" || existing.Status == "active" || existing.Status == "past_due" {
 				return fmt.Errorf("%w: tenant sudah punya langganan berjalan", helpers.ErrConflict)
 			}
+			// Berlangganan lagi setelah berhenti: TANPA masa coba baru. Dulu
+			// langganan yang dihentikan lalu dimulai lagi mendapat 14 hari
+			// gratis yang baru — berhenti-mulai bisa diulang tanpa batas.
+			// Masa coba hanya sekali per tenant; yang berhenti DI TENGAH masa
+			// coba boleh melanjutkan sisanya (tanggal aslinya dipertahankan).
 			existing.PlanID = plan.ID
 			existing.TermMonths = term
 			existing.DiscountRate = rate
 			existing.Status = "trial"
-			existing.TrialEndsAt = &trialEnds
+			if existing.TrialEndsAt == nil {
+				existing.TrialEndsAt = &now
+			}
 			existing.CurrentPeriodStart = now
-			existing.CurrentPeriodEnd = trialEnds
+			existing.CurrentPeriodEnd = now
+			if existing.TrialEndsAt.After(now) {
+				existing.CurrentPeriodEnd = *existing.TrialEndsAt
+			}
 			existing.AutoRenew = true
 			existing.CanceledAt = nil
 			existing.CancelReason = ""
@@ -167,7 +190,7 @@ func GenerateInvoice(ctx context.Context) (structs.SubInvoiceResponse, error) {
 			return err
 		}
 
-		inv, err := buildInvoice(ctx, tx, sub, plan, sub.TermMonths, sub.DiscountRate, 0)
+		inv, err := buildInvoice(ctx, tx, sub, plan, sub.TermMonths, sub.DiscountRate, 0, models.SubInvoiceRegular)
 		if err != nil {
 			return err
 		}
@@ -203,27 +226,41 @@ func GenerateInvoice(ctx context.Context) (structs.SubInvoiceResponse, error) {
 	return out, err
 }
 
-// buildInvoice merakit sebuah SubscriptionInvoice (belum disimpan). `extraCredit`
-// adalah potongan tambahan (kredit prorata saat ganti paket), diterapkan setelah
-// diskon masa langganan.
-func buildInvoice(ctx context.Context, tx *gorm.DB, sub models.Subscription, plan models.Plan, term int, rate decimal.Decimal, extraCredit int64) (models.SubscriptionInvoice, error) {
+// buildInvoice merakit sebuah SubscriptionInvoice (belum disimpan). `credit`
+// adalah potongan sisa paket lama saat ganti paket, diterapkan setelah diskon
+// masa langganan dan dibatasi sebesar sisa tagihannya (CreditAmount mencatat
+// yang benar-benar terpakai).
+func buildInvoice(ctx context.Context, tx *gorm.DB, sub models.Subscription, plan models.Plan, term int, rate decimal.Decimal, credit int64, kind string) (models.SubscriptionInvoice, error) {
 	now := time.Now().UTC()
 	today := firstOfDay(now)
 
 	periodStart := awalPeriodeBerbayar(sub, now)
+	if kind == models.SubInvoicePlanChange {
+		// Ganti paket berlaku sejak lunas (dihitung ulang saat itu), bukan
+		// setelah periode lama habis — sisa periode lama sudah dikreditkan.
+		periodStart = today
+	}
 	periodEnd := periodStart.AddDate(0, term, 0)
 
 	gross := plan.MonthlyPrice * int64(term)
-	discount := helpers.RoundHalfUpToInt(decimal.NewFromInt(gross).Mul(rate)) + extraCredit
-	if discount > gross {
-		discount = gross
+	termDiscount := helpers.RoundHalfUpToInt(decimal.NewFromInt(gross).Mul(rate))
+	if termDiscount > gross {
+		termDiscount = gross
 	}
+	if credit > gross-termDiscount {
+		credit = gross - termDiscount
+	}
+	if credit < 0 {
+		credit = 0
+	}
+	discount := termDiscount + credit
 	total := gross - discount
 
 	number, err := repositories.NextSubInvoiceNumber(ctx, tx)
 	if err != nil {
 		return models.SubscriptionInvoice{}, err
 	}
+	planID := plan.ID
 	return models.SubscriptionInvoice{
 		SubscriptionID: sub.ID,
 		Number:         number,
@@ -235,6 +272,10 @@ func buildInvoice(ctx context.Context, tx *gorm.DB, sub models.Subscription, pla
 		TotalAmount:    total,
 		DueDate:        today.AddDate(0, 0, subscriptionDueDays()),
 		Status:         "open",
+		PlanID:         &planID,
+		Kind:           kind,
+		CreditAmount:   credit,
+		Plan:           &plan,
 	}, nil
 }
 
@@ -276,7 +317,7 @@ func terapkanPembayaran(ctx context.Context, tx *gorm.DB, invoiceID string, amou
 	if amount <= 0 {
 		return models.SubscriptionInvoice{}, bayar, fmt.Errorf("%w: nominal pembayaran harus > 0", helpers.ErrValidation)
 	}
-	inv, err := repositories.FindSubInvoiceForTenant(ctx, tx, invoiceID)
+	inv, err := repositories.LockSubInvoiceForTenant(ctx, tx, invoiceID)
 	if err != nil {
 		return inv, bayar, err
 	}
@@ -301,31 +342,7 @@ func terapkanPembayaran(ctx context.Context, tx *gorm.DB, invoiceID string, amou
 
 	inv.PaidAmount += amount
 	if inv.PaidAmount >= inv.TotalAmount {
-		inv.Status = "paid"
-		inv.PaidAt = &now
-
-		sub, err := repositories.FindSubscriptionByTenant(ctx, tx)
-		if err != nil {
-			return inv, bayar, err
-		}
-		// Tagihan masa coba dihitung ulang periodenya SAAT LUNAS, bukan saat
-		// terbit: tagihan yang terbit di tengah masa coba tapi baru dibayar
-		// setelah masa coba habis mulai berlaku hari pembayaran — hari-hari
-		// di antaranya tenant memakai paket Gratis, jadi tidak ditagihkan.
-		if sub.Status == "trial" {
-			inv.PeriodStart = awalPeriodeBerbayar(sub, now)
-			inv.PeriodEnd = inv.PeriodStart.AddDate(0, inv.TermMonths, 0)
-		}
-		sub.Status = "active"
-		sub.CurrentPeriodStart = inv.PeriodStart
-		sub.CurrentPeriodEnd = inv.PeriodEnd
-		if err := repositories.SaveSubscription(ctx, tx, &sub); err != nil {
-			return inv, bayar, err
-		}
-		if err := repositories.CreateDeferredEntries(ctx, tx, deferredEntriesFor(inv)); err != nil {
-			return inv, bayar, err
-		}
-		if err := setTenantStatus(ctx, tx, "active"); err != nil {
+		if err := lunaskan(ctx, tx, &inv, now); err != nil {
 			return inv, bayar, err
 		}
 	}
@@ -333,6 +350,120 @@ func terapkanPembayaran(ctx context.Context, tx *gorm.DB, invoiceID string, amou
 		return inv, bayar, err
 	}
 	return inv, bayar, nil
+}
+
+// lunaskan menjalankan akibat sebuah tagihan LUNAS (pemanggil menyimpan
+// tagihannya): langganan aktif pada paket & periode tagihan itu, dan N baris
+// deferred_revenue_entries dibuat (§13.4).
+//
+// Periode dihitung ulang saat lunas untuk dua jenis tagihan:
+//   - ganti paket → mulai hari pelunasan; paket, masa, dan tarif diskon
+//     langganan baru berpindah SEKARANG (dulu saat tagihan terbit — paket
+//     baru terbuka tanpa dibayar), dan kredit sisa paket lama baru
+//     diperhitungkan pada tagihan lamanya sekarang juga;
+//   - masa coba → mulai saat masa coba berakhir, atau hari ini bila sudah
+//     lewat (hari-hari di paket Gratis tidak ditagihkan).
+func lunaskan(ctx context.Context, tx *gorm.DB, inv *models.SubscriptionInvoice, now time.Time) error {
+	inv.Status = "paid"
+	inv.PaidAt = &now
+
+	sub, err := repositories.FindSubscriptionByTenant(ctx, tx)
+	if err != nil {
+		return err
+	}
+	switch {
+	case inv.Kind == models.SubInvoicePlanChange:
+		inv.PeriodStart = firstOfDay(now)
+		inv.PeriodEnd = inv.PeriodStart.AddDate(0, inv.TermMonths, 0)
+		rate, err := repositories.TermDiscountRate(ctx, tx, inv.TermMonths)
+		if err != nil {
+			return err
+		}
+		sub.TermMonths = inv.TermMonths
+		sub.DiscountRate = rate
+		if inv.CreditFromInvoiceID != nil {
+			lama, err := repositories.FindSubInvoiceForTenant(ctx, tx, *inv.CreditFromInvoiceID)
+			if err != nil {
+				return err
+			}
+			// Nilai tagihan lama yang tetap diakui = yang dibayar − yang
+			// dipindahkan ke tagihan ini sebagai kredit.
+			tetap := lama.PaidAmount - inv.CreditAmount
+			if tetap < 0 {
+				tetap = 0
+			}
+			if err := settleInvoiceDeferred(ctx, tx, lama.ID, tetap, now); err != nil {
+				return err
+			}
+		}
+	case sub.Status == "trial":
+		inv.PeriodStart = awalPeriodeBerbayar(sub, now)
+		inv.PeriodEnd = inv.PeriodStart.AddDate(0, inv.TermMonths, 0)
+	}
+	// Yang dibayar menentukan paketnya.
+	if inv.PlanID != nil {
+		sub.PlanID = *inv.PlanID
+	}
+	sub.Status = "active"
+	sub.CurrentPeriodStart = inv.PeriodStart
+	sub.CurrentPeriodEnd = inv.PeriodEnd
+	if err := repositories.SaveSubscription(ctx, tx, &sub); err != nil {
+		return err
+	}
+	if err := repositories.CreateDeferredEntries(ctx, tx, deferredEntriesFor(*inv)); err != nil {
+		return err
+	}
+	return setTenantStatus(ctx, tx, "active")
+}
+
+// batalkanTagihanBelumDibayar membatalkan (void) tagihan terbuka yang belum
+// menerima uang dan tidak sedang dikonfirmasi. Baris tagihannya dikunci —
+// jalur kirim konfirmasi & persetujuan melewati kunci yang sama.
+func batalkanTagihanBelumDibayar(ctx context.Context, tx *gorm.DB, invoiceID string) error {
+	inv, err := repositories.LockSubInvoiceForTenant(ctx, tx, invoiceID)
+	if err != nil {
+		return err
+	}
+	if inv.Status != "open" && inv.Status != "overdue" {
+		return fmt.Errorf("%w: tagihan %s tidak lagi terbuka", helpers.ErrConflict, inv.Number)
+	}
+	if inv.PaidAmount > 0 {
+		return fmt.Errorf("%w: tagihan %s sudah dibayar sebagian — hubungi kami untuk menyelesaikannya", helpers.ErrConflict, inv.Number)
+	}
+	switch k, err := repositories.LatestSubClaimForInvoice(ctx, tx, inv.ID); {
+	case err == nil && k.Status == "pending":
+		return fmt.Errorf("%w: pembayaran tagihan %s sedang diverifikasi — tunggu hasilnya dulu", helpers.ErrConflict, inv.Number)
+	case err != nil && !errors.Is(err, repositories.ErrSubClaimNotFound):
+		return err
+	}
+	inv.Status = "void"
+	return repositories.SaveSubInvoice(ctx, tx, &inv)
+}
+
+// VoidPlanChangeInvoice membatalkan tagihan GANTI PAKET yang belum dibayar —
+// tenant berubah pikiran. Paketnya memang belum berpindah (baru berpindah saat
+// lunas), jadi cukup tagihannya yang dibatalkan.
+func VoidPlanChangeInvoice(ctx context.Context, invoiceID string) (structs.SubInvoiceResponse, error) {
+	var out structs.SubInvoiceResponse
+	err := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
+		inv, err := repositories.FindSubInvoiceForTenant(ctx, tx, invoiceID)
+		if err != nil {
+			return err
+		}
+		if inv.Kind != models.SubInvoicePlanChange {
+			return fmt.Errorf("%w: hanya tagihan ganti paket yang bisa dibatalkan", helpers.ErrConflict)
+		}
+		if err := batalkanTagihanBelumDibayar(ctx, tx, inv.ID); err != nil {
+			return err
+		}
+		inv, err = repositories.FindSubInvoiceForTenant(ctx, tx, invoiceID)
+		if err != nil {
+			return err
+		}
+		out = subInvoiceToResponse(inv)
+		return nil
+	})
+	return out, err
 }
 
 // deferredEntriesFor memecah total tagihan menjadi N baris pengakuan bulanan
@@ -343,8 +474,12 @@ func deferredEntriesFor(inv models.SubscriptionInvoice) []models.DeferredRevenue
 	if n < 1 {
 		n = 1
 	}
-	per := inv.TotalAmount / int64(n)
-	remainder := inv.TotalAmount - per*int64(n)
+	// Nilai layanan tagihan ini = uang tunainya + kredit yang dipindahkan dari
+	// tagihan lama (yang di sana sudah tidak diakui lagi). Tanpa kredit, nilai
+	// itu hilang dari pengakuan walau uangnya tetap kita pegang.
+	nilai := inv.TotalAmount + inv.CreditAmount
+	per := nilai / int64(n)
+	remainder := nilai - per*int64(n)
 	month0 := firstOfMonth(inv.PeriodStart)
 
 	rows := make([]models.DeferredRevenueEntry, 0, n)
@@ -407,7 +542,9 @@ func CancelSubscription(ctx context.Context, reason string) (structs.Subscriptio
 			}
 			earned = inv.PaidAmount - refund
 
-			if err := settleInvoiceDeferred(ctx, tx, inv.ID, earned, now); err != nil {
+			// Yang dikembalikan hanya uang tunai; kredit dari paket lama yang
+			// terpakai di tagihan ini tetap nilai yang diakui.
+			if err := settleInvoiceDeferred(ctx, tx, inv.ID, earned+inv.CreditAmount, now); err != nil {
 				return err
 			}
 			inv.PaidAmount = earned
@@ -452,9 +589,16 @@ func CancelSubscription(ctx context.Context, reason string) (structs.Subscriptio
 	return out, err
 }
 
-// ChangePlan menerbitkan tagihan paket baru dengan KREDIT prorata atas sisa masa
-// paket lama (dihitung pada harga bulanan normal), lalu mengarahkan langganan ke
-// paket baru. Berlaku setelah tagihan barunya dibayar.
+// ChangePlan menerbitkan tagihan GANTI PAKET dengan kredit atas sisa masa
+// paket lama (dihitung pada harga bulanan normal, tidak pernah melebihi yang
+// dibayar). Langganan TIDAK berpindah di sini: paket, masa, dan periodenya
+// berpindah saat tagihan ini lunas (lihat lunaskan). Dulu paket langsung
+// berpindah saat tagihan terbit — sejak kunci paket ditegakkan, itu membuka
+// paket yang lebih mahal tanpa membayar.
+//
+// Tagihan ganti paket yang belum dibayar boleh digantikan (memilih paket lain
+// lagi) atau dibatalkan (VoidPlanChangeInvoice). Bila biayanya habis tertutup
+// kredit, perpindahannya langsung berlaku.
 func ChangePlan(ctx context.Context, planCode string, term int) (structs.SubInvoiceResponse, error) {
 	var out structs.SubInvoiceResponse
 	if !validTerm(term) {
@@ -468,58 +612,91 @@ func ChangePlan(ctx context.Context, planCode string, term int) (structs.SubInvo
 		if sub.Status != "active" {
 			return fmt.Errorf("%w: hanya langganan aktif yang bisa ganti paket di tengah masa", helpers.ErrConflict)
 		}
-		if _, open, err := repositories.OpenSubInvoiceForTenant(ctx, tx); err != nil {
-			return err
-		} else if open {
-			return fmt.Errorf("%w: selesaikan tagihan yang belum dibayar dulu", helpers.ErrConflict)
-		}
-
 		newPlan, err := repositories.FindPlanByCode(ctx, tx, planCode)
 		if err != nil {
 			return err
 		}
-		oldPlan, err := repositories.FindPlanByID(ctx, tx, sub.PlanID)
-		if err != nil {
-			return err
+		if newPlan.MonthlyPrice <= 0 {
+			// Tagihan Rp0 tidak pernah bisa dibayar — dulu ia menggantung
+			// sebagai tagihan terbuka dan menghalangi perpanjangan.
+			return fmt.Errorf("%w: paket %s tidak perlu dibeli — bila masa berjalan tidak diperpanjang, toko kembali ke paket %s dengan sendirinya", helpers.ErrValidation, newPlan.Name, newPlan.Name)
 		}
+		if newPlan.ID == sub.PlanID && term == sub.TermMonths {
+			return fmt.Errorf("%w: paket %s %d bulan sedang dipakai", helpers.ErrConflict, newPlan.Name, term)
+		}
+		if open, ada, err := repositories.OpenSubInvoiceForTenant(ctx, tx); err != nil {
+			return err
+		} else if ada {
+			if open.Kind != models.SubInvoicePlanChange {
+				return fmt.Errorf("%w: selesaikan tagihan yang belum dibayar dulu", helpers.ErrConflict)
+			}
+			// Berubah pikiran sebelum membayar: tagihan ganti paket yang lama
+			// digantikan.
+			if err := batalkanTagihanBelumDibayar(ctx, tx, open.ID); err != nil {
+				return err
+			}
+		}
+
 		newRate, err := repositories.TermDiscountRate(ctx, tx, term)
 		if err != nil {
 			return err
 		}
-
 		now := time.Now().UTC()
 		var credit int64
+		var dari *string
 		if paidInv, ierr := repositories.LatestPaidSubInvoice(ctx, tx); ierr == nil {
+			hargaLama := int64(0)
+			if paidInv.Plan != nil {
+				hargaLama = paidInv.Plan.MonthlyPrice
+			} else if oldPlan, err := repositories.FindPlanByID(ctx, tx, sub.PlanID); err == nil {
+				hargaLama = oldPlan.MonthlyPrice
+			} else {
+				return err
+			}
 			used := wholeMonthsBetween(paidInv.PeriodStart, now)
 			remaining := paidInv.TermMonths - used
 			if remaining < 0 {
 				remaining = 0
 			}
-			credit = int64(remaining) * oldPlan.MonthlyPrice
-			earnedOld := paidInv.PaidAmount - credit
-			if earnedOld < 0 {
-				earnedOld = 0
+			credit = int64(remaining) * hargaLama
+			// Tidak pernah lebih dari uang yang benar-benar diterima (+ kredit
+			// yang dulu dipindahkan ke tagihan itu): tagihan prabayar berdiskon
+			// dinilai harga normal, jadi tanpa batas ini ganti paket sesaat
+			// setelah membayar memberi kredit lebih besar dari pembayarannya.
+			if batas := paidInv.PaidAmount + paidInv.CreditAmount; credit > batas {
+				credit = batas
 			}
-			if err := settleInvoiceDeferred(ctx, tx, paidInv.ID, earnedOld, now); err != nil {
-				return err
+			if credit > 0 {
+				id := paidInv.ID
+				dari = &id
 			}
 		} else if ierr != repositories.ErrSubInvoiceNotFound {
 			return ierr
 		}
 
-		inv, err := buildInvoice(ctx, tx, sub, newPlan, term, newRate, credit)
+		inv, err := buildInvoice(ctx, tx, sub, newPlan, term, newRate, credit, models.SubInvoicePlanChange)
 		if err != nil {
 			return err
 		}
+		if inv.CreditAmount < credit {
+			// Kredit melebihi biaya paket baru: sisanya akan hangus. Jangan
+			// diam-diam — minta masa yang lebih panjang atau tunggu periode
+			// berjalan selesai.
+			return fmt.Errorf("%w: sisa masa paket sekarang bernilai %s, lebih besar dari biaya paket %s %d bulan (%s) — pilih masa langganan yang lebih panjang, atau pindah paket setelah masa berjalan berakhir",
+				helpers.ErrValidation, helpers.FormatRupiah(credit), newPlan.Name, term, helpers.FormatRupiah(inv.GrossAmount-(inv.DiscountAmount-inv.CreditAmount)))
+		}
+		inv.CreditFromInvoiceID = dari
 		if err := repositories.CreateSubInvoice(ctx, tx, &inv); err != nil {
 			return err
 		}
-
-		sub.PlanID = newPlan.ID
-		sub.TermMonths = term
-		sub.DiscountRate = newRate
-		if err := repositories.SaveSubscription(ctx, tx, &sub); err != nil {
-			return err
+		if inv.TotalAmount == 0 {
+			// Biaya habis tertutup kredit — tidak ada yang perlu dibayar.
+			if err := lunaskan(ctx, tx, &inv, now); err != nil {
+				return err
+			}
+			if err := repositories.SaveSubInvoice(ctx, tx, &inv); err != nil {
+				return err
+			}
 		}
 		out = subInvoiceToResponse(inv)
 		return nil
@@ -654,6 +831,11 @@ func subInvoiceToResponse(i models.SubscriptionInvoice) structs.SubInvoiceRespon
 		GrossAmount: i.GrossAmount, DiscountAmount: i.DiscountAmount,
 		TotalAmount: i.TotalAmount, PaidAmount: i.PaidAmount,
 		DueDate: i.DueDate.Format("2006-01-02"), Status: i.Status,
+		Kind: i.Kind, CreditAmount: i.CreditAmount,
+	}
+	if i.Plan != nil {
+		r.PlanCode = i.Plan.Code
+		r.PlanName = i.Plan.Name
 	}
 	if i.PaidAt != nil {
 		r.PaidAt = i.PaidAt.UTC().Format(saleTimeLayout)

@@ -1836,6 +1836,31 @@ Persetujuan mengunci baris klaim (`FOR UPDATE`) lalu memeriksa `status = 'pendin
 transaksi yang sama dengan pencatatan pembayaran — dua staf yang menekan "Setujui" bersamaan
 menghasilkan tepat satu pembayaran; yang kalah mendapat 409.
 
+```sql
+-- 000040: tagihan membawa paket yang DIBAYARNYA; pindah paket berlaku saat lunas.
+ALTER TABLE subscription_invoices
+  ADD COLUMN plan_id CHAR(26) REFERENCES plans(id),
+  ADD COLUMN kind TEXT NOT NULL DEFAULT 'regular' CHECK (kind IN ('regular','plan_change')),
+  ADD COLUMN credit_amount BIGINT NOT NULL DEFAULT 0 CHECK (credit_amount >= 0),
+  ADD COLUMN credit_from_invoice_id CHAR(26) REFERENCES subscription_invoices(id);
+```
+
+Aturan pindah paket (`services.ChangePlan` → `lunaskan`):
+
+- Tagihan `plan_change` TIDAK memindahkan langganan saat terbit. Saat lunas: paket, masa, dan tarif
+  diskon berpindah, periode mulai hari pelunasan, dan tagihan lama (`credit_from_invoice_id`) baru
+  saat itu diselesaikan pengakuannya menjadi `dibayar − credit_amount`.
+- Kredit = sisa bulan × harga bulanan normal paket lama, dibatasi `paid_amount + credit_amount`
+  tagihan lama (tagihan prabayar berdiskon tidak boleh menghasilkan kredit melebihi uangnya).
+- Pengakuan tagihan baru = `total_amount + credit_amount` — nilai berpindah, tidak hilang.
+  Pembatalan setelahnya mengembalikan tunai saja; kreditnya tetap diakui.
+- Ke paket harga 0 → 422; kredit > biaya paket baru → 422 (bukan menghanguskan sisanya diam-diam);
+  kredit = biaya → tagihan Rp0 langsung lunas.
+- Kirim konfirmasi, persetujuan, dan pembatalan tagihan mengunci baris tagihan (`FOR UPDATE`) —
+  tidak ada konfirmasi menunggu yang tertinggal pada tagihan batal.
+- Masa coba sekali per tenant: `StartSubscription` untuk langganan `canceled`/`expired`
+  mempertahankan `trial_ends_at` lama.
+
 ### 5.14 Tabel sistem
 
 ```sql

@@ -55,6 +55,16 @@ export function HalamanLangganan() {
   const qc = useQueryClient()
   const toast = useToast()
 
+  const batalkanGanti = useMutation({
+    mutationFn: langgananApi.batalkanGanti,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['langganan'] })
+      qc.invalidateQueries({ queryKey: ['tagihan'] })
+      toast.berhasil('Pindah paket dibatalkan. Paket Anda tidak berubah.')
+    },
+    onError: (e) => toast.gagal(e instanceof GalatAPI ? e.pesan : 'Terjadi kesalahan.'),
+  })
+
   // "Bayar sekarang": pakai tagihan terbuka bila ada, kalau belum ada
   // terbitkan dulu — lalu buka dialog bayar.
   const bayarSekarang = useMutation({
@@ -198,7 +208,11 @@ export function HalamanLangganan() {
 
         {tagihanTerbuka && (
           <Kartu className="border-jingga-600 bg-permukaan-2 p-4">
-            <p className="font-semibold text-jingga-700">Ada tagihan yang belum dibayar</p>
+            <p className="font-semibold text-jingga-700">
+              {tagihanTerbuka.kind === 'plan_change'
+                ? `Tagihan pindah ke paket ${tagihanTerbuka.plan_name ?? ''}`
+                : 'Ada tagihan yang belum dibayar'}
+            </p>
             <p className="mt-1 text-angka font-extrabold tabular-nums text-teks-utama">
               {formatRupiah(tagihanTerbuka.total_amount - tagihanTerbuka.paid_amount)}
             </p>
@@ -208,6 +222,16 @@ export function HalamanLangganan() {
               {formatTanggal(tagihanTerbuka.period_end)} · jatuh tempo{' '}
               {formatTanggal(tagihanTerbuka.due_date)}
             </p>
+            {tagihanTerbuka.kind === 'plan_change' && (
+              // Paket BARU berpindah saat lunas — katakan, supaya pemilik tidak
+              // mengira fitur paket barunya rusak.
+              <p className="mt-1 text-label text-teks-sekunder">
+                Paket berpindah setelah pembayarannya diverifikasi; sampai itu paket{' '}
+                {langganan?.plan_name} tetap berjalan.
+                {tagihanTerbuka.credit_amount > 0 &&
+                  ` Sudah dipotong sisa masa paket lama ${formatRupiah(tagihanTerbuka.credit_amount)}.`}
+              </p>
+            )}
             {konfirmasi?.status === 'pending' ? (
               // Sudah dikonfirmasi: jangan tawarkan membayar lagi — tombol
               // "Bayar" di sini mengundang transfer dua kali.
@@ -227,10 +251,21 @@ export function HalamanLangganan() {
                     Konfirmasi sebelumnya belum bisa diterima: {konfirmasi.reject_reason}
                   </p>
                 )}
-                <Tombol className="mt-3" onClick={() => setBayarUntuk(tagihanTerbuka)}>
-                  <CreditCard className="h-5 w-5" aria-hidden />
-                  {konfirmasi?.status === 'rejected' ? 'Kirim Konfirmasi Baru' : 'Bayar Sekarang'}
-                </Tombol>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Tombol onClick={() => setBayarUntuk(tagihanTerbuka)}>
+                    <CreditCard className="h-5 w-5" aria-hidden />
+                    {konfirmasi?.status === 'rejected' ? 'Kirim Konfirmasi Baru' : 'Bayar Sekarang'}
+                  </Tombol>
+                  {tagihanTerbuka.kind === 'plan_change' && (
+                    <Tombol
+                      jenis="kedua"
+                      memuat={batalkanGanti.isPending}
+                      onClick={() => batalkanGanti.mutate(tagihanTerbuka.id)}
+                    >
+                      Batalkan Pindah Paket
+                    </Tombol>
+                  )}
+                </div>
               </>
             )}
           </Kartu>
@@ -256,6 +291,10 @@ export function HalamanLangganan() {
                 sudahBerlangganan={
                   langganan?.status === 'active' || langganan?.status === 'past_due'
                 }
+                // Tagihan pindah ke paket ini sudah terbit tapi belum lunas.
+                menungguBayar={
+                  tagihanTerbuka?.kind === 'plan_change' && tagihanTerbuka.plan_code === p.code
+                }
               />
             ))}
           </div>
@@ -273,6 +312,7 @@ export function HalamanLangganan() {
                 <div className="min-w-0">
                   <p className="font-medium tabular-nums text-teks-utama">{t.number}</p>
                   <p className="text-keterangan text-teks-redup">
+                    {t.plan_name && `${t.plan_name}${t.kind === 'plan_change' ? ' (pindah paket)' : ''} · `}
                     {formatTanggal(t.period_start)} – {formatTanggal(t.period_end)}
                   </p>
                 </div>
@@ -282,6 +322,10 @@ export function HalamanLangganan() {
                   </p>
                   {t.status === 'paid' ? (
                     <LencanaStatus nada="berhasil" anak="Lunas" />
+                  ) : t.status === 'void' ? (
+                    <LencanaStatus nada="netral" anak="Dibatalkan" />
+                  ) : t.status === 'refunded' ? (
+                    <LencanaStatus nada="netral" anak="Dikembalikan" />
                   ) : (
                     <LencanaStatus nada="menunggu" anak="Belum lunas" />
                   )}
@@ -359,11 +403,13 @@ function KartuPaket({
   kunciFitur,
   sedangDipakai,
   sudahBerlangganan,
+  menungguBayar,
 }: {
   paket: Paket
   kunciFitur: string[]
   sedangDipakai: boolean
   sudahBerlangganan: boolean
+  menungguBayar: boolean
 }) {
   const toast = useToast()
   const qc = useQueryClient()
@@ -381,8 +427,12 @@ function KartuPaket({
   const ambil = useMutation<string>({
     mutationFn: async () => {
       if (sudahBerlangganan) {
-        await langgananApi.gantiPaket(paket.code, masa)
-        return `Pindah ke paket ${paket.name}. Tagihan penyesuaiannya sudah dibuat.`
+        // Paket BARU berpindah saat tagihannya lunas — kecuali biayanya habis
+        // tertutup sisa masa paket lama (langsung lunas).
+        const t = await langgananApi.gantiPaket(paket.code, masa)
+        return t.status === 'paid'
+          ? `Pindah ke paket ${paket.name}. Biayanya tertutup sisa masa paket lama.`
+          : `Tagihan pindah ke paket ${paket.name} sudah dibuat. Paket berpindah setelah dibayar.`
       }
       const l = await langgananApi.mulai(paket.code, masa)
       const akhir = l.trial_ends_at ? new Date(l.trial_ends_at) : null
@@ -508,6 +558,16 @@ function KartuPaket({
           <p className="flex items-center gap-1.5 text-label font-medium text-hijau-700">
             <Check className="h-5 w-5" aria-hidden />
             Paket yang sedang dipakai
+          </p>
+        ) : menungguBayar ? (
+          <p className="flex items-center gap-1.5 text-label font-medium text-jingga-700">
+            <Clock className="h-5 w-5" aria-hidden />
+            Menunggu pembayaran — lihat tagihan di atas
+          </p>
+        ) : sudahBerlangganan && paket.monthly_price <= 0 ? (
+          // Gratis tidak "dibeli": tagihan Rp0 tidak pernah bisa dibayar.
+          <p className="text-label text-teks-sekunder">
+            Toko kembali ke paket ini dengan sendirinya bila masa berjalan tidak diperpanjang.
           </p>
         ) : (
           <Tombol
