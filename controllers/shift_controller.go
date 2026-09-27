@@ -169,9 +169,19 @@ func ListCashMovements(c *gin.Context) {
 		respondServiceError(c, err)
 		return
 	}
+	ids := make([]string, 0, len(rows))
+	for _, r := range rows {
+		ids = append(ids, r.CreatedBy)
+	}
+	nama, err := repositories.UserNames(c.Request.Context(), ids)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
 	items := make([]structs.CashMovementResponse, len(rows))
 	for i, r := range rows {
 		items[i] = cashMovementToResponse(r)
+		items[i].CreatedByName = nama[r.CreatedBy]
 	}
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.PaginatedResponse[structs.CashMovementResponse]]{
 		Success: true, Message: "Berhasil mengambil gerakan kas",

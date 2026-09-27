@@ -140,6 +140,10 @@ type CashMovementResponse struct {
 	Reason       string `json:"reason"`
 	OccurredAt   string `json:"occurred_at"`
 	BusinessDate string `json:"business_date"`
+	// Hanya pada daftar (GET /cash-movements): siapa yang mencatat — layar
+	// kas dipakai bergantian, dan "siapa yang mengambil Rp 50.000 tadi?"
+	// adalah pertanyaan pertama saat laci selisih.
+	CreatedByName string `json:"created_by_name,omitempty"`
 }
 
 // ── Receivable ─────────────────────────────────────────────────────────────

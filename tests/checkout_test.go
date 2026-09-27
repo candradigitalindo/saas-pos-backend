@@ -306,6 +306,18 @@ func TestShiftCloseReconciles(t *testing.T) {
 		"outlet_id": f.outletID, "direction": "out", "amount": 2000, "reason": "beli galon",
 	}).mustCode(t, "cash out", 201)
 
+	// Daftar kas menyebut siapa pencatatnya (layar kas dipakai bergantian).
+	gerak := call(t, "GET", "/api/v1/cash-movements?shift_id="+f.shiftID, f.token, nil).
+		mustOK(t, "daftar kas").data(t)["data"].([]any)
+	if len(gerak) != 2 {
+		t.Fatalf("daftar kas = %d baris, mau 2", len(gerak))
+	}
+	for _, g := range gerak {
+		if nama, _ := g.(map[string]any)["created_by_name"].(string); nama == "" {
+			t.Fatalf("pencatat kas tanpa nama: %v", g)
+		}
+	}
+
 	// expected = 100000 + 45000 + 5000 - 2000 = 148000
 	closed := call(t, "POST", "/api/v1/shifts/"+f.shiftID+"/close", f.token, map[string]any{
 		"counted_cash": 148000,

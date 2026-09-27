@@ -33,6 +33,8 @@ export interface GerakanKas {
   reason: string
   occurred_at: string
   business_date: string
+  /** Hanya pada daftar: siapa yang mencatat. */
+  created_by_name?: string
 }
 
 /** Metode bayar yang diterima backend. 'credit' = kasbon. */
