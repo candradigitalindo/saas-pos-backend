@@ -85,6 +85,14 @@ services:
     profiles: ["jobs"]
     depends_on: { db: { condition: service_healthy } }
 
+  subscription-renewals:
+    build: .
+    entrypoint: ["/usr/local/bin/subscription-renewals"]
+    env_file: [.env]
+    environment: *app-env
+    profiles: ["jobs"]
+    depends_on: { db: { condition: service_healthy } }
+
   process-channel-events:
     build: .
     entrypoint: ["/usr/local/bin/process-channel-events"]

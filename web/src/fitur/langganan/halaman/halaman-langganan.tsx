@@ -15,7 +15,14 @@ import { useSesi } from '@/bersama/hooks/use-sesi'
 import { formatRupiah } from '@/bersama/util/uang'
 import { formatTanggal } from '@/bersama/util/tanggal'
 import { cn } from '@/bersama/util/cn'
-import { langgananApi, type InfoBayar, type Paket, type TagihanLangganan } from '../api'
+import {
+  langgananApi,
+  type InfoBayar,
+  type Langganan,
+  type Paket,
+  type Pengembalian,
+  type TagihanLangganan,
+} from '../api'
 
 /**
  * Langganan aplikasi.
@@ -26,6 +33,7 @@ import { langgananApi, type InfoBayar, type Paket, type TagihanLangganan } from 
  */
 export function HalamanLangganan() {
   const [bayarUntuk, setBayarUntuk] = useState<TagihanLangganan | null>(null)
+  const [berhenti, setBerhenti] = useState(false)
 
   const ringkasan = useQuery({
     queryKey: ['langganan'],
@@ -40,12 +48,25 @@ export function HalamanLangganan() {
   const tagihanTerbuka = ringkasan.data?.open_invoice
   // Konfirmasi terbaru untuk tagihan terbuka: menunggu verifikasi atau ditolak.
   const konfirmasi = ringkasan.data?.payment_claim
+  const pengembalian = ringkasan.data?.refund
   // 404 = memang belum pernah berlangganan (paket Gratis). Galat LAIN jangan
   // disamarkan sebagai "Anda memakai paket Gratis" — pemilik yang baru
   // membayar akan mengira pembayarannya hilang.
   const belumBerlangganan =
     (ringkasan.error instanceof GalatAPI && ringkasan.error.status === 404) ||
     (ringkasan.isSuccess && !langganan)
+  // Langganan yang sudah dihentikan, atau data lama "masa coba paket Gratis":
+  // kartu atas menampilkan paket Gratis apa adanya — bukan lagi masa coba,
+  // tanggal berlaku, atau tombol bayar (dulu itulah yang tetap muncul setelah
+  // memilih Gratis di tengah masa coba).
+  const langgananGratis =
+    !!langganan && (paket.data?.find((p) => p.code === langganan.plan_code)?.monthly_price ?? 1) <= 0
+  const sudahBerhenti =
+    !!langganan &&
+    (langganan.status === 'canceled' || langganan.status === 'expired' || langgananGratis)
+  // Masih ada yang berjalan (masa coba / berbayar) → kartu Gratis menawarkan
+  // "Pindah ke Gratis" (= menghentikannya, dengan pengembalian bila ada).
+  const langgananHidup = !!langganan && !sudahBerhenti
 
   // Paket yang BERLAKU menurut server (GET /me) — bisa berbeda dari paket
   // yang dipilih: masa coba yang habis, atau masa bayar yang lewat tenggang,
@@ -92,7 +113,7 @@ export function HalamanLangganan() {
 
         {ringkasan.isLoading ? (
           <KerangkaKartuAngka />
-        ) : belumBerlangganan ? (
+        ) : belumBerlangganan || sudahBerhenti ? (
           <Kartu className="flex flex-col items-center gap-2 p-6 text-center">
             <Sparkles className="h-10 w-10 text-jingga-600" aria-hidden />
             <p className="text-judul-kartu font-semibold text-teks-utama">
@@ -100,9 +121,16 @@ export function HalamanLangganan() {
             </p>
             <p className="text-isi text-teks-sekunder">
               Gratis selamanya, tanpa batas barang maupun transaksi. Yang terkunci
-              hanya QRIS, kanal online, CRM, sales lapangan, dan cabang tambahan —
-              paket berbayar dimulai dengan masa coba gratis.
+              hanya QRIS, kanal online, CRM, sales lapangan, dan cabang tambahan.
+              {langganan?.trial_ends_at && new Date(langganan.trial_ends_at) > new Date()
+                ? ` Sisa masa coba Anda sampai ${formatTanggal(langganan.trial_ends_at)} bisa dilanjutkan dengan memilih paket berbayar.`
+                : ' Pilih paket berbayar di bawah kapan saja.'}
             </p>
+            {pengembalian && (
+              <div className="w-full text-left">
+                <StatusPengembalian pengembalian={pengembalian} />
+              </div>
+            )}
           </Kartu>
         ) : !langganan ? (
           <KeadaanGagal
@@ -114,9 +142,9 @@ export function HalamanLangganan() {
             onCobaLagi={() => ringkasan.refetch()}
           />
         ) : berlaku && berlaku.code !== langganan.plan_code ? (
-          // Langganan tercatat tapi TIDAK berlaku lagi (masa coba habis, lewat
-          // tenggang, atau dihentikan): katakan terus terang, dan beri jalan
-          // kembalinya di tempat yang sama.
+          // Langganan tercatat tapi TIDAK berlaku lagi (masa coba habis atau
+          // lewat tenggang): katakan terus terang, dan beri jalan kembalinya di
+          // tempat yang sama — bayar, atau tetap di Gratis.
           <Kartu className="flex flex-col gap-3 border-jingga-600 bg-permukaan-2 p-4">
             <div className="flex items-start gap-3">
               <Lock className="mt-0.5 h-5 w-5 shrink-0 text-jingga-700" aria-hidden />
@@ -124,9 +152,7 @@ export function HalamanLangganan() {
                 <p className="font-semibold text-teks-utama">
                   {langganan.status === 'trial'
                     ? `Masa coba paket ${langganan.plan_name} sudah berakhir`
-                    : langganan.status === 'canceled' || langganan.status === 'expired'
-                      ? `Langganan paket ${langganan.plan_name} sudah berhenti`
-                      : `Masa langganan paket ${langganan.plan_name} sudah habis`}
+                    : `Masa langganan paket ${langganan.plan_name} sudah habis`}
                 </p>
                 <p className="text-label text-teks-sekunder">
                   Sekarang memakai paket {berlaku.name} — fitur berbayar terkunci sampai
@@ -134,16 +160,21 @@ export function HalamanLangganan() {
                 </p>
               </div>
             </div>
-            {langganan.status !== 'canceled' && langganan.status !== 'expired' && !tagihanTerbuka && (
-              <Tombol
-                className="self-start"
-                memuat={bayarSekarang.isPending}
-                onClick={() => bayarSekarang.mutate()}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              {!tagihanTerbuka && (
+                <Tombol memuat={bayarSekarang.isPending} onClick={() => bayarSekarang.mutate()}>
+                  <CreditCard className="h-5 w-5" aria-hidden />
+                  Bayar paket {langganan.plan_name}
+                </Tombol>
+              )}
+              <button
+                type="button"
+                onClick={() => setBerhenti(true)}
+                className="text-label font-medium text-teks-sekunder underline underline-offset-4 hover:text-teks-utama focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-utama"
               >
-                <CreditCard className="h-5 w-5" aria-hidden />
-                Bayar paket {langganan.plan_name}
-              </Tombol>
-            )}
+                Tetap pakai Gratis
+              </button>
+            </div>
           </Kartu>
         ) : (
           <Kartu className="p-4">
@@ -203,6 +234,15 @@ export function HalamanLangganan() {
                   Bayar sekarang
                 </Tombol>
               )}
+            {/* Sengaja kecil dan di pojok: jalan keluar harus ADA dan jujur,
+                tapi bukan tombol yang ditekan tidak sengaja. */}
+            <button
+              type="button"
+              onClick={() => setBerhenti(true)}
+              className="mt-3 self-start text-label font-medium text-teks-sekunder underline underline-offset-4 hover:text-bahaya-teks focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-utama"
+            >
+              Berhenti berlangganan
+            </button>
           </Kartu>
         )}
 
@@ -295,6 +335,7 @@ export function HalamanLangganan() {
                 menungguBayar={
                   tagihanTerbuka?.kind === 'plan_change' && tagihanTerbuka.plan_code === p.code
                 }
+                onPindahGratis={langgananHidup ? () => setBerhenti(true) : undefined}
               />
             ))}
           </div>
@@ -334,6 +375,10 @@ export function HalamanLangganan() {
             ))}
           </Kartu>
         </section>
+      )}
+
+      {berhenti && langganan && (
+        <DialogBerhenti langganan={langganan} onTutup={() => setBerhenti(false)} />
       )}
 
       {bayarUntuk && (
@@ -404,12 +449,15 @@ function KartuPaket({
   sedangDipakai,
   sudahBerlangganan,
   menungguBayar,
+  onPindahGratis,
 }: {
   paket: Paket
   kunciFitur: string[]
   sedangDipakai: boolean
   sudahBerlangganan: boolean
   menungguBayar: boolean
+  /** Ada masa coba / langganan berjalan: pindah ke Gratis = menghentikannya. */
+  onPindahGratis?: () => void
 }) {
   const toast = useToast()
   const qc = useQueryClient()
@@ -564,11 +612,21 @@ function KartuPaket({
             <Clock className="h-5 w-5" aria-hidden />
             Menunggu pembayaran — lihat tagihan di atas
           </p>
-        ) : sudahBerlangganan && paket.monthly_price <= 0 ? (
-          // Gratis tidak "dibeli": tagihan Rp0 tidak pernah bisa dibayar.
-          <p className="text-label text-teks-sekunder">
-            Toko kembali ke paket ini dengan sendirinya bila masa berjalan tidak diperpanjang.
-          </p>
+        ) : paket.monthly_price <= 0 ? (
+          // Gratis tidak "dibeli": memilihnya = menghentikan masa coba atau
+          // langganan yang berjalan (lewat dialog berhenti, yang juga mengurus
+          // pengembalian dana). Dulu tombol ini memulai "masa coba paket
+          // Gratis" dan tagihan Rp0 yang tidak bisa dibayar.
+          onPindahGratis ? (
+            <Tombol jenis="kedua" onClick={onPindahGratis}>
+              Pindah ke Gratis
+            </Tombol>
+          ) : (
+            <p className="text-label text-teks-sekunder">
+              Toko kembali ke paket ini dengan sendirinya bila masa coba atau langganan tidak
+              dibayar.
+            </p>
+          )
         ) : (
           <Tombol
             jenis={sudahBerlangganan ? 'kedua' : 'utama'}
@@ -740,6 +798,179 @@ function DialogKonfirmasi({
           </Tombol>
           <Tombol jenis="kedua" onClick={onTutup} disabled={kirim.isPending}>
             Nanti saja
+          </Tombol>
+        </AksiDialog>
+      </IsiDialog>
+    </Dialog>
+  )
+}
+
+/** Status pengembalian dana setelah berhenti — uang kembali lewat transfer staf. */
+function StatusPengembalian({ pengembalian: r }: { pengembalian: Pengembalian }) {
+  const tujuan = [r.destination_bank, r.destination_account].filter(Boolean).join(' ')
+  return r.status === 'paid' ? (
+    <p className="flex items-start gap-2 rounded-kontrol border border-garis bg-permukaan px-3 py-2 text-label text-teks-sekunder">
+      <Check className="mt-0.5 h-4 w-4 shrink-0 text-hijau-700" aria-hidden />
+      <span>
+        Pengembalian <strong className="text-teks-utama">{formatRupiah(r.amount)}</strong> sudah
+        ditransfer{tujuan && ` ke ${tujuan}`}
+        {r.paid_at && ` pada ${formatTanggal(r.paid_at)}`}
+        {r.payout_reference && ` (referensi ${r.payout_reference})`}.
+      </span>
+    </p>
+  ) : (
+    <p className="flex items-start gap-2 rounded-kontrol border border-garis bg-permukaan px-3 py-2 text-label text-teks-sekunder">
+      <Clock className="mt-0.5 h-4 w-4 shrink-0 text-jingga-700" aria-hidden />
+      <span>
+        Pengembalian <strong className="text-teks-utama">{formatRupiah(r.amount)}</strong>
+        {tujuan && ` ke ${tujuan}`}
+        {r.destination_holder && ` a.n. ${r.destination_holder}`} sedang kami proses. Kami kabari
+        lewat WhatsApp begitu uangnya terkirim.
+      </span>
+    </p>
+  )
+}
+
+/**
+ * Berhenti berlangganan. Angkanya dari server (pratinjau), bukan dihitung di
+ * sini — rumus pengembaliannya (bulan terpakai dihitung harga normal) mudah
+ * salah dan pemilik berhak tahu angka pastinya sebelum menekan.
+ */
+function DialogBerhenti({ langganan, onTutup }: { langganan: Langganan; onTutup: () => void }) {
+  const toast = useToast()
+  const qc = useQueryClient()
+  const pratinjau = useQuery({
+    queryKey: ['langganan', 'pratinjau-berhenti'],
+    queryFn: langgananApi.pratinjauBerhenti,
+    gcTime: 0,
+  })
+  const [alasan, setAlasan] = useState('')
+  const [bank, setBank] = useState('')
+  const [rekening, setRekening] = useState('')
+  const [pemilik, setPemilik] = useState('')
+  const [galat, setGalat] = useState<string | null>(null)
+
+  const refund = pratinjau.data?.refund_amount ?? 0
+  const masaCoba = langganan.status === 'trial'
+  const sisaCoba =
+    masaCoba && langganan.trial_ends_at && new Date(langganan.trial_ends_at) > new Date()
+      ? langganan.trial_ends_at
+      : undefined
+  const perluRekening = refund > 0
+  const lengkap = !perluRekening || (bank.trim() && rekening.trim() && pemilik.trim())
+
+  const hentikan = useMutation({
+    mutationFn: () =>
+      langgananApi.berhenti({
+        reason: alasan.trim() || undefined,
+        ...(perluRekening && {
+          refund_bank: bank.trim(),
+          refund_account: rekening.trim(),
+          refund_holder: pemilik.trim(),
+        }),
+      }),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ['langganan'] })
+      qc.invalidateQueries({ queryKey: ['tagihan'] })
+      qc.invalidateQueries({ queryKey: ['me'] })
+      toast.berhasil(
+        r.refund_amount > 0
+          ? `Langganan dihentikan. Pengembalian ${formatRupiah(r.refund_amount)} sedang diproses.`
+          : masaCoba
+            ? 'Toko kembali ke paket Gratis.'
+            : 'Langganan dihentikan. Toko kembali ke paket Gratis.',
+      )
+      onTutup()
+    },
+    onError: (e) => setGalat(e instanceof GalatAPI ? e.pesan : 'Terjadi kesalahan.'),
+  })
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && !hentikan.isPending && onTutup()}>
+      <IsiDialog
+        judul={masaCoba ? 'Pindah ke paket Gratis?' : `Berhenti berlangganan paket ${langganan.plan_name}?`}
+      >
+        <p className="text-isi text-teks-sekunder">
+          {masaCoba ? `Masa coba paket ${langganan.plan_name}` : 'Paket'} berhenti{' '}
+          <strong className="text-teks-utama">sekarang</strong> dan toko kembali ke paket Gratis:
+          QRIS, kanal online, CRM, dan cabang tambahan terkunci. Penjualan, barang, dan data Anda
+          tetap aman.
+        </p>
+        {sisaCoba && (
+          <p className="text-label text-teks-sekunder">
+            Berubah pikiran? Pilih paket berbayar lagi sebelum {formatTanggal(sisaCoba)} untuk
+            melanjutkan sisa masa coba.
+          </p>
+        )}
+
+        {pratinjau.isLoading ? (
+          <KerangkaBaris jumlah={1} />
+        ) : pratinjau.isError ? (
+          <p className="text-label text-bahaya-teks">
+            {pratinjau.error instanceof GalatAPI ? pratinjau.error.pesan : 'Perhitungan belum bisa dimuat.'}
+          </p>
+        ) : perluRekening ? (
+          <div className="flex flex-col gap-3 rounded-kontrol border border-garis bg-permukaan-2 p-3">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-label text-teks-sekunder">Uang kembali</span>
+              <span className="text-judul-kartu font-bold tabular-nums text-teks-utama">
+                {formatRupiah(refund)}
+              </span>
+            </div>
+            <p className="text-keterangan text-teks-redup">
+              Dibayar {formatRupiah(pratinjau.data!.paid_amount)} − {pratinjau.data!.months_used} bulan
+              terpakai × harga normal {formatRupiah(pratinjau.data!.monthly_price)}/bulan. Ditransfer
+              tim kami ke rekening berikut.
+            </p>
+            <Kolom label="Bank" placeholder="Mis. BCA" value={bank} onChange={(e) => setBank(e.target.value)} required />
+            <Kolom
+              label="Nomor rekening"
+              inputMode="numeric"
+              value={rekening}
+              onChange={(e) => setRekening(e.target.value)}
+              required
+            />
+            <Kolom
+              label="Nama pemilik rekening"
+              value={pemilik}
+              onChange={(e) => setPemilik(e.target.value)}
+              required
+            />
+          </div>
+        ) : (
+          !masaCoba && (
+            <p className="text-label text-teks-sekunder">Tidak ada uang yang perlu dikembalikan.</p>
+          )
+        )}
+
+        <Kolom
+          label="Alasan berhenti (boleh kosong)"
+          placeholder="Membantu kami memperbaiki aplikasi"
+          value={alasan}
+          onChange={(e) => setAlasan(e.target.value)}
+        />
+
+        {galat && (
+          <p className="rounded-kontrol border border-bahaya bg-bahaya-teks/10 px-3 py-2 text-label text-bahaya-teks">
+            {galat}
+          </p>
+        )}
+
+        <AksiDialog>
+          <Tombol
+            jenis={masaCoba ? 'utama' : 'bahaya'}
+            memuat={hentikan.isPending}
+            labelMemuat={masaCoba ? 'Memindahkan…' : 'Menghentikan…'}
+            disabled={!pratinjau.isSuccess || !lengkap}
+            onClick={() => {
+              setGalat(null)
+              hentikan.mutate()
+            }}
+          >
+            {masaCoba ? 'Pindah ke Gratis' : 'Hentikan Langganan'}
+          </Tombol>
+          <Tombol jenis="kedua" onClick={onTutup} disabled={hentikan.isPending}>
+            Batal
           </Tombol>
         </AksiDialog>
       </IsiDialog>

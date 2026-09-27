@@ -131,17 +131,45 @@ func ListPaymentClaims(c *gin.Context) {
 	})
 }
 
-// CancelSubscription: POST /api/v1/subscription/cancel — batal + hitung refund.
+// CancelSubscription: POST /api/v1/subscription/cancel — berhenti sekarang;
+// pengembalian dana (bila ada) masuk antrean staf keuangan ke rekening yang
+// diisi di body.
 func CancelSubscription(c *gin.Context) {
 	var req structs.SubscriptionCancelRequest
-	_ = c.ShouldBindJSON(&req) // body opsional
-	res, err := services.CancelSubscription(c.Request.Context(), req.Reason)
+	// Body opsional (tanpa pengembalian dana tidak ada yang perlu diisi) —
+	// tapi yang dikirim tetap divalidasi. Dulu galat binding diabaikan.
+	if c.Request.ContentLength != 0 {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			validationFailed(c, err)
+			return
+		}
+	}
+	res, err := services.CancelSubscription(c.Request.Context(), services.CancelInput{
+		Reason: req.Reason, Bank: req.RefundBank, Account: req.RefundAccount, Holder: req.RefundHolder,
+	})
 	if err != nil {
 		notFoundOr(c, err, repositories.ErrSubscriptionNotFound, "Tenant belum berlangganan")
 		return
 	}
+	msg := "Langganan dihentikan"
+	if res.RefundAmount > 0 {
+		msg = "Langganan dihentikan — pengembalian dana sedang diproses"
+	}
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.SubscriptionCancelResponse]{
-		Success: true, Message: "Langganan dibatalkan", Data: res,
+		Success: true, Message: msg, Data: res,
+	})
+}
+
+// CancelPreview: GET /api/v1/subscription/cancel-preview — angka pengembalian
+// bila berhenti sekarang.
+func CancelPreview(c *gin.Context) {
+	res, err := services.CancelPreview(c.Request.Context())
+	if err != nil {
+		notFoundOr(c, err, repositories.ErrSubscriptionNotFound, "Tenant belum berlangganan")
+		return
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[structs.SubscriptionCancelPreview]{
+		Success: true, Message: "Perkiraan pengembalian dana", Data: res,
 	})
 }
 

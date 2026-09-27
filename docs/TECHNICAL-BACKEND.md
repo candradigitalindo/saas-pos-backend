@@ -1861,6 +1861,40 @@ Aturan pindah paket (`services.ChangePlan` → `lunaskan`):
 - Masa coba sekali per tenant: `StartSubscription` untuk langganan `canceled`/`expired`
   mempertahankan `trial_ends_at` lama.
 
+```sql
+-- 000041: pengingat terkirim sekali; pengembalian dana menjadi antrean.
+CREATE TABLE subscription_notices (
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('trial_ending','invoice_overdue','grace_ending')),
+  ref TEXT NOT NULL,                       -- id tagihan / tanggal yang diingatkan
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (tenant_id, kind, ref)
+);
+ALTER TABLE subscription_refunds
+  ADD COLUMN status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','paid','not_needed')),
+  ADD COLUMN destination_bank TEXT NOT NULL DEFAULT '', ADD COLUMN destination_account TEXT NOT NULL DEFAULT '',
+  ADD COLUMN destination_holder TEXT NOT NULL DEFAULT '', ADD COLUMN paid_at TIMESTAMPTZ,
+  ADD COLUMN paid_by CHAR(26) REFERENCES platform_admins(id) ON DELETE SET NULL,
+  ADD COLUMN payout_reference TEXT NOT NULL DEFAULT '';
+```
+
+Pekerjaan harian `cmd/subscription-renewals` (`services.RunSubscriptionRenewals`), idempoten:
+
+1. Langganan `active`/`past_due` + `auto_renew` yang berakhir ≤ `SUBSCRIPTION_RENEWAL_LEAD_DAYS`
+   lagi dan belum punya tagihan terbuka → `GenerateInvoice` (baris langganan dikunci `FOR UPDATE`;
+   pemilik yang menekan "Bayar sekarang" bersamaan tidak menerbitkan tagihan kedua).
+2. Tagihan `open` lewat `due_date` → `overdue` + pengingat.
+3. `active` yang periodenya lewat → `past_due` (hak paket tetap dari waktu + tenggang).
+4. Pengingat masa coba (`SUBSCRIPTION_TRIAL_REMINDER_DAYS`) dan masa tenggang
+   (`SUBSCRIPTION_GRACE_REMINDER_DAYS`, hanya bila perpanjangan belum lunas).
+
+Setiap pengingat = satu baris `subscription_notices` + satu pesan outbox di transaksi yang sama.
+Kegagalan satu tenant dicatat dan dilewati (kode keluar 2), tenant lain tetap diproses.
+
+Periode perpanjangan: tagihan yang terbit selama masih dalam tenggang bersambung dari akhir periode
+lama (hari tenggang ikut terbayar); yang dibayar setelah tenggang habis mulai hari pembayaran.
+
 ### 5.14 Tabel sistem
 
 ```sql

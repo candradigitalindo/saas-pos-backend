@@ -79,9 +79,41 @@ export interface InfoBayar {
   account_holder?: string
 }
 
+/** Pengembalian dana setelah berhenti — ditransfer staf keuangan dari panel. */
+export interface Pengembalian {
+  id: string
+  amount: number
+  months_used: number
+  status: 'pending' | 'paid' | 'not_needed'
+  destination_bank?: string
+  destination_account?: string
+  destination_holder?: string
+  payout_reference?: string
+  created_at: string
+  paid_at?: string
+}
+
+/** Angka pengembalian bila berhenti SEKARANG. */
+export interface PratinjauBerhenti {
+  refund_amount: number
+  months_used: number
+  paid_amount: number
+  term_months: number
+  monthly_price: number
+}
+
+export interface InputBerhenti {
+  reason?: string
+  refund_bank?: string
+  refund_account?: string
+  refund_holder?: string
+}
+
 export interface RingkasanLangganan {
   subscription: Langganan
   open_invoice?: TagihanLangganan
+  /** Pengembalian dana terbaru yang bernilai (setelah berhenti). */
+  refund?: Pengembalian
   /** Konfirmasi TERBARU untuk tagihan terbuka (menunggu / ditolak). */
   payment_claim?: KonfirmasiBayar
   /** Kosong bila rekening tujuan belum dikonfigurasi di server. */
@@ -106,13 +138,16 @@ export const langgananApi = {
   batalkanGanti: (invoiceId: string) =>
     api.post<TagihanLangganan>(`/subscription/invoices/${invoiceId}/void`, {}),
 
-  berhenti: (reason?: string) =>
+  pratinjauBerhenti: () => api.get<PratinjauBerhenti>('/subscription/cancel-preview'),
+
+  /** Rekening tujuan wajib bila ada uang yang dikembalikan (lihat pratinjau). */
+  berhenti: (input: InputBerhenti) =>
     api.post<{
       refund_amount: number
       earned_amount: number
       months_used: number
       subscription: Langganan
-    }>('/subscription/cancel', { reason }),
+    }>('/subscription/cancel', input),
 
   /**
    * Menerbitkan tagihan untuk paket & masa langganan yang dipilih. Dulu tidak

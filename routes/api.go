@@ -215,6 +215,10 @@ func registerPlatformRoutes(v1 *gin.RouterGroup) {
 	pf.GET("/subscription-payment-claims", tagihan, controllers.PlatformListPaymentClaims)
 	pf.POST("/subscription-payment-claims/:id/approve", tagihan, controllers.PlatformApprovePaymentClaim)
 	pf.POST("/subscription-payment-claims/:id/reject", tagihan, controllers.PlatformRejectPaymentClaim)
+	// Pengembalian dana langganan yang dihentikan — uang KELUAR, wewenang keuangan.
+	refund := middlewares.RequirePlatform(models.CapBillingRefund)
+	pf.GET("/subscription-refunds", refund, controllers.PlatformListRefunds)
+	pf.POST("/subscription-refunds/:id/paid", refund, controllers.PlatformMarkRefundPaid)
 
 	// Outbox notifikasi (§5.14): antrean, antrean mati, dan template pesan.
 	pf.GET("/outbox", baca, controllers.PlatformListOutbox)
@@ -380,6 +384,7 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	sub.POST("", controllers.StartSubscription)
 	sub.POST("/invoices", controllers.GenerateSubInvoice)
 	sub.GET("/invoices", controllers.ListSubInvoices)
+	sub.GET("/cancel-preview", controllers.CancelPreview)
 	sub.POST("/cancel", controllers.CancelSubscription)
 	sub.POST("/change-plan", controllers.ChangeSubscriptionPlan)
 	sub.POST("/invoices/:id/void", controllers.VoidPlanChangeInvoice)

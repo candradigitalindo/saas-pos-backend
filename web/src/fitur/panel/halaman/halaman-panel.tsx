@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Coins, LogOut, ReceiptText, RefreshCw, ShieldCheck, Users } from 'lucide-react'
+import { AlertTriangle, Coins, LogOut, ReceiptText, RefreshCw, ShieldCheck, Undo2, Users } from 'lucide-react'
 import { AksiDialog, Dialog, IsiDialog } from '@/bersama/ui/dialog'
 import { Kartu } from '@/bersama/ui/kartu'
 import { Kolom } from '@/bersama/ui/kolom'
@@ -21,7 +21,13 @@ import { GalatAPI } from '@/lib/api-client'
 import { formatTanggalJam, tanggalISO } from '@/bersama/util/tanggal'
 import { cn } from '@/bersama/util/cn'
 import { formatRupiah } from '@/bersama/util/uang'
-import { KEMAMPUAN, panelApi, type AdminPanel, type KonfirmasiBayarPanel } from '../api'
+import {
+  KEMAMPUAN,
+  panelApi,
+  type AdminPanel,
+  type KonfirmasiBayarPanel,
+  type PengembalianPanel,
+} from '../api'
 import { SegmenPilihan } from '@/bersama/ui/segmen'
 import { keDate } from '@/bersama/util/tanggal'
 
@@ -115,7 +121,7 @@ function usePanel(): NilaiSesiPanel {
 
 // ── Kerangka ───────────────────────────────────────────────────────────────
 
-type Tab = 'mitra' | 'pembayaran' | 'komisi' | 'outbox'
+type Tab = 'mitra' | 'pembayaran' | 'pengembalian' | 'komisi' | 'outbox'
 
 function IsiPanel() {
   const { sudahMasuk, memuat, admin, keluar, bisa } = usePanel()
@@ -135,6 +141,12 @@ function IsiPanel() {
     queryKey: ['panel-bayar', 'pending'],
     queryFn: () => panelApi.konfirmasiBayar('pending'),
     enabled: bolehBayar,
+    refetchInterval: 60_000,
+  })
+  const menungguDana = useQuery({
+    queryKey: ['panel-dana', 'pending'],
+    queryFn: () => panelApi.pengembalian('pending'),
+    enabled: sudahMasuk && bisa(KEMAMPUAN.kembalikanDana),
     refetchInterval: 60_000,
   })
 
@@ -159,6 +171,16 @@ function IsiPanel() {
             label: 'Konfirmasi Pembayaran',
             ikon: ReceiptText,
             lencana: menungguBayar.data?.length ?? 0,
+          },
+        ]
+      : []),
+    ...(bisa(KEMAMPUAN.kembalikanDana)
+      ? [
+          {
+            kunci: 'pengembalian' as const,
+            label: 'Pengembalian Dana',
+            ikon: Undo2,
+            lencana: menungguDana.data?.length ?? 0,
           },
         ]
       : []),
@@ -231,6 +253,7 @@ function IsiPanel() {
         <main className="min-w-0 flex-1">
           {tab === 'mitra' && <PanelMitra />}
           {tab === 'pembayaran' && <PanelPembayaran />}
+          {tab === 'pengembalian' && <PanelPengembalian />}
           {tab === 'komisi' && <PanelKomisi />}
           {tab === 'outbox' && <PanelOutbox />}
         </main>
@@ -564,6 +587,145 @@ function PanelPembayaran() {
                 Tolak Konfirmasi
               </Tombol>
               <Tombol jenis="kedua" disabled={tolak.isPending} onClick={() => setTolakUntuk(null)}>
+                Batal
+              </Tombol>
+            </AksiDialog>
+          </IsiDialog>
+        </Dialog>
+      )}
+    </section>
+  )
+}
+
+// ── Pengembalian dana ──────────────────────────────────────────────────────
+
+/**
+ * Antrean uang KELUAR: langganan yang dihentikan di tengah masa prabayar.
+ * Staf keuangan mentransfer ke rekening yang diisi pemilik, lalu menandainya
+ * dengan nomor referensi transfer — pemilik diberi tahu lewat WhatsApp dan
+ * melihatnya di menu Langganan.
+ */
+function PanelPengembalian() {
+  const toast = useToast()
+  const qc = useQueryClient()
+  const [saring, setSaring] = useState<'pending' | 'paid' | 'all'>('pending')
+  const [untuk, setUntuk] = useState<PengembalianPanel | null>(null)
+  const [referensi, setReferensi] = useState('')
+
+  const daftar = useQuery({
+    queryKey: ['panel-dana', saring],
+    queryFn: () => panelApi.pengembalian(saring),
+  })
+  const tandai = useMutation({
+    mutationFn: (v: { r: PengembalianPanel; ref: string }) => panelApi.tandaiDitransfer(v.r.id, v.ref),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: ['panel-dana'] })
+      setUntuk(null)
+      setReferensi('')
+      toast.berhasil(`Pengembalian ${v.r.business_name} ditandai sudah ditransfer.`)
+    },
+    onError: (e) => toast.gagal(e instanceof GalatAPI ? e.pesan : 'Terjadi kesalahan.'),
+  })
+  const isi = daftar.data ?? []
+
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-judul font-bold text-teks-utama">Pengembalian Dana</h2>
+        <SegmenPilihan
+          label="Saring pengembalian"
+          nilai={saring}
+          onPilih={setSaring}
+          pilihan={[
+            ['pending', 'Menunggu'],
+            ['paid', 'Sudah ditransfer'],
+            ['all', 'Semua'],
+          ]}
+        />
+      </div>
+      <p className="text-label text-teks-sekunder">
+        Transfer ke rekening tujuan dulu, baru tandai di sini dengan nomor referensi transfernya.
+      </p>
+
+      {daftar.isLoading ? (
+        <KerangkaBaris jumlah={3} />
+      ) : isi.length === 0 ? (
+        <p className="text-isi text-teks-redup">
+          {saring === 'pending' ? 'Tidak ada pengembalian yang menunggu.' : 'Belum ada data.'}
+        </p>
+      ) : (
+        <Kartu className="divide-y divide-garis">
+          {isi.map((r) => (
+            <div key={r.id} className="flex flex-wrap items-start justify-between gap-3 p-4">
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-teks-utama">
+                  {r.business_name}
+                  {r.plan_name && <span className="font-normal text-teks-sekunder"> · paket {r.plan_name}</span>}
+                </p>
+                <p className="text-label text-teks-sekunder">
+                  <span className="font-semibold tabular-nums text-teks-utama">{formatRupiah(r.amount)}</span>
+                  {' → '}
+                  {r.destination_bank || r.destination_account ? (
+                    <span className="font-medium text-teks-utama">
+                      {[r.destination_bank, r.destination_account].filter(Boolean).join(' ')}
+                      {r.destination_holder && ` a.n. ${r.destination_holder}`}
+                    </span>
+                  ) : (
+                    <span className="text-bahaya-teks">rekening belum diisi — hubungi tenant</span>
+                  )}
+                </p>
+                <p className="text-keterangan text-teks-redup">
+                  Tagihan {r.invoice_number} · dibayar {formatRupiah(r.invoice_paid + r.amount)} ·{' '}
+                  {r.months_used} bulan terpakai · berhenti {formatTanggalJam(r.created_at)}
+                  {r.tenant_phone && ` · ${r.tenant_phone}`}
+                </p>
+                {r.reason && <p className="text-keterangan text-teks-redup">Alasan: {r.reason}</p>}
+                {r.status === 'paid' && (
+                  <p className="text-keterangan text-teks-redup">
+                    Ditransfer {r.paid_at && formatTanggalJam(r.paid_at)} · ref {r.payout_reference}
+                  </p>
+                )}
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                {r.status === 'pending' ? (
+                  <Tombol ukuran="padat" onClick={() => setUntuk(r)}>
+                    Tandai Sudah Ditransfer
+                  </Tombol>
+                ) : (
+                  <LencanaStatus nada="berhasil" anak="Ditransfer" />
+                )}
+              </div>
+            </div>
+          ))}
+        </Kartu>
+      )}
+
+      {untuk && (
+        <Dialog open onOpenChange={(o) => !o && !tandai.isPending && setUntuk(null)}>
+          <IsiDialog judul="Tandai sudah ditransfer?">
+            <p className="text-isi text-teks-sekunder">
+              <strong className="text-teks-utama">{formatRupiah(untuk.amount)}</strong> ke{' '}
+              <strong className="text-teks-utama">
+                {[untuk.destination_bank, untuk.destination_account].filter(Boolean).join(' ') || '—'}
+              </strong>
+              {untuk.destination_holder && ` a.n. ${untuk.destination_holder}`} ({untuk.business_name}).
+            </p>
+            <Kolom
+              label="Nomor referensi transfer"
+              placeholder="Dari bukti transfer bank"
+              value={referensi}
+              onChange={(e) => setReferensi(e.target.value)}
+              autoFocus
+            />
+            <AksiDialog>
+              <Tombol
+                memuat={tandai.isPending}
+                disabled={referensi.trim().length < 3}
+                onClick={() => tandai.mutate({ r: untuk, ref: referensi.trim() })}
+              >
+                Tandai Ditransfer
+              </Tombol>
+              <Tombol jenis="kedua" disabled={tandai.isPending} onClick={() => setUntuk(null)}>
                 Batal
               </Tombol>
             </AksiDialog>

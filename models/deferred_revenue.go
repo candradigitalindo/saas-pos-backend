@@ -43,12 +43,48 @@ type SubscriptionRefund struct {
 	Reason                string    `json:"reason"`
 	RefundedAt            time.Time `json:"refunded_at"`
 	CreatedAt             time.Time `json:"created_at"`
+
+	// Antrean pencairan (000041): pending → paid oleh staf keuangan di panel;
+	// not_needed untuk yang nilainya nol. Rekening tujuan diisi tenant saat
+	// berhenti.
+	Status             string     `json:"status" gorm:"not null;default:pending"`
+	DestinationBank    string     `json:"destination_bank"`
+	DestinationAccount string     `json:"destination_account"`
+	DestinationHolder  string     `json:"destination_holder"`
+	PaidAt             *time.Time `json:"paid_at"`
+	PaidBy             *string    `json:"paid_by" gorm:"type:char(26)"`
+	PayoutReference    string     `json:"payout_reference"`
 }
 
 // BeforeCreate meng-generate ULID bila ID belum diisi.
 func (r *SubscriptionRefund) BeforeCreate(tx *gorm.DB) (err error) {
 	if r.ID == "" {
 		r.ID = ulid.New()
+	}
+	return
+}
+
+// SubscriptionNotice menandai satu pengingat langganan yang SUDAH dikirim
+// pekerjaan harian (000041) — UNIQUE (tenant_id, kind, ref) menjamin sekali.
+type SubscriptionNotice struct {
+	ID        string    `json:"id" gorm:"primaryKey;type:char(26)"`
+	TenantID  string    `json:"tenant_id" gorm:"type:char(26);not null"`
+	Kind      string    `json:"kind" gorm:"not null"`
+	Ref       string    `json:"ref" gorm:"not null"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// Jenis pengingat langganan.
+const (
+	NoticeTrialEnding    = "trial_ending"
+	NoticeInvoiceOverdue = "invoice_overdue"
+	NoticeGraceEnding    = "grace_ending"
+)
+
+// BeforeCreate meng-generate ULID bila ID belum diisi.
+func (n *SubscriptionNotice) BeforeCreate(tx *gorm.DB) (err error) {
+	if n.ID == "" {
+		n.ID = ulid.New()
 	}
 	return
 }

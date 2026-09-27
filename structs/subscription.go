@@ -22,6 +22,51 @@ type SubscriptionChangePlanRequest struct {
 // SubscriptionCancelRequest membatalkan langganan di tengah masa.
 type SubscriptionCancelRequest struct {
 	Reason string `json:"reason" binding:"omitempty,max=255"`
+	// Rekening tujuan pengembalian dana — wajib bila ada uang yang
+	// dikembalikan (lihat GET /subscription/cancel-preview).
+	RefundBank    string `json:"refund_bank" binding:"omitempty,max=60"`
+	RefundAccount string `json:"refund_account" binding:"omitempty,max=40"`
+	RefundHolder  string `json:"refund_holder" binding:"omitempty,max=100"`
+}
+
+// SubscriptionCancelPreview: angka pengembalian bila berhenti sekarang.
+type SubscriptionCancelPreview struct {
+	RefundAmount int64 `json:"refund_amount"`
+	MonthsUsed   int   `json:"months_used"`
+	PaidAmount   int64 `json:"paid_amount"`
+	TermMonths   int   `json:"term_months"`
+	MonthlyPrice int64 `json:"monthly_price"`
+}
+
+// SubscriptionRefundResponse: satu pengembalian dana langganan.
+type SubscriptionRefundResponse struct {
+	ID                 string `json:"id"`
+	Amount             int64  `json:"amount"`
+	MonthsUsed         int    `json:"months_used"`
+	Status             string `json:"status"` // pending | paid | not_needed
+	DestinationBank    string `json:"destination_bank,omitempty"`
+	DestinationAccount string `json:"destination_account,omitempty"`
+	DestinationHolder  string `json:"destination_holder,omitempty"`
+	PayoutReference    string `json:"payout_reference,omitempty"`
+	CreatedAt          string `json:"created_at"`
+	PaidAt             string `json:"paid_at,omitempty"`
+}
+
+// PlatformRefundResponse: pengembalian dana untuk antrean panel.
+type PlatformRefundResponse struct {
+	SubscriptionRefundResponse
+	TenantID      string `json:"tenant_id"`
+	BusinessName  string `json:"business_name"`
+	TenantPhone   string `json:"tenant_phone,omitempty"`
+	InvoiceNumber string `json:"invoice_number"`
+	InvoicePaid   int64  `json:"invoice_paid"`
+	PlanName      string `json:"plan_name,omitempty"`
+	Reason        string `json:"reason,omitempty"`
+}
+
+// RefundPaidRequest: staf keuangan menandai pengembalian sudah ditransfer.
+type RefundPaidRequest struct {
+	Reference string `json:"reference" binding:"required,min=3,max=100"`
 }
 
 // PaymentClaimRequest: tenant MENGONFIRMASI pembayaran tagihan langganan
@@ -110,6 +155,8 @@ type SubInvoiceResponse struct {
 type SubscriptionOverviewResponse struct {
 	Subscription SubscriptionResponse `json:"subscription"`
 	OpenInvoice  *SubInvoiceResponse  `json:"open_invoice,omitempty"`
+	// Pengembalian dana terbaru (bila ada yang bernilai) — ditampilkan setelah berhenti.
+	Refund *SubscriptionRefundResponse `json:"refund,omitempty"`
 	// PaymentClaim: konfirmasi TERBARU untuk tagihan terbuka — menunggu
 	// verifikasi, atau ditolak (beserta alasannya).
 	PaymentClaim *PaymentClaimResponse `json:"payment_claim,omitempty"`

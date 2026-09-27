@@ -17,6 +17,8 @@ export const KEMAMPUAN = {
   baca: 'platform.read',
   /** Memverifikasi konfirmasi pembayaran langganan (finance & superadmin). */
   verifikasiBayar: 'billing.verify',
+  /** Mentransfer pengembalian dana langganan yang dihentikan (finance & superadmin). */
+  kembalikanDana: 'billing.refund',
 } as const
 
 export interface AdminPanel {
@@ -82,6 +84,27 @@ export interface KonfirmasiBayarPanel {
   plan_name?: string
 }
 
+/** Pengembalian dana langganan yang dihentikan, dengan konteksnya. */
+export interface PengembalianPanel {
+  id: string
+  amount: number
+  months_used: number
+  status: 'pending' | 'paid' | 'not_needed'
+  destination_bank?: string
+  destination_account?: string
+  destination_holder?: string
+  payout_reference?: string
+  created_at: string
+  paid_at?: string
+  tenant_id: string
+  business_name: string
+  tenant_phone?: string
+  invoice_number: string
+  invoice_paid: number
+  plan_name?: string
+  reason?: string
+}
+
 export interface HasilJalankanKomisi {
   from: string
   to: string
@@ -127,4 +150,11 @@ export const panelApi = {
     api.post<unknown>(`/platform/subscription-payment-claims/${id}/approve`, {}, PANEL),
   tolakBayar: (id: string, reason: string) =>
     api.post<null>(`/platform/subscription-payment-claims/${id}/reject`, { reason }, PANEL),
+
+  /** Pengembalian dana. status: pending (bawaan) | paid | all. */
+  pengembalian: (status?: string) =>
+    api.get<PengembalianPanel[]>('/platform/subscription-refunds', { ...PANEL, query: { status } }),
+  /** Uang sudah ditransfer ke rekening tenant — dengan nomor referensinya. */
+  tandaiDitransfer: (id: string, reference: string) =>
+    api.post<unknown>(`/platform/subscription-refunds/${id}/paid`, { reference }, PANEL),
 }

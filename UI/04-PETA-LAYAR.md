@@ -223,6 +223,7 @@ menu aktif selalu digulir ke dalam pandangan.
 | Konfirmasi sudah bayar | `POST /subscription-payment-claims` + `Idempotency-Key` | `billing.manage` |
 | Ganti paket / berhenti | `POST /subscription/change-plan` · `POST /subscription/cancel` | `billing.manage` |
 | Batalkan pindah paket | `POST /subscription/invoices/:id/void` | `billing.manage` |
+| Berhenti berlangganan | `GET /subscription/cancel-preview` · `POST /subscription/cancel` | `billing.manage` |
 | Bayar sekarang (masa coba / habis / tenggang) | `POST /subscription/invoices` lalu konfirmasi | `billing.manage` |
 
 **Pembayaran langganan diverifikasi, bukan dinyatakan sendiri.** Dialog "Konfirmasi Pembayaran"
@@ -239,6 +240,18 @@ kartu tagihannya berjudul "Tagihan pindah ke paket …", menyebut bahwa paket se
 berjalan sampai pembayarannya diverifikasi (plus potongan sisa masa paket lama), dan punya tombol
 "Batalkan Pindah Paket". Kartu paket tujuannya bertuliskan "Menunggu pembayaran". Kartu Gratis tidak
 punya tombol untuk pelanggan berbayar — toko kembali ke Gratis sendiri bila tidak diperpanjang.
+
+**Pindah ke Gratis** (tombol di kartu Gratis selama ada masa coba/langganan berjalan, dan tautan
+"Tetap pakai Gratis" di kartu masa coba yang habis) membuka dialog berhenti yang sama. Setelahnya
+kartu atas menampilkan "Anda memakai paket Gratis" — tanpa masa coba, tanggal berlaku, atau tombol
+bayar — plus sisa masa coba yang masih bisa dilanjutkan. Dulu kartu Gratis memulai "masa coba paket
+Gratis" dan tagihan Rp0 yang tidak bisa dibayar (000041 merapikan data yang terlanjur).
+
+**Berhenti berlangganan** adalah tautan kecil di kartu status (jalan keluar harus ada dan jujur,
+tapi bukan tombol besar). Dialognya membaca angka dari `cancel-preview` — uang kembali = dibayar −
+bulan terpakai × harga normal — dan meminta bank, nomor rekening, dan nama pemilik bila ada uang
+kembali. Setelah berhenti, kartu status menampilkan status pengembaliannya ("sedang kami proses" →
+"sudah ditransfer … referensi …").
 
 **Kunci paket di layar** (dari `plan` di `GET /me`; penegakannya tetap di server, 402):
 
@@ -364,6 +377,7 @@ staf hanya melihat yang boleh ia kerjakan.
 | Pelatihan | `GET\|POST /platform/partner-trainings` | baca: semua · tulis: operator |
 | Sengketa atribusi | `GET /platform/partner-disputes` · `POST /platform/partner-disputes/:id/resolve` | baca: semua · putus: operator |
 | Konfirmasi pembayaran langganan | `GET /platform/subscription-payment-claims` · `POST …/:id/approve` · `POST …/:id/reject` | superadmin, finance (`billing.verify`) |
+| Pengembalian dana langganan | `GET /platform/subscription-refunds` · `POST …/:id/paid` | superadmin, finance (`billing.refund`) |
 | Antrean notifikasi | `GET /platform/outbox` · `POST /platform/outbox/:id/retry` | baca: semua · ulang: superadmin |
 | Template pesan | `POST /platform/notification-templates` | superadmin |
 

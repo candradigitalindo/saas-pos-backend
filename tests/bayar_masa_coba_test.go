@@ -61,7 +61,7 @@ func TestBayarSaatMasaCobaMulaiSetelahMasaCobaHabis(t *testing.T) {
 
 	// Berhenti sebelum masa berbayarnya mulai → belum ada bulan terpakai,
 	// uang kembali utuh (dulu minimal 1 bulan dianggap terpakai).
-	res := call(t, "POST", "/api/v1/subscription/cancel", f.token, map[string]any{"reason": "batal"}).
+	res := call(t, "POST", "/api/v1/subscription/cancel", f.token, berhentiDengan("batal")).
 		mustOK(t, "berhenti").data(t)
 	assertI64(t, res, "months_used", 0)
 	assertI64(t, res, "refund_amount", total)

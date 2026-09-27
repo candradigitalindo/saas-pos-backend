@@ -326,9 +326,7 @@ func TestPartnerClawback(t *testing.T) {
 		t.Fatalf("hitung awal: run=%+v err=%v", run, err)
 	}
 
-	call(t, "POST", "/api/v1/subscription/cancel", f.token, map[string]any{
-		"reason": "tutup usaha",
-	}).mustOK(t, "batalkan langganan")
+	call(t, "POST", "/api/v1/subscription/cancel", f.token, berhentiDengan("tutup usaha")).mustOK(t, "batalkan langganan")
 
 	run2, err := services.ComputePartnerCommissions(bg(), pid, from, to)
 	if err != nil {

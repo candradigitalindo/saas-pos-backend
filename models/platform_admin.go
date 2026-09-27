@@ -50,13 +50,16 @@ const (
 	// (menyetujui = mengaktifkan paket berbayar). Wewenang keuangan — bukan
 	// operator yang memverifikasi mitra.
 	CapBillingVerify = "billing.verify"
+	// CapBillingRefund: mencairkan pengembalian dana langganan yang dihentikan
+	// (uang KELUAR) — keuangan, bukan operator.
+	CapBillingRefund = "billing.refund"
 )
 
 // platformCaps memetakan peran → kemampuan.
 var platformCaps = map[string][]string{
-	"superadmin": {CapPartnerVerify, CapPartnerFinance, CapPartnerDispute, CapPlatformAdmin, CapPlatformRead, CapBillingVerify},
+	"superadmin": {CapPartnerVerify, CapPartnerFinance, CapPartnerDispute, CapPlatformAdmin, CapPlatformRead, CapBillingVerify, CapBillingRefund},
 	"operator":   {CapPartnerVerify, CapPartnerDispute, CapPlatformRead},
-	"finance":    {CapPartnerFinance, CapPlatformRead, CapBillingVerify},
+	"finance":    {CapPartnerFinance, CapPlatformRead, CapBillingVerify, CapBillingRefund},
 	"support":    {CapPlatformRead},
 }
 

@@ -24,6 +24,34 @@ var notifTemplateCatalog = []notifTemplateSeed{
 			"Jumlah: {{total}}\nJatuh tempo: {{jatuh_tempo}}\n\nTerima kasih.",
 	},
 	{
+		Code: "subscription.trial_ending", Channel: "whatsapp", Subject: "",
+		Body: "Halo {{nama_usaha}} 👋\n\nMasa coba paket {{paket}} berakhir {{sampai}}. Supaya QRIS dan fitur " +
+			"paket lainnya tetap jalan, bayar lewat menu Langganan — masa berbayar baru dimulai setelah masa " +
+			"coba berakhir, jadi tidak ada hari yang hilang.",
+	},
+	{
+		Code: "subscription.invoice_overdue", Channel: "whatsapp", Subject: "",
+		Body: "Halo {{nama_usaha}},\n\nTagihan langganan {{nomor}} sebesar {{jumlah}} sudah lewat jatuh tempo " +
+			"({{jatuh_tempo}}). Fitur paket tetap jalan selama masa tenggang — bayar lewat menu Langganan " +
+			"supaya tidak terkunci.",
+	},
+	{
+		Code: "subscription.grace_ending", Channel: "whatsapp", Subject: "",
+		Body: "Halo {{nama_usaha}},\n\nMasa tenggang langganan Anda berakhir {{sampai}}. Setelah itu fitur paket " +
+			"berbayar (QRIS, kanal online, CRM, cabang tambahan) terkunci sampai tagihan {{nomor}} ({{jumlah}}) " +
+			"dibayar. Penjualan biasa tetap jalan.",
+	},
+	{
+		Code: "subscription.refund_requested", Channel: "whatsapp", Subject: "",
+		Body: "Halo {{nama_usaha}},\n\nLangganan Anda sudah dihentikan. Pengembalian dana {{jumlah}} akan kami " +
+			"transfer ke {{rekening}}. Kami kabari lagi begitu uangnya terkirim.",
+	},
+	{
+		Code: "subscription.refund_paid", Channel: "whatsapp", Subject: "",
+		Body: "Halo {{nama_usaha}},\n\nPengembalian dana {{jumlah}} sudah kami transfer ke {{rekening}} " +
+			"(referensi {{referensi}}). Terima kasih sudah memakai aplikasi kami.",
+	},
+	{
 		Code: "subscription.payment_approved", Channel: "whatsapp", Subject: "",
 		Body: "Halo {{nama_usaha}} 👋\n\nPembayaran {{jumlah}} untuk tagihan {{nomor}} sudah kami terima. " +
 			"Terima kasih!\n\nFitur paket Anda sudah aktif — buka menu Langganan untuk melihat masa berlakunya.",

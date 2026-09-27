@@ -39,6 +39,14 @@ var (
 	tokenKeuangan  string
 )
 
+// berhentiDengan: body POST /subscription/cancel lengkap dengan rekening
+// tujuan pengembalian dana (wajib bila ada uang yang dikembalikan).
+func berhentiDengan(alasan string) map[string]any {
+	return map[string]any{
+		"reason": alasan, "refund_bank": "BCA", "refund_account": "1234567890", "refund_holder": "Pemilik Uji",
+	}
+}
+
 // tokenKeuanganPlatform: token staf keuangan panel (billing.verify), dibuat
 // sekali per jalannya tes.
 func tokenKeuanganPlatform(t *testing.T) string {
@@ -110,7 +118,7 @@ func TestSubscriptionPrepaidCancelRefund(t *testing.T) {
 		t.Fatalf("backdate invoice: %v", err)
 	}
 
-	res := call(t, "POST", "/api/v1/subscription/cancel", f.token, map[string]any{"reason": "tutup usaha"}).
+	res := call(t, "POST", "/api/v1/subscription/cancel", f.token, berhentiDengan("tutup usaha")).
 		mustOK(t, "cancel").data(t)
 	// refund = 789684 - 5 * 79000 = 394684 ; earned = 395000
 	assertI64(t, res, "months_used", 5)

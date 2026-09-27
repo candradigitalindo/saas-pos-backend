@@ -356,3 +356,29 @@ func TestKreditTidakMelebihiYangDibayar(t *testing.T) {
 	}).mustCode(t, "ganti ke Pro 12 bulan", 201).data(t)
 	assertI64(t, inv, "credit_amount", 789684)
 }
+
+// Memilih Gratis bukan "berlangganan": dulu di tengah masa coba ia menjadi
+// masa coba paket Gratis, lalu "Bayar sekarang" menerbitkan tagihan Rp0 yang
+// tidak mungkin dibayar — toko tersangkut.
+func TestPaketGratisTidakDipilihAtauDitagih(t *testing.T) {
+	requireDB(t)
+	f := registerTenantPolos(t, "pilihgratis")
+	call(t, "POST", "/api/v1/subscription", f.token, map[string]any{
+		"plan_code": "basic", "term_months": 1,
+	}).mustCode(t, "mulai Basic", 201)
+	call(t, "POST", "/api/v1/subscription", f.token, map[string]any{
+		"plan_code": "free", "term_months": 1,
+	}).mustCode(t, "pilih Gratis di masa coba", 422)
+
+	// Data lama yang sudah terlanjur "masa coba paket Gratis": tagihannya ditolak.
+	database.DB.Exec(`UPDATE subscriptions SET plan_id = (SELECT id FROM plans WHERE code = 'free') WHERE tenant_id = ?`, f.tenantID)
+	call(t, "POST", "/api/v1/subscription/invoices", f.token, nil).mustCode(t, "tagihan paket Gratis", 422)
+	// Jalan keluarnya: pilih paket berbayar.
+	call(t, "POST", "/api/v1/subscription", f.token, map[string]any{
+		"plan_code": "pro", "term_months": 1,
+	}).mustCode(t, "pilih Pro", 201)
+	inv := call(t, "POST", "/api/v1/subscription/invoices", f.token, nil).mustCode(t, "tagihan Pro", 201).data(t)
+	if inv["total_amount"].(float64) <= 0 {
+		t.Fatalf("tagihan Pro = %v", inv["total_amount"])
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"candra/backend-api/config"
@@ -75,6 +76,12 @@ func StartSubscription(ctx context.Context, planCode string, term int) (structs.
 		plan, err := repositories.FindPlanByCode(ctx, tx, planCode)
 		if err != nil {
 			return err
+		}
+		if plan.MonthlyPrice <= 0 {
+			// Dulu memilih Gratis di tengah masa coba menghasilkan "masa coba
+			// paket Gratis" — dan "Bayar sekarang" lalu menerbitkan tagihan Rp0
+			// yang tidak mungkin dibayar, menggantung selamanya.
+			return fmt.Errorf("%w: paket %s tidak perlu dipilih — toko memakainya dengan sendirinya bila masa coba atau langganan tidak dibayar. Untuk berhenti sekarang, pakai \"Berhenti berlangganan\"", helpers.ErrValidation, plan.Name)
 		}
 		rate, err := repositories.TermDiscountRate(ctx, tx, term)
 		if err != nil {
@@ -175,7 +182,9 @@ func StartSubscription(ctx context.Context, planCode string, term int) (structs.
 func GenerateInvoice(ctx context.Context) (structs.SubInvoiceResponse, error) {
 	var out structs.SubInvoiceResponse
 	err := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
-		sub, err := repositories.FindSubscriptionByTenant(ctx, tx)
+		// Dikunci: pekerjaan harian perpanjangan dan pemilik yang menekan
+		// "Bayar sekarang" bersamaan tidak boleh menerbitkan dua tagihan.
+		sub, err := repositories.LockSubscriptionByTenant(ctx, tx)
 		if err != nil {
 			return err
 		}
@@ -188,6 +197,9 @@ func GenerateInvoice(ctx context.Context) (structs.SubInvoiceResponse, error) {
 		plan, err := repositories.FindPlanByID(ctx, tx, sub.PlanID)
 		if err != nil {
 			return err
+		}
+		if plan.MonthlyPrice <= 0 {
+			return fmt.Errorf("%w: paket %s tidak ditagih — pilih paket berbayar dulu", helpers.ErrValidation, plan.Name)
 		}
 
 		inv, err := buildInvoice(ctx, tx, sub, plan, sub.TermMonths, sub.DiscountRate, 0, models.SubInvoiceRegular)
@@ -280,15 +292,18 @@ func buildInvoice(ctx context.Context, tx *gorm.DB, sub models.Subscription, pla
 }
 
 // awalPeriodeBerbayar menentukan kapan masa berbayar sebuah tagihan dimulai:
-//   - perpanjangan langganan aktif → tepat saat periode berjalan berakhir;
+//   - perpanjangan langganan berbayar yang belum lewat masa tenggang → tepat
+//     saat periode berjalan berakhir (hari-hari tenggang ikut terbayar, karena
+//     fiturnya memang tetap jalan);
 //   - masih dalam masa coba → saat masa coba berakhir, supaya membayar lebih
 //     awal tidak menghanguskan sisa masa coba (dulu masa berbayar dimulai hari
 //     itu juga, jadi pemilik yang rajin membayar di hari pertama kehilangan 14
 //     hari gratisnya);
-//   - selain itu (masa coba habis, langganan lewat) → hari ini.
+//   - selain itu (masa coba habis, langganan lewat tenggang) → hari ini.
 func awalPeriodeBerbayar(sub models.Subscription, now time.Time) time.Time {
 	switch {
-	case sub.Status == "active" && sub.CurrentPeriodEnd.After(now):
+	case (sub.Status == "active" || sub.Status == "past_due") &&
+		sub.CurrentPeriodEnd.AddDate(0, 0, subscriptionGraceDays()).After(now):
 		return firstOfDay(sub.CurrentPeriodEnd)
 	case sub.Status == "trial" && sub.TrialEndsAt != nil && sub.TrialEndsAt.After(now):
 		return firstOfDay(*sub.TrialEndsAt)
@@ -399,6 +414,12 @@ func lunaskan(ctx context.Context, tx *gorm.DB, inv *models.SubscriptionInvoice,
 	case sub.Status == "trial":
 		inv.PeriodStart = awalPeriodeBerbayar(sub, now)
 		inv.PeriodEnd = inv.PeriodStart.AddDate(0, inv.TermMonths, 0)
+	case now.After(inv.PeriodStart.AddDate(0, 0, subscriptionGraceDays())):
+		// Perpanjangan yang baru dibayar setelah masa tenggangnya habis:
+		// selama itu toko memakai paket Gratis, jadi hari-hari itu tidak
+		// ditagihkan — periode mulai hari pembayaran.
+		inv.PeriodStart = firstOfDay(now)
+		inv.PeriodEnd = inv.PeriodStart.AddDate(0, inv.TermMonths, 0)
 	}
 	// Yang dibayar menentukan paketnya.
 	if inv.PlanID != nil {
@@ -497,14 +518,59 @@ func deferredEntriesFor(inv models.SubscriptionInvoice) []models.DeferredRevenue
 	return rows
 }
 
-// CancelSubscription membatalkan langganan di tengah masa. Refund dihitung pada
-// harga bulanan NORMAL (blueprint aturan 3):
+// CancelInput: alasan berhenti + rekening tujuan pengembalian dana (wajib bila
+// ada uang yang dikembalikan — staf keuangan mentransfernya dari panel).
+type CancelInput struct {
+	Reason, Bank, Account, Holder string
+}
+
+// hitungPengembalian menghitung pengembalian dana bila langganan dihentikan
+// sekarang, dari tagihan berbayar terbaru (blueprint aturan 3):
 //
 //	refund = maks(0, dibayar − bulan_terpakai × harga_bulanan_normal)
 //
-// Pengakuan pendapatan disamakan agar total yang diakui = dibayar − refund.
-func CancelSubscription(ctx context.Context, reason string) (structs.SubscriptionCancelResponse, error) {
-	var out structs.SubscriptionCancelResponse
+// ada=false bila belum pernah ada tagihan berbayar (mis. masih masa coba).
+func hitungPengembalian(ctx context.Context, tx *gorm.DB, sub models.Subscription, now time.Time) (inv models.SubscriptionInvoice, ada bool, monthsUsed int, refund, earned int64, err error) {
+	inv, err = repositories.LatestPaidSubInvoice(ctx, tx)
+	if errors.Is(err, repositories.ErrSubInvoiceNotFound) {
+		return inv, false, 0, 0, 0, nil
+	}
+	if err != nil {
+		return inv, false, 0, 0, 0, err
+	}
+	harga := int64(0)
+	if inv.Plan != nil {
+		harga = inv.Plan.MonthlyPrice
+	} else {
+		plan, err := repositories.FindPlanByID(ctx, tx, sub.PlanID)
+		if err != nil {
+			return inv, false, 0, 0, 0, err
+		}
+		harga = plan.MonthlyPrice
+	}
+	monthsUsed = wholeMonthsBetween(inv.PeriodStart, now)
+	switch {
+	case now.Before(inv.PeriodStart):
+		// Dibayar di masa coba lalu berhenti sebelum masa berbayarnya
+		// mulai: belum ada bulan yang terpakai, uangnya kembali utuh.
+		monthsUsed = 0
+	case monthsUsed < 1:
+		monthsUsed = 1
+	}
+	if monthsUsed > inv.TermMonths {
+		monthsUsed = inv.TermMonths
+	}
+	refund = inv.PaidAmount - int64(monthsUsed)*harga
+	if refund < 0 {
+		refund = 0
+	}
+	return inv, true, monthsUsed, refund, inv.PaidAmount - refund, nil
+}
+
+// CancelPreview: angka pengembalian bila langganan dihentikan SEKARANG —
+// ditampilkan sebelum pemilik menekan "Hentikan".
+func CancelPreview(ctx context.Context) (structs.SubscriptionCancelPreview, error) {
+	var out structs.SubscriptionCancelPreview
 	err := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
 		sub, err := repositories.FindSubscriptionByTenant(ctx, tx)
 		if err != nil {
@@ -513,35 +579,65 @@ func CancelSubscription(ctx context.Context, reason string) (structs.Subscriptio
 		if sub.Status == "canceled" || sub.Status == "expired" {
 			return fmt.Errorf("%w: langganan sudah berakhir", helpers.ErrConflict)
 		}
+		inv, ada, bulan, refund, _, err := hitungPengembalian(ctx, tx, sub, time.Now().UTC())
+		if err != nil {
+			return err
+		}
+		out = structs.SubscriptionCancelPreview{RefundAmount: refund, MonthsUsed: bulan}
+		if ada {
+			out.PaidAmount = inv.PaidAmount
+			out.TermMonths = inv.TermMonths
+			if inv.Plan != nil {
+				out.MonthlyPrice = inv.Plan.MonthlyPrice
+			}
+		}
+		return nil
+	})
+	return out, err
+}
+
+// CancelSubscription menghentikan langganan sekarang: paket kembali ke Gratis,
+// tagihan terbuka yang belum dibayar dibatalkan, dan pengembalian dana (bila
+// ada) masuk ANTREAN staf keuangan ke rekening yang diisi pemilik. Pengakuan
+// pendapatan disamakan agar total yang diakui = dibayar − refund.
+func CancelSubscription(ctx context.Context, in CancelInput) (structs.SubscriptionCancelResponse, error) {
+	var out structs.SubscriptionCancelResponse
+	in.Reason, in.Bank = strings.TrimSpace(in.Reason), strings.TrimSpace(in.Bank)
+	in.Account, in.Holder = strings.TrimSpace(in.Account), strings.TrimSpace(in.Holder)
+	err := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
+		sub, err := repositories.LockSubscriptionByTenant(ctx, tx)
+		if err != nil {
+			return err
+		}
+		if sub.Status == "canceled" || sub.Status == "expired" {
+			return fmt.Errorf("%w: langganan sudah berakhir", helpers.ErrConflict)
+		}
 		now := time.Now().UTC()
 
-		var refund, earned int64
-		var monthsUsed int
-
-		inv, ierr := repositories.LatestPaidSubInvoice(ctx, tx)
-		if ierr == nil {
-			plan, err := repositories.FindPlanByID(ctx, tx, sub.PlanID)
+		// Tagihan yang masih terbuka tidak akan dibayar lagi. Yang sedang
+		// dikonfirmasi menahan penghentian — uangnya mungkin sudah dikirim.
+		for {
+			open, ada, err := repositories.OpenSubInvoiceForTenant(ctx, tx)
 			if err != nil {
 				return err
 			}
-			monthsUsed = wholeMonthsBetween(inv.PeriodStart, now)
-			switch {
-			case now.Before(inv.PeriodStart):
-				// Dibayar di masa coba lalu berhenti sebelum masa berbayarnya
-				// mulai: belum ada bulan yang terpakai, uangnya kembali utuh.
-				monthsUsed = 0
-			case monthsUsed < 1:
-				monthsUsed = 1
+			if !ada {
+				break
 			}
-			if monthsUsed > inv.TermMonths {
-				monthsUsed = inv.TermMonths
+			if err := batalkanTagihanBelumDibayar(ctx, tx, open.ID); err != nil {
+				return err
 			}
-			refund = inv.PaidAmount - int64(monthsUsed)*plan.MonthlyPrice
-			if refund < 0 {
-				refund = 0
-			}
-			earned = inv.PaidAmount - refund
+		}
 
+		inv, ada, monthsUsed, refund, earned, err := hitungPengembalian(ctx, tx, sub, now)
+		if err != nil {
+			return err
+		}
+		if ada {
+			if refund > 0 && (in.Bank == "" || in.Account == "" || in.Holder == "") {
+				return fmt.Errorf("%w: isi bank, nomor rekening, dan nama pemilik rekening untuk pengembalian %s",
+					helpers.ErrValidation, helpers.FormatRupiah(refund))
+			}
 			// Yang dikembalikan hanya uang tunai; kredit dari paket lama yang
 			// terpakai di tagihan ini tetap nilai yang diakui.
 			if err := settleInvoiceDeferred(ctx, tx, inv.ID, earned+inv.CreditAmount, now); err != nil {
@@ -552,22 +648,39 @@ func CancelSubscription(ctx context.Context, reason string) (structs.Subscriptio
 			if err := repositories.SaveSubInvoice(ctx, tx, &inv); err != nil {
 				return err
 			}
-			if err := repositories.CreateSubRefund(ctx, tx, &models.SubscriptionRefund{
+			r := models.SubscriptionRefund{
 				SubscriptionInvoiceID: inv.ID,
 				Amount:                refund,
 				MonthsUsed:            monthsUsed,
-				Reason:                reason,
+				Reason:                in.Reason,
 				RefundedAt:            now,
-			}); err != nil {
+				Status:                "not_needed",
+			}
+			if refund > 0 {
+				r.Status = "pending"
+				r.DestinationBank, r.DestinationAccount, r.DestinationHolder = in.Bank, in.Account, in.Holder
+			}
+			if err := repositories.CreateSubRefund(ctx, tx, &r); err != nil {
 				return err
 			}
-		} else if ierr != repositories.ErrSubInvoiceNotFound {
-			return ierr
+			if refund > 0 {
+				tid := reqctx.TenantID(ctx)
+				var tenant models.Tenant
+				if err := repositories.FindTenantByID(ctx, tx, tid, &tenant); err == nil && tenant.Phone != "" {
+					_ = EnqueueNotification(ctx, tx, &tid, "subscription.refund_requested", map[string]any{
+						"channel":    "whatsapp",
+						"to":         tenant.Phone,
+						"nama_usaha": tenant.BusinessName,
+						"jumlah":     helpers.FormatRupiah(refund),
+						"rekening":   in.Bank + " " + in.Account + " a.n. " + in.Holder,
+					})
+				}
+			}
 		}
 
 		sub.Status = "canceled"
 		sub.CanceledAt = &now
-		sub.CancelReason = reason
+		sub.CancelReason = in.Reason
 		sub.AutoRenew = false
 		if err := repositories.SaveSubscription(ctx, tx, &sub); err != nil {
 			return err
@@ -605,12 +718,14 @@ func ChangePlan(ctx context.Context, planCode string, term int) (structs.SubInvo
 		return out, fmt.Errorf("%w: masa langganan harus 1, 3, 6, 9, atau 12 bulan", helpers.ErrValidation)
 	}
 	err := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
-		sub, err := repositories.FindSubscriptionByTenant(ctx, tx)
+		sub, err := repositories.LockSubscriptionByTenant(ctx, tx)
 		if err != nil {
 			return err
 		}
-		if sub.Status != "active" {
-			return fmt.Errorf("%w: hanya langganan aktif yang bisa ganti paket di tengah masa", helpers.ErrConflict)
+		// past_due = masa bayar sudah lewat, tagihan perpanjangan belum lunas:
+		// pindah paket saat itu justru wajar (kreditnya nol).
+		if sub.Status != "active" && sub.Status != "past_due" {
+			return fmt.Errorf("%w: hanya langganan berbayar yang berjalan yang bisa ganti paket", helpers.ErrConflict)
 		}
 		newPlan, err := repositories.FindPlanByCode(ctx, tx, planCode)
 		if err != nil {
@@ -752,6 +867,13 @@ func GetSubscriptionOverview(ctx context.Context) (structs.SubscriptionOverviewR
 		}
 	}
 	out.PaymentInstructions = PaymentInstructions()
+	switch r, err := repositories.LatestRefundForTenant(ctx, nil); {
+	case err == nil && r.Status != "not_needed":
+		rr := refundToResponse(r)
+		out.Refund = &rr
+	case err != nil && !errors.Is(err, repositories.ErrSubRefundNotFound):
+		return out, err
+	}
 	return out, nil
 }
 

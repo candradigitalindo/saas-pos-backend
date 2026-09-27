@@ -459,3 +459,34 @@ func PlatformRejectPaymentClaim(c *gin.Context) {
 		Success: true, Message: "Konfirmasi ditolak", Data: nil,
 	})
 }
+
+// PlatformListRefunds: GET /platform/subscription-refunds?status= — antrean
+// pengembalian dana langganan yang dihentikan.
+func PlatformListRefunds(c *gin.Context) {
+	rows, err := services.PlatformListRefunds(c.Request.Context(), c.Query("status"))
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[[]structs.PlatformRefundResponse]{
+		Success: true, Message: "Pengembalian dana langganan", Data: rows,
+	})
+}
+
+// PlatformMarkRefundPaid: POST /platform/subscription-refunds/:id/paid — uang
+// sudah ditransfer ke rekening tenant (dengan nomor referensinya).
+func PlatformMarkRefundPaid(c *gin.Context) {
+	var req structs.RefundPaidRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		validationFailed(c, err)
+		return
+	}
+	res, err := services.PlatformMarkRefundPaid(c.Request.Context(), c.Param("id"), req.Reference)
+	if err != nil {
+		notFoundOr(c, err, repositories.ErrSubRefundNotFound, "Pengembalian dana tidak ditemukan")
+		return
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[structs.SubscriptionRefundResponse]{
+		Success: true, Message: "Pengembalian dana ditandai sudah ditransfer", Data: res,
+	})
+}
