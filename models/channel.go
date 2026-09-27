@@ -36,6 +36,13 @@ type Channel struct {
 	IntegrationMode      string          `json:"integration_mode" gorm:"not null;default:manual"`
 	IsActive             bool            `json:"is_active" gorm:"not null;default:true"`
 
+	// Sambungan API milik tenant (migrasi 000042). WebhookToken = bagian acak
+	// alamat webhook per kanal; ConnectionStatus dari "Tes koneksi" terakhir.
+	WebhookToken        *string    `json:"-" gorm:"column:webhook_token"`
+	ConnectionStatus    string     `json:"connection_status" gorm:"not null;default:none"`
+	ConnectionCheckedAt *time.Time `json:"connection_checked_at"`
+	ConnectionError     string     `json:"connection_error" gorm:"not null;default:''"`
+
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

@@ -3,7 +3,9 @@ package repositories
 import (
 	"context"
 	"errors"
+	"time"
 
+	"candra/backend-api/database"
 	"candra/backend-api/models"
 
 	"gorm.io/gorm"
@@ -259,4 +261,139 @@ func SaveChannelOrderStatus(ctx context.Context, tx *gorm.DB, o *models.ChannelO
 		return ErrChannelOrderNotFound
 	}
 	return nil
+}
+
+// ChannelStatRow: agregat pesanan satu kanal (lihat ChannelStats).
+type ChannelStatRow struct {
+	ChannelID     string
+	OrderCount    int64
+	GrossAmount   int64
+	TotalAmount   int64
+	FeeAmount     int64
+	CanceledCount int64
+	LastOrderAt   *time.Time
+}
+
+// ChannelStatsSince merangkum pesanan tiap kanal sejak `since` (waktu pesanan,
+// bukan waktu dicatat — impor CSV membawa tanggal aslinya). Pesanan terakhir
+// dihitung tanpa batas waktu: "terakhir 3 bulan lalu" juga informasi.
+// Satu kueri untuk semua kanal.
+func ChannelStatsSince(ctx context.Context, since time.Time) (map[string]ChannelStatRow, error) {
+	tid := currentTenantID(ctx)
+	var rows []ChannelStatRow
+	err := tenantDB(ctx, nil).Raw(`
+		SELECT co.channel_id,
+		  COUNT(*) FILTER (WHERE s.status = 'completed' AND s.occurred_at >= ?)                        AS order_count,
+		  COALESCE(SUM(s.subtotal) FILTER (WHERE s.status = 'completed' AND s.occurred_at >= ?), 0)    AS gross_amount,
+		  COALESCE(SUM(s.total) FILTER (WHERE s.status = 'completed' AND s.occurred_at >= ?), 0)       AS total_amount,
+		  COALESCE(SUM(f.fee) FILTER (WHERE s.status = 'completed' AND s.occurred_at >= ?), 0)         AS fee_amount,
+		  COUNT(*) FILTER (WHERE s.status = 'canceled' AND s.occurred_at >= ?)                         AS canceled_count,
+		  MAX(s.occurred_at)                                                                           AS last_order_at
+		FROM channel_orders co
+		JOIN sales s ON s.tenant_id = co.tenant_id AND s.id = co.sale_id
+		LEFT JOIN (
+		  SELECT sale_id, SUM(fee_amount) AS fee FROM sale_payments WHERE tenant_id = ? GROUP BY sale_id
+		) f ON f.sale_id = s.id
+		WHERE co.tenant_id = ?
+		GROUP BY co.channel_id`,
+		since, since, since, since, since, tid, tid).Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]ChannelStatRow, len(rows))
+	for _, r := range rows {
+		out[r.ChannelID] = r
+	}
+	return out, nil
+}
+
+// SalesForChannelOrders memuat penjualan di balik pesanan kanal, lengkap dengan
+// item & pembayarannya, dalam kueri tetap (bukan satu kueri per pesanan).
+func SalesForChannelOrders(ctx context.Context, orders []models.ChannelOrder) (map[string]models.Sale, error) {
+	out := map[string]models.Sale{}
+	if len(orders) == 0 {
+		return out, nil
+	}
+	ids := make([]string, 0, len(orders))
+	for _, o := range orders {
+		ids = append(ids, o.SaleID)
+	}
+	var sales []models.Sale
+	if err := scopeTenant(ctx, tenantDB(ctx, nil)).Where("id IN ?", ids).Find(&sales).Error; err != nil {
+		return nil, err
+	}
+	if err := AttachSaleLines(ctx, sales); err != nil {
+		return nil, err
+	}
+	for _, s := range sales {
+		out[s.ID] = s
+	}
+	return out, nil
+}
+
+// FindProductIDByCode mencari barang dari SKU atau barcode-nya — untuk impor
+// laporan kanal yang tidak mengenal ID internal. Kosong bila tidak ada; galat
+// bila kodenya dipakai lebih dari satu barang (tebakan di sini berarti stok
+// barang yang salah ikut terpotong).
+func FindProductIDByCode(ctx context.Context, tx *gorm.DB, code string) (string, error) {
+	var ids []string
+	err := scopeTenant(ctx, tenantDB(ctx, tx).Model(&models.Product{})).
+		Where("sku = ? OR barcode = ?", code, code).Limit(2).Pluck("id", &ids).Error
+	if err != nil {
+		return "", err
+	}
+	switch len(ids) {
+	case 0:
+		return "", nil
+	case 1:
+		return ids[0], nil
+	default:
+		return "", ErrAmbiguousProductCode
+	}
+}
+
+// ErrAmbiguousProductCode: satu SKU/barcode dipakai beberapa barang.
+var ErrAmbiguousProductCode = errors.New("kode barang dipakai lebih dari satu barang")
+
+// SaveChannelConnection menyimpan kredensial terenkripsi & status sambungan API.
+func SaveChannelConnection(ctx context.Context, tx *gorm.DB, c *models.Channel) error {
+	res := scopeTenant(ctx, tenantDB(ctx, tx)).Model(&models.Channel{}).
+		Where("id = ?", c.ID).
+		Updates(map[string]any{
+			"provider":              c.Provider,
+			"merchant_ref":          c.MerchantRef,
+			"integration_mode":      c.IntegrationMode,
+			"credentials_encrypted": c.CredentialsEncrypted,
+			"webhook_token":         c.WebhookToken,
+			"connection_status":     c.ConnectionStatus,
+			"connection_checked_at": c.ConnectionCheckedAt,
+			"connection_error":      c.ConnectionError,
+			"updated_at":            gorm.Expr("now()"),
+		})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return ErrChannelNotFound
+	}
+	return nil
+}
+
+// FindChannelByWebhookToken mencari kanal dari token alamat webhook-nya,
+// LINTAS tenant (webhook datang tanpa sesi) — seperti FindChannelByProviderRef.
+func FindChannelByWebhookToken(ctx context.Context, token string) (models.Channel, error) {
+	var c models.Channel
+	err := database.DB.WithContext(ctx).Where("webhook_token = ?", token).First(&c).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return c, ErrChannelNotFound
+	}
+	return c, err
+}
+
+// LastChannelEventAt: kapan peristiwa terakhir dari kanal ini diterima.
+func LastChannelEventAt(ctx context.Context, channelID string) (*time.Time, error) {
+	var t *time.Time
+	err := scopeTenant(ctx, tenantDB(ctx, nil).Model(&models.ChannelEvent{})).
+		Where("channel_id = ?", channelID).Select("MAX(received_at)").Scan(&t).Error
+	return t, err
 }

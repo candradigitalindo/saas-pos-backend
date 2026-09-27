@@ -85,15 +85,11 @@ type NormalizedFee struct {
 	Note   string
 }
 
-// adapterFor memilih adaptor untuk sebuah provider. Adaptor khusus menyusul per
-// kemitraan (blueprint F.9); default = adaptor generik.
-func adapterFor(provider string) ChannelAdapter {
-	switch strings.ToLower(strings.TrimSpace(provider)) {
-	// case "gofood": return gofoodAdapter{} // TODO: butuh kemitraan API aplikator
-	// case "shopee": return shopeeAdapter{} // TODO: butuh open platform
-	default:
-		return genericAdapter{}
-	}
+// adapterFor memilih adaptor untuk MEMPROSES payload tersimpan. Selalu generik:
+// adaptor penyedia nyata (channel_provider.go) sudah menerjemahkan payloadnya
+// ke bentuk generik saat webhook diterima, dengan kredensial milik tenant.
+func adapterFor(string) ChannelAdapter {
+	return genericAdapter{}
 }
 
 // genericAdapter menerima payload yang SUDAH berbentuk normalized JSON.
@@ -226,6 +222,13 @@ func IngestChannelEvent(ctx context.Context, provider, merchantRef string, raw [
 	}
 	if err != nil {
 		return res, err
+	}
+	// Jalur lama ini tidak bertanda tangan. Kanal yang sudah tersambung API
+	// hanya menerima webhook di alamatnya sendiri yang diverifikasi — tanpa
+	// penjaga ini siapa pun yang tahu nomor/ID tokonya bisa menyuntik pesanan.
+	if len(ch.CredentialsEncrypted) > 0 {
+		res.Reason = "kanal ini tersambung API; kirim ke alamat webhook di pengaturan kanal"
+		return res, nil
 	}
 
 	norm, nerr := adapterFor(ch.Provider).Normalize(raw)
@@ -404,16 +407,13 @@ func applyOrderCreated(ctx context.Context, ch models.Channel, norm NormalizedEv
 	for _, it := range norm.Items {
 		pid, vid := it.ProductID, it.VariantID
 		if pid == "" && it.SKU != "" {
-			cp, ok, err := repositories.FindChannelProductBySKU(ctx, nil, ch.ID, it.SKU)
+			p, v, err := resolveChannelSKU(ctx, ch.ID, it.SKU)
 			if err != nil {
 				return err
 			}
-			if !ok {
-				return fmt.Errorf("%w: SKU %q belum dipetakan ke produk", helpers.ErrValidation, it.SKU)
-			}
-			pid = cp.ProductID
-			if vid == "" && cp.VariantID != nil {
-				vid = *cp.VariantID
+			pid = p
+			if vid == "" {
+				vid = v
 			}
 		}
 		if pid == "" {

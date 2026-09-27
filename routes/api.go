@@ -111,6 +111,10 @@ func SetupRouter() *gin.Engine {
 		float64(config.GetIntEnv("CHANNEL_WEBHOOK_RATELIMIT_BURST", 40)),
 	)
 	r.POST("/webhooks/channels/:provider", webhookLimiter, controllers.IngestChannelWebhook)
+	// Alamat PER KANAL untuk sambungan API milik tenant: tanda tangan diperiksa
+	// dengan rahasia kanal itu. GET = verifikasi alamat oleh penyedia (Meta).
+	r.GET("/webhooks/channels/:provider/:token", webhookLimiter, controllers.ProviderWebhookChallenge)
+	r.POST("/webhooks/channels/:provider/:token", webhookLimiter, controllers.ProviderWebhook)
 
 	v1 := r.Group("/api/v1")
 	registerAuthRoutes(v1)
@@ -505,6 +509,12 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	ch.POST("/:id/products", controllers.UpsertChannelProduct)
 	ch.DELETE("/:id/products/:pid", controllers.DeleteChannelProduct)
 	ch.POST("/:id/orders/import", middlewares.Require("channel.order.accept", "channel.manage"), controllers.ImportChannelOrders)
+	// Sambungan API milik tenant (kredensial tenant sendiri, disimpan terenkripsi).
+	ch.GET("/:id/connection", controllers.GetChannelConnection)
+	ch.PUT("/:id/connection", controllers.SaveChannelConnection)
+	ch.POST("/:id/connection/test", controllers.TestChannelConnection)
+	ch.DELETE("/:id/connection", controllers.DeleteChannelConnection)
+	t.GET("/channel-providers", chMgr, controllers.ListChannelProviders)
 
 	co := t.Group("/channel-orders", chOrd)
 	co.GET("", controllers.ListChannelOrders)

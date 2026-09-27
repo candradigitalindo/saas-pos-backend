@@ -328,11 +328,14 @@ menyebut paket termurah yang membukanya.
 | `POST /api/v1/sync/push` `op: visit.upsert` | `crm.visit.checkin` | Sinkron kunjungan offline (tanpa duplikat) |
 | `GET/POST /api/v1/sales-targets` | `crm.commission.view` | Target sales + pencapaian (kunjungan & tertagih) |
 | `GET/POST /api/v1/commissions` · `.../approve` · `.../pay` | `crm.commission.view` | Hitung komisi dari nilai tertagih → setujui → bayar |
-| `GET/POST/PUT/DELETE /api/v1/channels[/:id]` | `channel.manage` | Kanal per outlet + tarif komisi |
+| `GET/POST/PUT/DELETE /api/v1/channels[/:id]` | `channel.manage` | Kanal per outlet + tarif komisi. `GET /channels` mengirim **larik** (bukan halaman) dengan `stats` 30 hari per kanal (pesanan, kotor, komisi, bersih, dibatalkan, pesanan terakhir). `DELETE` hanya menonaktifkan |
 | `GET/POST /api/v1/channels/:id/products` · `DELETE .../:pid` | `channel.manage` | Pemetaan SKU kanal ↔ produk |
-| `POST /api/v1/channels/:id/orders/import` | `channel.order.accept` | Impor CSV laporan harian kanal |
-| `GET/POST/PUT /api/v1/channel-orders[/:id]` · `.../status` · `.../cancel` | `channel.order.accept` | Entri pesanan manual, status, pembatalan |
-| `POST /webhooks/channels/:provider` (`?merchant_ref=` / `X-Merchant-Ref`) | — (tanpa auth) | Terima webhook kanal → simpan mentah ke `channel_events`, balas 200 |
+| `POST /api/v1/channels/:id/orders/import` | `channel.manage` | Impor CSV laporan harian kanal: `external_order_id,date,sku,qty,unit_price,fee_amount` — `sku` dicocokkan ke pemetaan SKU kanal lalu SKU/barcode barang (`product_id` masih diterima). Hasil `{imported, skipped, failed, errors}` |
+| `GET/POST/PUT /api/v1/channel-orders[/:id]` · `.../status` · `.../cancel` | `channel.order.accept` | Entri pesanan manual, status, pembatalan. Daftar membawa kotor/komisi/bersih, `receipt_no`, `sale_status`, `occurred_at`, `items` |
+| `POST /webhooks/channels/:provider` (`?merchant_ref=` / `X-Merchant-Ref`) | — (tanpa auth) | Terima webhook kanal → simpan mentah ke `channel_events`, balas 200. Menolak kanal yang sudah tersambung API (jalur ini tak bertanda tangan) |
+| `GET/POST /webhooks/channels/:provider/:token` | tanda tangan penyedia | Alamat webhook **per kanal** untuk sambungan API milik tenant. GET = verifikasi alamat (WhatsApp `hub.challenge`); POST diperiksa dengan rahasia kanal itu (WhatsApp: `X-Hub-Signature-256` dengan App Secret tenant) → 401 bila tidak cocok |
+| `GET /api/v1/channel-providers` | `channel.manage` | Katalog penyedia: isian kredensial, langkah mendapatkannya, kemampuan, tersedia/belum |
+| `GET/PUT/DELETE /api/v1/channels/:id/connection` · `POST .../test` | `channel.manage` (+ paket `online_channel` untuk menulis) | Kredensial API milik tenant (terenkripsi; rahasia hanya pratinjau 4 karakter), alamat webhook, tes koneksi ke penyedia, putus |
 | `GET /api/v1/channels/:id/events?status=` · `GET .../stock-syncs` | `channel.manage` | Inbox peristiwa kanal + antrean sinkron stok (umur keterlambatan) |
 | `POST /api/v1/channel-events/process` | `channel.manage` | Picu pekerja pemroses manual (selain `cmd/process-channel-events`) |
 | `GET/POST /api/v1/channels/:id/settlements` · `.../receipt` | `channel.settlement.view` | Rekonsiliasi pencairan: hitung nilai periode, catat uang masuk (`matched`/`mismatch`) |

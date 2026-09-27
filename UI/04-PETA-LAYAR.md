@@ -150,7 +150,7 @@ menu aktif selalu digulir ke dalam pandangan.
 
 | Layar | Endpoint | Izin |
 |---|---|---|
-| Daftar & pengaturan kanal | `GET\|POST\|PUT\|DELETE /channels[/:id]` | `channel.manage` |
+| Kanal Online: ringkasan 30 hari (diterima bersih, pesanan, penjualan, komisi), kartu per kanal dengan kinerjanya & saklar aktif, catat pesanan (pilih kanal, perkiraan komisi), impor CSV per SKU, daftar pesanan + rincian & pembatalan | `GET\|POST\|PUT /channels[/:id]` · `POST /channels/:id/orders/import` | `channel.manage` |
 | Pemetaan SKU kanal ↔ produk | `GET\|POST /channels/:id/products` · `DELETE /channels/:id/products/:pid` | `channel.manage` |
 | Pesanan kanal | `GET /channel-orders` · `GET /channel-orders/:id` | `channel.order.accept` |
 | Catat pesanan manual (WA/IG) | `POST /channel-orders` | `channel.order.accept` |
@@ -403,7 +403,7 @@ Jangan dirancang di UI sampai backendnya tersedia:
 
 | Fitur | Status backend |
 |---|---|
-| Adaptor API kanal per-provider (GoFood, Shopee, dll.) | **Terkunci pihak luar.** Menunggu kemitraan; blueprint F.9 melarang menjanjikannya sebelum disetujui. Sekarang lewat entri manual / CSV / webhook generik |
+| Sambungan API kanal dengan kredensial MILIK TENANT | `GET /channel-providers` · `GET\|PUT\|DELETE /channels/:id/connection` · `POST .../test` — dialog "Sambungan API" di kartu kanal. Tersedia: **WhatsApp Cloud API** (pesanan katalog). Menyusul per penyedia: GoFood (GoBiz), GrabFood, Shopee, TikTok Shop/Tokopedia, Lazada |
 | Pengiriman email sungguhan | Alur outbox sudah utuh & teruji. WhatsApp **sudah** terkirim sungguhan lewat sidecar `wa-gateway/` (bila `WA_GATEWAY_URL` diisi); email masih mencatat ke log sampai penyedianya dipilih |
 | Deteksi kejanggalan mitra (merchant fiktif, pendaftaran beruntun) | Blueprint G.5 P1 — belum dibangun |
 | Laporan biaya akuisisi per mitra & wilayah | Blueprint G.5 P1 — belum dibangun |

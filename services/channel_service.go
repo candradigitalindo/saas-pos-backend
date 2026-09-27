@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -41,11 +42,64 @@ func ListChannels(ctx context.Context) ([]structs.ChannelResponse, error) {
 	if err != nil {
 		return nil, err
 	}
+	stat, err := repositories.ChannelStatsSince(ctx, time.Now().UTC().AddDate(0, 0, -channelStatDays))
+	if err != nil {
+		return nil, err
+	}
 	out := make([]structs.ChannelResponse, len(rows))
 	for i := range rows {
 		out[i] = channelToResponse(rows[i])
+		r := stat[rows[i].ID]
+		s := structs.ChannelStats{
+			Days: channelStatDays, OrderCount: r.OrderCount, GrossAmount: r.GrossAmount,
+			FeeAmount: r.FeeAmount, NetAmount: r.TotalAmount - r.FeeAmount, CanceledCount: r.CanceledCount,
+		}
+		if r.LastOrderAt != nil {
+			s.LastOrderAt = r.LastOrderAt.UTC().Format(saleTimeLayout)
+		}
+		out[i].Stats = &s
 	}
 	return out, nil
+}
+
+// channelStatDays: rentang kinerja kanal di daftar kanal.
+const channelStatDays = 30
+
+// ListChannelOrdersDetailed: satu halaman pesanan kanal lengkap dengan uangnya
+// (kotor, komisi, bersih), nomor nota, status penjualan, dan isinya. Versi
+// daftar sebelumnya mengirim nol untuk semua angka uang — layar kanal
+// menampilkan "Rp 0" untuk setiap pesanan.
+func ListChannelOrdersDetailed(ctx context.Context, f repositories.ChannelOrderFilter, limit, offset int) ([]structs.ChannelOrderResponse, int64, error) {
+	rows, total, err := repositories.ListChannelOrders(ctx, f, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	sales, err := repositories.SalesForChannelOrders(ctx, rows)
+	if err != nil {
+		return nil, 0, err
+	}
+	out := make([]structs.ChannelOrderResponse, len(rows))
+	for i, o := range rows {
+		s, ada := sales[o.SaleID]
+		if !ada {
+			out[i] = channelOrderToResponse(o, channelSaleAmounts{})
+			continue
+		}
+		var fee int64
+		for _, p := range s.Payments {
+			fee += p.FeeAmount
+		}
+		out[i] = channelOrderToResponse(o, channelSaleAmounts{gross: s.Subtotal, fee: fee, net: s.Total - fee})
+		out[i].ReceiptNo = s.ReceiptNo
+		out[i].SaleStatus = s.Status
+		out[i].OccurredAt = s.OccurredAt.UTC().Format(saleTimeLayout)
+		for _, it := range s.Items {
+			out[i].Items = append(out[i].Items, structs.ChannelOrderItemResponse{
+				ProductName: it.ProductName, Qty: it.Qty.String(), UnitName: it.UnitName, LineTotal: it.LineTotal,
+			})
+		}
+	}
+	return out, total, nil
 }
 
 // CreateChannel mendaftarkan kanal baru untuk sebuah outlet.
@@ -193,11 +247,15 @@ type ChannelOrderImportResult struct {
 }
 
 // csvOrderRow satu baris CSV: header
-// external_order_id,date,product_id,qty,unit_price,fee_amount
+// external_order_id,date,sku,qty,unit_price,fee_amount — atau product_id
+// menggantikan sku. Laporan marketplace tidak mengenal ID internal barang, jadi
+// `sku` yang lazim dipakai: dicocokkan ke pemetaan SKU kanal lebih dulu, lalu
+// ke SKU/barcode barang di toko.
 type csvOrderRow struct {
 	ExternalOrderID string
 	Date            string
 	ProductID       string
+	SKU             string
 	Qty             string
 	UnitPrice       string
 	FeeAmount       string
@@ -221,10 +279,15 @@ func ImportChannelOrdersCSV(ctx context.Context, channelID string, raw []byte) (
 	for i, h := range head {
 		idx[strings.ToLower(strings.TrimSpace(h))] = i
 	}
-	for _, need := range []string{"external_order_id", "date", "product_id", "qty", "unit_price"} {
+	for _, need := range []string{"external_order_id", "date", "qty", "unit_price"} {
 		if _, ok := idx[need]; !ok {
 			return res, fmt.Errorf("%w: kolom %q wajib ada di header CSV", helpers.ErrValidation, need)
 		}
+	}
+	_, adaPID := idx["product_id"]
+	_, adaSKU := idx["sku"]
+	if !adaPID && !adaSKU {
+		return res, fmt.Errorf("%w: header CSV wajib punya kolom \"sku\" (atau \"product_id\")", helpers.ErrValidation)
 	}
 	get := func(rec []string, key string) string {
 		i, ok := idx[key]
@@ -253,13 +316,14 @@ func ImportChannelOrdersCSV(ctx context.Context, channelID string, raw []byte) (
 			ExternalOrderID: get(rec, "external_order_id"),
 			Date:            get(rec, "date"),
 			ProductID:       get(rec, "product_id"),
+			SKU:             get(rec, "sku"),
 			Qty:             get(rec, "qty"),
 			UnitPrice:       get(rec, "unit_price"),
 			FeeAmount:       get(rec, "fee_amount"),
 		}
-		if row.ExternalOrderID == "" || row.ProductID == "" {
+		if row.ExternalOrderID == "" || (row.ProductID == "" && row.SKU == "") {
 			res.Failed++
-			res.Errors = append(res.Errors, fmt.Sprintf("baris %d: external_order_id & product_id wajib", line))
+			res.Errors = append(res.Errors, fmt.Sprintf("baris %d: external_order_id & sku wajib diisi", line))
 			continue
 		}
 		if _, seen := byOrder[row.ExternalOrderID]; !seen {
@@ -286,8 +350,14 @@ func ImportChannelOrdersCSV(ctx context.Context, channelID string, raw []byte) (
 				bad = "unit_price tidak valid"
 				break
 			}
+			pid, vid, rerr := resolveCSVProduct(ctx, channelID, row)
+			if rerr != nil {
+				// Tanpa awalan "input tidak valid:" — di daftar galat impor ia hanya mengulang.
+				bad = strings.TrimPrefix(rerr.Error(), helpers.ErrValidation.Error()+": ")
+				break
+			}
 			upCopy := up
-			in.Items = append(in.Items, ChannelOrderItemInput{ProductID: row.ProductID, Qty: qty, UnitPrice: &upCopy})
+			in.Items = append(in.Items, ChannelOrderItemInput{ProductID: pid, VariantID: vid, Qty: qty, UnitPrice: &upCopy})
 			if row.FeeAmount != "" {
 				f, ferr := strconv.ParseInt(row.FeeAmount, 10, 64)
 				if ferr != nil || f < 0 {
@@ -554,6 +624,43 @@ func RecordChannelOrder(ctx context.Context, in ChannelOrderInput) (structs.Chan
 	return out, created, err
 }
 
+// resolveCSVProduct: product_id apa adanya; selain itu lewat resolveChannelSKU.
+func resolveCSVProduct(ctx context.Context, channelID string, row csvOrderRow) (string, string, error) {
+	if row.ProductID != "" {
+		return row.ProductID, "", nil
+	}
+	return resolveChannelSKU(ctx, channelID, row.SKU)
+}
+
+// resolveChannelSKU: SKU dari kanal (CSV, katalog WhatsApp, marketplace) →
+// barang toko. Pemetaan SKU kanal lebih dulu, lalu SKU/barcode barang — jadi
+// toko yang menyamakan SKU katalognya tidak perlu memetakan satu per satu.
+// Galat validasi (permanen): SKU tak dikenal atau dipakai beberapa barang.
+func resolveChannelSKU(ctx context.Context, channelID, sku string) (string, string, error) {
+	cp, ok, err := repositories.FindChannelProductBySKU(ctx, nil, channelID, sku)
+	if err != nil {
+		return "", "", err
+	}
+	if ok {
+		vid := ""
+		if cp.VariantID != nil {
+			vid = *cp.VariantID
+		}
+		return cp.ProductID, vid, nil
+	}
+	pid, err := repositories.FindProductIDByCode(ctx, nil, sku)
+	if errors.Is(err, repositories.ErrAmbiguousProductCode) {
+		return "", "", fmt.Errorf("%w: SKU %q dipakai lebih dari satu barang", helpers.ErrValidation, sku)
+	}
+	if err != nil {
+		return "", "", err
+	}
+	if pid == "" {
+		return "", "", fmt.Errorf("%w: SKU %q tidak dikenal — samakan dengan SKU/barcode barang di toko", helpers.ErrValidation, sku)
+	}
+	return pid, "", nil
+}
+
 // UpdateChannelOrderStatus memutakhirkan status & jejak logistik pesanan kanal.
 func UpdateChannelOrderStatus(ctx context.Context, id string, in structs.ChannelOrderStatusRequest) (structs.ChannelOrderResponse, error) {
 	var out structs.ChannelOrderResponse
@@ -698,7 +805,11 @@ func channelToResponse(c models.Channel) structs.ChannelResponse {
 		ID: c.ID, OutletID: c.OutletID, Kind: c.Kind, Provider: c.Provider, Name: c.Name,
 		MerchantRef: c.MerchantRef, CommissionRate: c.CommissionRate.String(),
 		IntegrationMode: c.IntegrationMode, IsActive: c.IsActive,
-		CreatedAt: c.CreatedAt.UTC().Format(saleTimeLayout),
+		CreatedAt:        c.CreatedAt.UTC().Format(saleTimeLayout),
+		ConnectionStatus: c.ConnectionStatus,
+	}
+	if r.ConnectionStatus == "" {
+		r.ConnectionStatus = "none"
 	}
 	if c.PriceListID != nil {
 		r.PriceListID = *c.PriceListID

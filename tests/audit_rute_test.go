@@ -24,7 +24,10 @@ func TestAuditSemuaRuteMenolakTanpaToken(t *testing.T) {
 		"/api/v1/partner/auth/login":   "pintu masuk mitra",
 		"/api/v1/platform/auth/login":  "pintu masuk staf internal",
 		"/webhooks/channels/:provider": "kanal tidak membawa token kita",
-		"/uploads/*filepath":           "foto barang; pagarnya nama ULID tak tertebak",
+		// Tanpa sesi, tapi berpagar tanda tangan milik kanal: salah → 401
+		// (diuji di sambungan_kanal_test.go).
+		"/webhooks/channels/:provider/:token": "diamankan tanda tangan penyedia per kanal",
+		"/uploads/*filepath":                  "foto barang; pagarnya nama ULID tak tertebak",
 	}
 
 	r := routes.SetupRouter()

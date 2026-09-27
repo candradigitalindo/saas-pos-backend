@@ -128,14 +128,10 @@ func DeleteChannelProduct(c *gin.Context) {
 func ListChannelOrders(c *gin.Context) {
 	page, limit, offset := helpers.ParsePaginationParams(c)
 	f := repositories.ChannelOrderFilter{ChannelID: c.Query("channel_id"), ExternalStatus: c.Query("status")}
-	rows, total, err := repositories.ListChannelOrders(c.Request.Context(), f, limit, offset)
+	items, total, err := services.ListChannelOrdersDetailed(c.Request.Context(), f, limit, offset)
 	if err != nil {
 		respondServiceError(c, err)
 		return
-	}
-	items := make([]structs.ChannelOrderResponse, len(rows))
-	for i := range rows {
-		items[i] = services.ChannelOrderToResponse(rows[i])
 	}
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.PaginatedResponse[structs.ChannelOrderResponse]]{
 		Success: true, Message: "Daftar pesanan kanal",

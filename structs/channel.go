@@ -37,6 +37,23 @@ type ChannelResponse struct {
 	IntegrationMode string `json:"integration_mode"`
 	IsActive        bool   `json:"is_active"`
 	CreatedAt       string `json:"created_at"`
+	// none | connected | error — sambungan API milik tenant (lihat /connection).
+	ConnectionStatus string `json:"connection_status"`
+	// Hanya pada daftar (GET /channels): kinerja kanal belakangan ini, supaya
+	// pemilik bisa membandingkan kanal tanpa membuka laporan.
+	Stats *ChannelStats `json:"stats,omitempty"`
+}
+
+// ChannelStats: pesanan SELESAI kanal dalam `days` hari terakhir (yang
+// dibatalkan dihitung terpisah). gross = sebelum komisi, net = diterima.
+type ChannelStats struct {
+	Days          int    `json:"days"`
+	OrderCount    int64  `json:"order_count"`
+	GrossAmount   int64  `json:"gross_amount"`
+	FeeAmount     int64  `json:"fee_amount"`
+	NetAmount     int64  `json:"net_amount"`
+	CanceledCount int64  `json:"canceled_count"`
+	LastOrderAt   string `json:"last_order_at,omitempty"`
 }
 
 // ── Channel product (pemetaan SKU) ────────────────────────────────────────
@@ -109,4 +126,85 @@ type ChannelOrderResponse struct {
 	FeeAmount       int64  `json:"fee_amount"`
 	NetAmount       int64  `json:"net_amount"`
 	CreatedAt       string `json:"created_at"`
+	// Hanya pada daftar (GET /channel-orders): dari penjualannya — nomor nota,
+	// statusnya (dibatalkan?), waktu pesanan, dan isi belanja.
+	ReceiptNo  string                     `json:"receipt_no,omitempty"`
+	SaleStatus string                     `json:"sale_status,omitempty"`
+	OccurredAt string                     `json:"occurred_at,omitempty"`
+	Items      []ChannelOrderItemResponse `json:"items,omitempty"`
+}
+
+// ChannelOrderItemResponse: satu baris isi pesanan kanal.
+type ChannelOrderItemResponse struct {
+	ProductName string `json:"product_name"`
+	Qty         string `json:"qty"`
+	UnitName    string `json:"unit_name"`
+	LineTotal   int64  `json:"line_total"`
+}
+
+// ── Sambungan API kanal (milik tenant) ────────────────────────────────────
+
+// ChannelProviderField: satu isian kredensial yang diminta penyedia.
+type ChannelProviderField struct {
+	Key      string `json:"key"`
+	Label    string `json:"label"`
+	Help     string `json:"help,omitempty"`
+	Secret   bool   `json:"secret"`
+	Optional bool   `json:"optional,omitempty"`
+}
+
+// ChannelProviderInfo: penyedia yang bisa disambungkan, cara mendapatkan
+// kredensialnya, dan apa yang terjadi setelah tersambung.
+type ChannelProviderInfo struct {
+	Code         string                 `json:"code"`
+	Name         string                 `json:"name"`
+	Kind         string                 `json:"kind"`
+	Available    bool                   `json:"available"`
+	DocsURL      string                 `json:"docs_url"`
+	Steps        []string               `json:"steps"`
+	Fields       []ChannelProviderField `json:"fields"`
+	Capabilities []string               `json:"capabilities"`
+	Note         string                 `json:"note,omitempty"`
+}
+
+// ChannelConnectionRequest: PUT /channels/:id/connection. Isian rahasia yang
+// dikosongkan = tetap memakai nilai tersimpan (tidak perlu diketik ulang).
+type ChannelConnectionRequest struct {
+	Provider string            `json:"provider" binding:"required,max=30"`
+	Fields   map[string]string `json:"fields"`
+}
+
+// ChannelConnectionField: nilai isian yang aman ditampilkan — rahasia hanya
+// pratinjau 4 karakter terakhir.
+type ChannelConnectionField struct {
+	Set     bool   `json:"set"`
+	Value   string `json:"value,omitempty"`
+	Preview string `json:"preview,omitempty"`
+}
+
+// LabelValue: pasangan label & nilai untuk disalin tenant ke konsol penyedia.
+type LabelValue struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+}
+
+// ChannelConnectionResponse: GET/PUT /channels/:id/connection.
+type ChannelConnectionResponse struct {
+	Provider      string                            `json:"provider,omitempty"`
+	Status        string                            `json:"status"`
+	CheckedAt     string                            `json:"checked_at,omitempty"`
+	Error         string                            `json:"error,omitempty"`
+	Fields        map[string]ChannelConnectionField `json:"fields"`
+	WebhookURL    string                            `json:"webhook_url,omitempty"`
+	WebhookValues []LabelValue                      `json:"webhook_values,omitempty"`
+	LastEventAt   string                            `json:"last_event_at,omitempty"`
+	// Info dari tes terakhir yang baru saja dijalankan (mis. nama bisnis & nomor).
+	Info string `json:"info,omitempty"`
+}
+
+// ProviderWebhookResult: balasan webhook bertanda tangan.
+type ProviderWebhookResult struct {
+	Received  int    `json:"received"`
+	Duplicate int    `json:"duplicate"`
+	Ignored   string `json:"ignored,omitempty"`
 }
