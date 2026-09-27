@@ -778,3 +778,55 @@ func TestOutletRatesValidated(t *testing.T) {
 		t.Fatalf("tarif tersimpan = %v / %v, mau 0.11 / 0.075", d["tax_rate"], d["service_charge_rate"])
 	}
 }
+
+// TestLoginWithEmail — halaman masuk dulu hanya menerima nama pengguna, dan
+// tidak menjelaskannya: orang yang mengetik email (yang biasanya lebih diingat)
+// selalu mendapat "salah". Kini email juga diterima, tanpa peduli huruf besar.
+func TestLoginWithEmail(t *testing.T) {
+	requireDB(t)
+	f := registerTenant(t, "loginemail") // pemilik: owner_loginemail / owner_loginemail@example.com
+
+	masuk := func(nama, sandi string) apiResp {
+		return call(t, "POST", "/api/v1/auth/login", "", map[string]any{"username": nama, "password": sandi})
+	}
+
+	d := masuk("owner_loginemail@example.com", "rahasia123").mustOK(t, "masuk dengan email").data(t)
+	if get[string](t, d, "user.username") != "owner_loginemail" {
+		t.Fatalf("masuk dengan email menghasilkan user %v", d["user"])
+	}
+	masuk("  Owner_LoginEmail@Example.COM ", "rahasia123").mustOK(t, "email beda huruf besar & berspasi")
+	masuk("owner_loginemail", "rahasia123").mustOK(t, "nama pengguna tetap bisa")
+
+	// Salah sandi lewat email & email tak dikenal: pesan SAMA dengan nama
+	// pengguna salah — tidak membocorkan email mana yang terdaftar.
+	salah := masuk("owner_loginemail@example.com", "bukan-sandinya").mustCode(t, "sandi salah via email", 401)
+	takAda := masuk("tidak.ada@example.com", "rahasia123").mustCode(t, "email tak dikenal", 401)
+	if salah.Body["message"] != takAda.Body["message"] {
+		t.Fatalf("pesan berbeda membocorkan keberadaan email: %q vs %q", salah.Body["message"], takAda.Body["message"])
+	}
+
+	buatStaf := func(username, email string) {
+		call(t, "POST", "/api/v1/users", f.token, map[string]any{
+			"name": "Staf " + username, "username": username, "email": email,
+			"password": "rahasia123", "role_id": roleID(t, f, "Kasir"),
+		}).mustCode(t, "buat staf "+username, 201)
+	}
+
+	// Nama pengguna yang memuat "@" (tidak pernah dilarang) tetap masuk seperti
+	// dulu — dicocokkan sebagai nama pengguna lebih dulu.
+	buatStaf("kasir@loginemail", "kasir.lain@example.com")
+	d = masuk("kasir@loginemail", "rahasia123").mustOK(t, "nama pengguna ber-@").data(t)
+	if get[string](t, d, "user.username") != "kasir@loginemail" {
+		t.Fatalf("nama pengguna ber-@ masuk sebagai %v", d["user"])
+	}
+
+	// Dua akun yang emailnya hanya beda huruf besar: yang persis tetap masuk,
+	// tebakan tanpa huruf besar DITOLAK (tidak memilih salah satu).
+	buatStaf("kembar_a", "Kembar@Example.com")
+	buatStaf("kembar_b", "kembar@example.com")
+	d = masuk("Kembar@Example.com", "rahasia123").mustOK(t, "email persis").data(t)
+	if get[string](t, d, "user.username") != "kembar_a" {
+		t.Fatalf("email persis masuk sebagai %v, mau kembar_a", d["user"])
+	}
+	masuk("KEMBAR@EXAMPLE.COM", "rahasia123").mustCode(t, "email ambigu tanpa huruf besar", 401)
+}

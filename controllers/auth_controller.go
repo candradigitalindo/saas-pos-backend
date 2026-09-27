@@ -88,15 +88,16 @@ func Login(c *gin.Context) {
 		return
 	}
 
+	// `username` boleh berisi nama pengguna ATAU email (FindUserForLogin).
 	var user models.User
-	err := repositories.FindUserByUsername(c.Request.Context(), req.Username, &user)
+	err := repositories.FindUserForLogin(c.Request.Context(), req.Username, &user)
 	if err != nil {
 		helpers.CheckPassword(req.Password, helpers.DummyPasswordHash)
-		unauthorized(c, "Username atau password salah")
+		unauthorized(c, pesanGagalMasuk)
 		return
 	}
 	if err := helpers.CheckPassword(req.Password, user.Password); err != nil {
-		unauthorized(c, "Username atau password salah")
+		unauthorized(c, pesanGagalMasuk)
 		return
 	}
 	if !user.IsActive {
@@ -245,6 +246,10 @@ func Logout(c *gin.Context) {
 		Data:    nil,
 	})
 }
+
+// pesanGagalMasuk SAMA untuk akun tak dikenal dan sandi salah, lewat nama
+// pengguna maupun email — pesan yang berbeda membocorkan akun mana yang ada.
+const pesanGagalMasuk = "Nama pengguna/email atau kata sandi salah"
 
 // unauthorized membalas 401 dengan pesan seragam.
 func unauthorized(c *gin.Context, msg string) {

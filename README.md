@@ -261,7 +261,7 @@ Semua endpoint bisnis di bawah prefiks `/api/v1`.
 |---|---|---|
 | `GET  /health`, `/health/ready` | — | Liveness / readiness (cek DB) |
 | `POST /api/v1/auth/register` | publik | Daftar USAHA: tenant + outlet + peran + pemilik (1 transaksi) |
-| `POST /api/v1/auth/login` | publik | → access + refresh token |
+| `POST /api/v1/auth/login` | publik | Kolom `username` diisi nama pengguna **atau email** → access + refresh token |
 | `POST /api/v1/auth/refresh` | publik | Tukar refresh token (rotasi + deteksi reuse) |
 | `POST /api/v1/auth/logout` | token | Cabut refresh token |
 | `GET  /api/v1/me` | token | Profil: user, tenant, permission, `outlet_ids` + `outlets` (rincian cabang: pajak, biaya layanan — dipakai total kasir) |

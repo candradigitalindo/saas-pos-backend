@@ -238,7 +238,7 @@ export function HalamanDaftar() {
           <Kolom
             label="Nama pengguna"
             ikon={AtSign}
-            bantuan="Untuk masuk nanti. Tanpa spasi."
+            bantuan="Untuk masuk nanti (email juga bisa). Tanpa spasi."
             autoCapitalize="none"
             autoComplete="username"
             value={form.username}

@@ -15,6 +15,11 @@ import { GALAT_SESI_HABIS, GalatAPI } from '@/lib/api-client'
  * setiap orang didominasi tombol abu-abu yang terbaca "rusak". Kolom kosong
  * kini dijawab dengan kalimat di bawah kolomnya (ui/01 §7), sama seperti form
  * lain di aplikasi.
+ *
+ * Kolom pertama menerima NAMA PENGGUNA ATAU EMAIL, dan menjelaskan asalnya.
+ * Dulu labelnya hanya "Nama pengguna" tanpa keterangan apa pun, dan server
+ * hanya menerima nama pengguna — orang yang mengetik email (biasanya lebih
+ * diingat) selalu ditolak tanpa tahu sebabnya.
  */
 export function HalamanMasuk() {
   const { masuk } = useSesi()
@@ -31,7 +36,7 @@ export function HalamanMasuk() {
     setGalat(null)
 
     const kosong: Record<string, string> = {}
-    if (!username.trim()) kosong.username = 'Nama pengguna belum diisi.'
+    if (!username.trim()) kosong.username = 'Nama pengguna atau email belum diisi.'
     if (!sandi) kosong.password = 'Kata sandi belum diisi.'
     setKolomGalat(kosong)
     if (Object.keys(kosong).length > 0) return
@@ -46,7 +51,7 @@ export function HalamanMasuk() {
         // 401 di layar masuk bukan "sesi habis" — itu salah nama/sandi.
         setGalat(
           e.status === 401 || e.pesan === GALAT_SESI_HABIS
-            ? 'Nama pengguna atau kata sandi salah.'
+            ? 'Nama pengguna/email atau kata sandi salah.'
             : e.pesan,
         )
       } else {
@@ -68,10 +73,13 @@ export function HalamanMasuk() {
 
       <form onSubmit={kirim} className="flex flex-col gap-4" noValidate>
         <Kolom
-          label="Nama pengguna"
+          label="Nama pengguna atau email"
           ikon={UserRound}
+          bantuan="Yang dibuat saat mendaftar usaha. Staf toko: tanyakan ke pemilik."
           autoComplete="username"
           autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           autoFocus
           value={username}
           onChange={(e) => setUsername(e.target.value)}

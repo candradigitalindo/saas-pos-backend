@@ -61,6 +61,8 @@ type UserUpdateRequest struct {
 }
 
 // Struct ini digunakan saat user melakukan proses login.
+// Username boleh diisi NAMA PENGGUNA ATAU EMAIL — namanya tetap "username"
+// supaya klien lama tidak perlu diubah (lihat repositories.FindUserForLogin).
 // DeviceName opsional: label perangkat yang ikut disimpan di refresh token
 // sehingga user bisa mengenali sesinya di daftar "perangkat aktif".
 type UserLoginRequest struct {

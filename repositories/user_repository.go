@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"candra/backend-api/database"
@@ -90,6 +91,44 @@ func FindUserByUsername(ctx context.Context, username string, user *models.User)
 		Joins("Role").
 		Where("users.username = ?", username).
 		First(user).Error
+}
+
+// FindUserForLogin mencari user untuk halaman masuk dari NAMA PENGGUNA atau
+// EMAIL (spasi di tepi diabaikan). Urutannya:
+//
+//  1. nama pengguna persis — perilaku lama; nama pengguna TIDAK dilarang
+//     memuat "@", jadi akun lama yang nama penggunanya berbentuk email tetap
+//     bisa masuk seperti biasa;
+//  2. email persis (memakai uq_users_email);
+//  3. email tanpa peduli huruf besar-kecil — orang mengetik
+//     "Sari@Warung.id" untuk akun "sari@warung.id" — HANYA bila tepat satu
+//     akun cocok. uq_users_email peka huruf besar, jadi dua akun bisa berbeda
+//     hanya di kapitalisasi; dalam keadaan itu tidak ada yang ditebak.
+//
+// Dulu hanya langkah 1, dan halaman masuk tidak menjelaskannya: yang mengetik
+// email — biasanya lebih diingat daripada nama pengguna — selalu ditolak.
+// Tanpa scope tenant — login lintas tenant lewat satu endpoint.
+func FindUserForLogin(ctx context.Context, login string, user *models.User) error {
+	login = strings.TrimSpace(login)
+	err := FindUserByUsername(ctx, login, user)
+	if err == nil || !errors.Is(err, gorm.ErrRecordNotFound) || !strings.Contains(login, "@") {
+		return err
+	}
+	err = database.DB.WithContext(ctx).Joins("Role").Where("users.email = ?", login).First(user).Error
+	if err == nil || !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	var cocok []models.User
+	if err := database.DB.WithContext(ctx).Joins("Role").
+		Where("LOWER(users.email) = LOWER(?)", login).
+		Limit(2).Find(&cocok).Error; err != nil {
+		return err
+	}
+	if len(cocok) != 1 {
+		return gorm.ErrRecordNotFound
+	}
+	*user = cocok[0]
+	return nil
 }
 
 // CreateUser menyimpan user baru. Pemanggil (service) mengisi TenantID & RoleID

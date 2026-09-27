@@ -2148,7 +2148,7 @@ Perilaku server:
 
 ```
 POST   /api/v1/auth/register           daftar tenant + outlet + owner + peran bawaan (1 transaksi)
-POST   /api/v1/auth/login              → access token (15 mnt) + refresh token (30 hari)
+POST   /api/v1/auth/login              username ATAU email → access token (15 mnt) + refresh token (30 hari)
 POST   /api/v1/auth/refresh            tukar refresh token, rotasi
 POST   /api/v1/auth/logout             cabut refresh token
 POST   /api/v1/auth/pin-login          ganti kasir cepat di perangkat yang sama

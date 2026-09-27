@@ -44,7 +44,7 @@ Semakin sedikit pintu, semakin kecil peluang tersesat.
 | Layar | Endpoint | Izin |
 |---|---|---|
 | Daftar usaha baru | `POST /auth/register` | — (publik) |
-| Masuk | `POST /auth/login` | — (publik) |
+| Masuk | `POST /auth/login` | — (publik); kolom `username` menerima nama pengguna atau email |
 | Perbarui sesi (di balik layar) | `POST /auth/refresh` | — |
 | Keluar | `POST /auth/logout` | wajib masuk |
 | Profil & izin saya | `GET /me` | wajib masuk |
