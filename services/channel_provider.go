@@ -47,6 +47,13 @@ type ProviderAdapter interface {
 // providerAdapters: penyedia yang SUDAH bisa disambungkan.
 var providerAdapters = map[string]ProviderAdapter{
 	"whatsapp": whatsappAdapter{},
+	"gofood":   gofoodAdapter{},
+}
+
+// webhookSubscriber: penyedia yang alamat webhook-nya bisa didaftarkan lewat
+// API (GoBiz) — tenant tidak perlu menempelkannya sendiri.
+type webhookSubscriber interface {
+	SubscribeWebhook(ctx context.Context, cred ChannelCredentials, alamat string) error
 }
 
 // providerAliases: nama bebas yang diketik saat membuat kanal → kode penyedia.
@@ -75,10 +82,8 @@ func segera(code, name, kind, docs, catatan string) structs.ChannelProviderInfo 
 
 // ListChannelProviders: katalog penyedia untuk layar "Hubungkan API".
 func ListChannelProviders() []structs.ChannelProviderInfo {
-	out := []structs.ChannelProviderInfo{whatsappAdapter{}.Info()}
+	out := []structs.ChannelProviderInfo{whatsappAdapter{}.Info(), gofoodAdapter{}.Info()}
 	out = append(out,
-		segera("gofood", "GoFood (GoBiz)", "delivery_app", "https://developer.gobiz.com/",
-			"Butuh akun GoBiz Developer (Client ID, Client Secret, Partner ID, Outlet ID) milik toko."),
 		segera("grabfood", "GrabFood", "delivery_app", "https://developer.grab.com/",
 			"Butuh kredensial GrabFood Partner API (client ID & secret) milik toko."),
 		segera("shopee", "Shopee", "marketplace", "https://open.shopee.com/",
@@ -117,13 +122,14 @@ func genericFromEvent(ev NormalizedEvent, raw []byte) ([]byte, error) {
 		Courier         string          `json:"courier,omitempty"`
 		Reason          string          `json:"reason,omitempty"`
 		OccurredAt      string          `json:"occurred_at,omitempty"`
+		IgnoreIfMissing bool            `json:"ignore_if_missing,omitempty"`
 		Items           []item          `json:"items,omitempty"`
 		Fees            []fee           `json:"fees,omitempty"`
 		Raw             json.RawMessage `json:"_raw,omitempty"`
 	}{
 		EventType: ev.EventType, ExternalOrderID: ev.ExternalOrderID, ExternalStatus: ev.ExternalStatus,
 		BuyerName: ev.BuyerName, BuyerPhone: ev.BuyerPhone, ShippingAddress: ev.ShippingAddress,
-		Courier: ev.Courier, Reason: ev.Reason,
+		Courier: ev.Courier, Reason: ev.Reason, IgnoreIfMissing: ev.IgnoreIfMissing,
 	}
 	if ev.OccurredAt != nil {
 		p.OccurredAt = ev.OccurredAt.UTC().Format(time.RFC3339)

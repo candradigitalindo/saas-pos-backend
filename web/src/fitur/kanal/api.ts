@@ -63,7 +63,15 @@ export interface PenyediaKanal {
   available: boolean
   docs_url: string
   steps: string[]
-  fields: { key: string; label: string; help?: string; secret: boolean; optional?: boolean }[]
+  fields: {
+    key: string
+    label: string
+    help?: string
+    secret: boolean
+    optional?: boolean
+    /** Isian pilihan (mis. Sandbox/Produksi); nilai pertama = bawaan. */
+    options?: { label: string; value: string }[]
+  }[]
   capabilities: string[]
   note?: string
 }

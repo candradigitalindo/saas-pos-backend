@@ -65,6 +65,11 @@ type NormalizedEvent struct {
 	OccurredAt      *time.Time
 	Items           []NormalizedItem
 	Fees            []NormalizedFee
+	// IgnoreIfMissing: status/pembatalan untuk pesanan yang belum pernah
+	// tercatat diabaikan, bukan dicoba ulang sampai mati. Di aplikator itu
+	// wajar — pesanan yang ditolak/kedaluwarsa sebelum diterima toko tetap
+	// mengirim "cancelled".
+	IgnoreIfMissing bool
 }
 
 // NormalizedItem adalah satu baris pesanan ternormalisasi. `ProductID` boleh
@@ -106,6 +111,7 @@ type genericPayload struct {
 	Courier         string `json:"courier"`
 	Reason          string `json:"reason"`
 	OccurredAt      string `json:"occurred_at"` // RFC3339
+	IgnoreIfMissing bool   `json:"ignore_if_missing"`
 	Items           []struct {
 		SKU       string `json:"sku"`
 		ProductID string `json:"product_id"`
@@ -135,6 +141,7 @@ func (genericAdapter) Normalize(raw []byte) (NormalizedEvent, error) {
 		ShippingAddress: p.ShippingAddress,
 		Courier:         p.Courier,
 		Reason:          p.Reason,
+		IgnoreIfMissing: p.IgnoreIfMissing,
 	}
 	if s := strings.TrimSpace(p.OccurredAt); s != "" {
 		if t, err := time.Parse(time.RFC3339, s); err == nil {
@@ -482,6 +489,9 @@ func applyOrderStatus(ctx context.Context, ch models.Channel, norm NormalizedEve
 		return err
 	}
 	if !ok {
+		if norm.IgnoreIfMissing {
+			return nil
+		}
 		return fmt.Errorf("%w: pesanan %s belum tercatat", helpers.ErrNotFound, norm.ExternalOrderID)
 	}
 	_, err = UpdateChannelOrderStatus(ctx, co.ID, structs.ChannelOrderStatusRequest{
@@ -498,6 +508,9 @@ func applyOrderCanceled(ctx context.Context, ch models.Channel, norm NormalizedE
 		return err
 	}
 	if !ok {
+		if norm.IgnoreIfMissing {
+			return nil // mis. ditolak/kedaluwarsa sebelum diterima — tak ada penjualan untuk dibatalkan
+		}
 		return fmt.Errorf("%w: pesanan %s belum tercatat", helpers.ErrNotFound, norm.ExternalOrderID)
 	}
 	reason := strings.TrimSpace(norm.Reason)

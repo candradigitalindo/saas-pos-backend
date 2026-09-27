@@ -151,6 +151,8 @@ type ChannelProviderField struct {
 	Help     string `json:"help,omitempty"`
 	Secret   bool   `json:"secret"`
 	Optional bool   `json:"optional,omitempty"`
+	// Options: isian pilihan (mis. Sandbox/Produksi); nilai pertama = bawaan.
+	Options []LabelValue `json:"options,omitempty"`
 }
 
 // ChannelProviderInfo: penyedia yang bisa disambungkan, cara mendapatkan

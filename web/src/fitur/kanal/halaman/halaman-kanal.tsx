@@ -247,7 +247,7 @@ export function HalamanKanal() {
       <p className="flex items-start gap-2 text-keterangan text-teks-redup">
         <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
         Kanal yang disambungkan ke API penyedia memakai akun developer milik toko Anda sendiri, dan
-        pesanannya masuk otomatis (saat ini WhatsApp; penyedia lain menyusul). Kanal lain dicatat
+        pesanannya masuk otomatis (saat ini WhatsApp dan GoFood; penyedia lain menyusul). Kanal lain dicatat
         manual atau diimpor dari laporan harian (CSV).
       </p>
 

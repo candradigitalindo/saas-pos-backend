@@ -141,6 +141,13 @@ func SaveChannelConnection(ctx context.Context, channelID string, in structs.Cha
 			}
 		}
 		ad.Prepare(cred)
+		// Akun/toko/lingkungan berganti → alamat webhook harus didaftarkan ulang.
+		for _, k := range []string{"client_id", "outlet_id", "environment", "phone_number_id"} {
+			if lama[k] != cred[k] {
+				delete(cred, "subscribed_url")
+				break
+			}
+		}
 		polos, err := json.Marshal(cred)
 		if err != nil {
 			return err
@@ -199,6 +206,7 @@ func TestChannelConnection(ctx context.Context, channelID string) (structs.Chann
 		ch.ConnectionStatus, ch.ConnectionError = "error", terr.Error()
 	} else {
 		ch.ConnectionStatus, ch.ConnectionError = "connected", ""
+		info = daftarkanWebhook(tctx, ad, &ch, cred, info)
 	}
 	err = repositories.WithTenant(ctx, func(tx *gorm.DB) error {
 		return repositories.SaveChannelConnection(ctx, tx, &ch)
@@ -209,6 +217,35 @@ func TestChannelConnection(ctx context.Context, channelID string) (structs.Chann
 	out = connectionResponse(ctx, ch, cred)
 	out.Info = info
 	return out, nil
+}
+
+// daftarkanWebhook: untuk penyedia yang mendukungnya, alamat webhook kanal
+// didaftarkan lewat API — sekali per alamat (dicatat di kredensial). Gagal
+// mendaftar tidak menggagalkan tes koneksi; alasannya ikut di info supaya
+// tenant bisa mendaftarkannya manual.
+func daftarkanWebhook(ctx context.Context, ad ProviderAdapter, ch *models.Channel, cred ChannelCredentials, info string) string {
+	sub, bisa := ad.(webhookSubscriber)
+	if !bisa || ch.WebhookToken == nil {
+		return info
+	}
+	alamat := webhookURL(ch.Provider, *ch.WebhookToken)
+	tambah := func(s string) string { return strings.Trim(info+" · "+s, " ·") }
+	if !strings.HasPrefix(alamat, "https://") {
+		return tambah("webhook belum didaftarkan: alamat publik HTTPS server (APP_URL) belum diatur")
+	}
+	if cred["subscribed_url"] == alamat {
+		return tambah("webhook terdaftar")
+	}
+	if err := sub.SubscribeWebhook(ctx, cred, alamat); err != nil {
+		return tambah("webhook belum terdaftar: " + err.Error())
+	}
+	cred["subscribed_url"] = alamat
+	if polos, err := json.Marshal(cred); err == nil {
+		if sandi, err := rahasia.Tutup(polos); err == nil {
+			ch.CredentialsEncrypted = sandi
+		}
+	}
+	return tambah("webhook didaftarkan")
 }
 
 // DisconnectChannel menghapus kredensial & alamat webhook; kanal kembali manual.

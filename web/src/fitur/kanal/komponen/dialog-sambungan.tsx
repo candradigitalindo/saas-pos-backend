@@ -159,6 +159,41 @@ export function DialogSambungan({ kanal, onTutup }: { kanal: Kanal; onTutup: () 
                 <div className="flex flex-col gap-3">
                   {dipilih.fields.map((f) => {
                     const lama = tersimpan ? s?.fields[f.key] : undefined
+                    const pilihan = f.options ?? []
+                    if (pilihan.length > 0) {
+                      const nilai = isian[f.key] ?? lama?.value ?? pilihan[0]!.value
+                      return (
+                        <div key={f.key} className="flex flex-col gap-1.5">
+                          <p id={`label-${f.key}`} className="text-label font-medium text-teks-sekunder">
+                            {f.label}
+                          </p>
+                          <div
+                            role="radiogroup"
+                            aria-labelledby={`label-${f.key}`}
+                            className="grid auto-cols-fr grid-flow-col gap-1 rounded-full bg-permukaan-2 p-1"
+                          >
+                            {pilihan.map((o) => (
+                              <button
+                                key={o.value}
+                                type="button"
+                                role="radio"
+                                aria-checked={nilai === o.value}
+                                onClick={() => setIsian((x) => ({ ...x, [f.key]: o.value }))}
+                                className={cn(
+                                  'h-11 rounded-full px-2 text-label font-semibold',
+                                  nilai === o.value
+                                    ? 'bg-permukaan text-utama shadow-kartu'
+                                    : 'text-teks-sekunder hover:text-teks-utama',
+                                )}
+                              >
+                                {o.label}
+                              </button>
+                            ))}
+                          </div>
+                          {f.help && <p className="text-keterangan text-teks-redup">{f.help}</p>}
+                        </div>
+                      )
+                    }
                     return (
                       <Kolom
                         key={f.key}
