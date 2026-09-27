@@ -19,7 +19,7 @@ import { cn } from '@/bersama/util/cn'
  * Pengguna satu toko (hampir semua kasir) melihat kepala yang sama tanpa
  * tombol — tidak ada pilihan yang pura-pura bisa dipilih.
  */
-export function PemilihToko() {
+export function PemilihToko({ ringkas = false }: { ringkas?: boolean }) {
   const { profil, tokoAktif, rincianToko, gantiToko } = useSesi()
   const toast = useToast()
   const [buka, setBuka] = useState(false)
@@ -32,7 +32,17 @@ export function PemilihToko() {
   // nama produknya, seperti kepala navigasi SaaS pada umumnya.
   const sebutToko = daftar.length > 1 || namaToko !== namaUsaha
 
-  const isi = (
+  // Ringkas (navigasi samping diciutkan): logo saja — nama usaha & toko
+  // tetap dibacakan pembaca layar dan muncul sebagai petunjuk arahkan-kursor.
+  const isi = ringkas ? (
+    <>
+      <LogoKasir className="h-9 w-9" />
+      <span className="sr-only">
+        {namaUsaha}
+        {sebutToko ? `, ${namaToko}` : ''}
+      </span>
+    </>
+  ) : (
     <>
       <LogoKasir className="h-9 w-9" />
       <span className="min-w-0 flex-1 text-left">
@@ -50,7 +60,14 @@ export function PemilihToko() {
   )
 
   if (daftar.length <= 1) {
-    return <div className="flex items-center gap-3 px-2 py-1">{isi}</div>
+    return (
+      <div
+        className={cn('flex items-center gap-3 py-1', ringkas ? 'justify-center' : 'px-2')}
+        title={ringkas ? namaUsaha : undefined}
+      >
+        {isi}
+      </div>
+    )
   }
 
   return (
@@ -59,14 +76,16 @@ export function PemilihToko() {
         <button
           type="button"
           aria-label={`Toko yang dipakai: ${namaToko}. Ganti toko`}
+          title={ringkas ? `${namaToko} — ganti toko` : undefined}
           className={cn(
-            'flex min-h-12 w-full items-center gap-3 rounded-kontrol px-2 py-1',
+            'flex min-h-12 w-full items-center gap-3 rounded-kontrol py-1',
+            ringkas ? 'justify-center' : 'px-2',
             'hover:bg-permukaan-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-utama',
             buka && 'bg-permukaan-2',
           )}
         >
           {isi}
-          <ChevronsUpDown className="h-4 w-4 shrink-0 text-teks-redup" aria-hidden />
+          {!ringkas && <ChevronsUpDown className="h-4 w-4 shrink-0 text-teks-redup" aria-hidden />}
         </button>
       </Popover.Trigger>
 
@@ -75,6 +94,7 @@ export function PemilihToko() {
           align="start"
           sideOffset={6}
           collisionPadding={12}
+          side={ringkas ? 'right' : 'bottom'}
           className="gerak-lapis z-[60] w-[var(--radix-popover-trigger-width)] min-w-60 rounded-kontrol border border-garis bg-permukaan p-1 shadow-melayang"
         >
           <p className="px-3 pb-1 pt-2 text-keterangan font-semibold uppercase tracking-wide text-teks-redup">

@@ -32,10 +32,18 @@ bagi pengguna gaptek.
 Kasir sengaja dibuat mode fokus: hanya ada Kasir, dan tombol keluar shift.
 Semakin sedikit pintu, semakin kecil peluang tersesat.
 
-### Layar lebar — navigasi samping, dikelompokkan
+### Layar lebar — navigasi samping ala SaaS (`app/layouts/navigasi-samping.tsx`)
 
-`Beranda` · `Penjualan` · `Barang & Stok` · `Pelanggan` · `Laporan` ·
-`CRM` · `Kanal` · `SDM` · `Pengaturan`
+- **Kepala:** pemilih toko · tombol utama **Buka Kasir** · kotak **Cari…** (palet perintah,
+  Ctrl/⌘ K — lompat ke halaman atau aksi cepat; kata lain ikut dicocokkan: "piutang" → Kasbon,
+  "kulakan" → Catat barang masuk).
+- **Daftar:** `Beranda` · `Laporan`, lalu kelompok yang bisa dilipat — `Penjualan` ·
+  `Barang & Stok` · `Pelanggan` · `CRM` · `SDM` (kelompok berisi halaman aktif selalu terbuka) —
+  dan di ujungnya `Langganan` · `Pengaturan`. Menu aktif: latar `sorot` + garis aksen; lencana
+  jumlah pada Stok (hampir habis + habis + minus); gembok pada fitur yang terkunci paket.
+- **Kaki:** kartu paket (Gratis / masa coba, hanya `billing.manage`) · status sinkron · profil ·
+  tombol ciutkan (lajur ikon 72px, diingat per perangkat) · keluar.
+- Baris 48px di layar sentuh, 40px dengan penunjuk halus (ui/01 §3).
 
 ---
 
@@ -66,10 +74,9 @@ Semakin sedikit pintu, semakin kecil peluang tersesat.
 | Peringatan stok menipis | `GET /stocks?low=true` | `stock.view` |
 | Pintasan aksi harian | — | sesuai izin |
 
-Navigasi samping (≥1024px): kepala berisi logo, nama usaha, dan **pemilih
-toko** (muncul sebagai tombol bila cabang > 1); kaki berisi status sinkron dan
-profil pengguna (avatar inisial, nama, peran, tombol keluar). Tepat satu menu
-menyala — yang jalurnya paling spesifik (`menuAktif`).
+Navigasi samping (≥1024px): lihat "Layar lebar" di atas. **Pemilih toko** muncul sebagai
+tombol bila cabang > 1. Tepat satu menu menyala — yang jalurnya paling spesifik (`menuAktif`) — dan
+menu aktif selalu digulir ke dalam pandangan.
 
 ---
 
