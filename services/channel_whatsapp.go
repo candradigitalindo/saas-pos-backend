@@ -76,7 +76,7 @@ func (whatsappAdapter) MerchantRef(cred ChannelCredentials) string {
 	return strings.TrimSpace(cred["phone_number_id"])
 }
 
-func (whatsappAdapter) WebhookValues(cred ChannelCredentials) []structs.LabelValue {
+func (whatsappAdapter) WebhookValues(cred ChannelCredentials, _ string) []structs.LabelValue {
 	return []structs.LabelValue{{Label: "Verify token", Value: cred["verify_token"]}}
 }
 

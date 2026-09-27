@@ -26,8 +26,9 @@ func TestAuditSemuaRuteMenolakTanpaToken(t *testing.T) {
 		"/webhooks/channels/:provider": "kanal tidak membawa token kita",
 		// Tanpa sesi, tapi berpagar tanda tangan milik kanal: salah → 401
 		// (diuji di sambungan_kanal_test.go).
-		"/webhooks/channels/:provider/:token": "diamankan tanda tangan penyedia per kanal",
-		"/uploads/*filepath":                  "foto barang; pagarnya nama ULID tak tertebak",
+		"/webhooks/channels/:provider/:token":       "diamankan tanda tangan penyedia per kanal",
+		"/webhooks/channels/:provider/:token/*aksi": "sub-jalur webhook per kanal (token OAuth GrabFood, pesanan)",
+		"/uploads/*filepath":                        "foto barang; pagarnya nama ULID tak tertebak",
 	}
 
 	r := routes.SetupRouter()

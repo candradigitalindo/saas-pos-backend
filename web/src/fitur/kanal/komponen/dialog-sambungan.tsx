@@ -212,7 +212,9 @@ export function DialogSambungan({ kanal, onTutup }: { kanal: Kanal; onTutup: () 
                   })}
                 </div>
 
-                {tersimpan && s?.webhook_url && <AlamatWebhook s={s} />}
+                {tersimpan && s?.webhook_url && (
+                  <AlamatWebhook s={s} label={dipilih.webhook_label ?? 'Callback URL'} />
+                )}
 
                 {galat && (
                   <p role="alert" className="text-label text-bahaya-teks">
@@ -301,9 +303,9 @@ function StatusSambungan({ s }: { s: SambunganKanal }) {
 }
 
 /** Yang harus ditempel balik di konsol penyedia. */
-function AlamatWebhook({ s }: { s: SambunganKanal }) {
+function AlamatWebhook({ s, label }: { s: SambunganKanal; label: string }) {
   const relatif = s.webhook_url?.startsWith('/')
-  const baris = [{ label: 'Callback URL', value: s.webhook_url! }, ...(s.webhook_values ?? [])]
+  const baris = [{ label, value: s.webhook_url! }, ...(s.webhook_values ?? [])]
   return (
     <div className="flex flex-col gap-2 rounded-kontrol border border-garis p-3">
       <p className="text-label font-semibold text-teks-utama">Tempel di konsol penyedia</p>
@@ -326,8 +328,21 @@ function SalinNilai({ label, nilai }: { label: string; nilai: string }) {
     <div className="flex flex-col gap-1">
       <span className="text-keterangan text-teks-redup">{label}</span>
       <div className="flex items-center gap-2">
-        <code className="min-w-0 flex-1 truncate rounded-kontrol bg-permukaan-2 px-2.5 py-2 text-keterangan text-teks-utama">
-          {nilai}
+        {/* Yang terpotong bagian DEPAN (elipsis), 18 karakter terakhir selalu
+            tampak: alamat-alamat webhook sama awalnya dan berbeda di ujung
+            (".../oauth/token"). Tombol salin tetap menyalin nilai utuh. */}
+        <code
+          title={nilai}
+          className="flex min-w-0 flex-1 rounded-kontrol bg-permukaan-2 px-2.5 py-2 text-keterangan whitespace-nowrap text-teks-utama"
+        >
+          {nilai.length > 24 ? (
+            <>
+              <span className="min-w-0 truncate">{nilai.slice(0, -18)}</span>
+              <span className="shrink-0">{nilai.slice(-18)}</span>
+            </>
+          ) : (
+            nilai
+          )}
         </code>
         <button
           type="button"

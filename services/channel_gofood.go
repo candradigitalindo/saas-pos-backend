@@ -89,7 +89,7 @@ func (gofoodAdapter) MerchantRef(cred ChannelCredentials) string {
 	return strings.TrimSpace(cred["outlet_id"])
 }
 
-func (gofoodAdapter) WebhookValues(ChannelCredentials) []structs.LabelValue { return nil }
+func (gofoodAdapter) WebhookValues(ChannelCredentials, string) []structs.LabelValue { return nil }
 
 // GoBiz tidak memverifikasi alamat lewat GET.
 func (gofoodAdapter) VerifyChallenge(url.Values, ChannelCredentials) (string, bool) { return "", false }

@@ -167,6 +167,8 @@ type ChannelProviderInfo struct {
 	Fields       []ChannelProviderField `json:"fields"`
 	Capabilities []string               `json:"capabilities"`
 	Note         string                 `json:"note,omitempty"`
+	// WebhookLabel: nama alamat webhook utama di konsol penyedia (bawaan "Callback URL").
+	WebhookLabel string `json:"webhook_label,omitempty"`
 }
 
 // ChannelConnectionRequest: PUT /channels/:id/connection. Isian rahasia yang

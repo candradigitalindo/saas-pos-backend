@@ -74,6 +74,8 @@ export interface PenyediaKanal {
   }[]
   capabilities: string[]
   note?: string
+  /** Nama alamat webhook utama di konsol penyedia (bawaan "Callback URL"). */
+  webhook_label?: string
 }
 
 /** GET /channels/:id/connection — rahasia hanya pratinjau 4 karakter terakhir. */

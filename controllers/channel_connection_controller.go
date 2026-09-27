@@ -87,7 +87,12 @@ func ProviderWebhook(c *gin.Context) {
 		})
 		return
 	}
-	res, err := services.IngestProviderWebhook(c.Request.Context(), c.Param("provider"), c.Param("token"), c.Request.Header, raw)
+	res, balasan, err := services.IngestProviderWebhook(c.Request.Context(), c.Param("provider"), c.Param("token"),
+		c.Param("aksi"), c.Request.Header, raw)
+	if balasan != nil {
+		c.JSON(balasan.Status, balasan.Body)
+		return
+	}
 	if errors.Is(err, services.ErrWebhookUnauthorized) {
 		c.JSON(http.StatusUnauthorized, structs.ErrorResponse{
 			Success: false, Message: "Webhook tidak sah", Errors: map[string]string{"signature": "tidak cocok"},

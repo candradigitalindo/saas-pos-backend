@@ -32,8 +32,9 @@ type ProviderAdapter interface {
 	Prepare(cred ChannelCredentials)
 	// MerchantRef: pengenal toko/nomor di penyedia — unik lintas tenant.
 	MerchantRef(cred ChannelCredentials) string
-	// WebhookValues: nilai selain URL yang perlu disalin ke konsol penyedia.
-	WebhookValues(cred ChannelCredentials) []structs.LabelValue
+	// WebhookValues: nilai selain URL utama yang perlu disalin ke konsol
+	// penyedia; alamat = URL webhook kanal (untuk alamat turunan).
+	WebhookValues(cred ChannelCredentials, alamat string) []structs.LabelValue
 	// VerifyChallenge menjawab GET verifikasi alamat webhook. ok=false → 403.
 	VerifyChallenge(q url.Values, cred ChannelCredentials) (body string, ok bool)
 	// VerifySignature memeriksa tanda tangan webhook (bukan dari penyedia → galat).
@@ -48,6 +49,21 @@ type ProviderAdapter interface {
 var providerAdapters = map[string]ProviderAdapter{
 	"whatsapp": whatsappAdapter{},
 	"gofood":   gofoodAdapter{},
+	"grabfood": grabfoodAdapter{},
+}
+
+// WebhookBalasan: balasan langsung untuk sub-jalur webhook yang ditangani
+// adaptor sendiri (bukan peristiwa pesanan).
+type WebhookBalasan struct {
+	Status int
+	Body   any
+}
+
+// webhookActor: penyedia yang punya sub-jalur di bawah alamat webhook — mis.
+// GrabFood meminta token OAuth dari "server partner" sebelum mengirim pesanan.
+// handled=false → diperlakukan sebagai webhook pesanan biasa.
+type webhookActor interface {
+	WebhookAction(aksi string, h http.Header, body []byte, cred ChannelCredentials) (WebhookBalasan, bool)
 }
 
 // webhookSubscriber: penyedia yang alamat webhook-nya bisa didaftarkan lewat
@@ -82,10 +98,8 @@ func segera(code, name, kind, docs, catatan string) structs.ChannelProviderInfo 
 
 // ListChannelProviders: katalog penyedia untuk layar "Hubungkan API".
 func ListChannelProviders() []structs.ChannelProviderInfo {
-	out := []structs.ChannelProviderInfo{whatsappAdapter{}.Info(), gofoodAdapter{}.Info()}
+	out := []structs.ChannelProviderInfo{whatsappAdapter{}.Info(), gofoodAdapter{}.Info(), grabfoodAdapter{}.Info()}
 	out = append(out,
-		segera("grabfood", "GrabFood", "delivery_app", "https://developer.grab.com/",
-			"Butuh kredensial GrabFood Partner API (client ID & secret) milik toko."),
 		segera("shopee", "Shopee", "marketplace", "https://open.shopee.com/",
 			"Butuh aplikasi Shopee Open Platform (Partner ID & Partner Key) milik toko."),
 		segera("tiktokshop", "TikTok Shop & Tokopedia", "marketplace", "https://partner.tiktokshop.com/",

@@ -115,6 +115,10 @@ func SetupRouter() *gin.Engine {
 	// dengan rahasia kanal itu. GET = verifikasi alamat oleh penyedia (Meta).
 	r.GET("/webhooks/channels/:provider/:token", webhookLimiter, controllers.ProviderWebhookChallenge)
 	r.POST("/webhooks/channels/:provider/:token", webhookLimiter, controllers.ProviderWebhook)
+	// Sub-jalur (mis. GrabFood: /oauth/token, /order) — penyedia yang
+	// memanggil beberapa endpoint "server partner".
+	r.GET("/webhooks/channels/:provider/:token/*aksi", webhookLimiter, controllers.ProviderWebhookChallenge)
+	r.POST("/webhooks/channels/:provider/:token/*aksi", webhookLimiter, controllers.ProviderWebhook)
 
 	v1 := r.Group("/api/v1")
 	registerAuthRoutes(v1)

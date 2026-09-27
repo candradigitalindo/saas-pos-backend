@@ -89,7 +89,7 @@ func connectionResponse(ctx context.Context, ch models.Channel, cred ChannelCred
 	if ch.WebhookToken != nil {
 		out.WebhookURL = webhookURL(ch.Provider, *ch.WebhookToken)
 	}
-	out.WebhookValues = ad.WebhookValues(cred)
+	out.WebhookValues = ad.WebhookValues(cred, out.WebhookURL)
 	if t, err := repositories.LastChannelEventAt(ctx, ch.ID); err == nil && t != nil {
 		out.LastEventAt = t.UTC().Format(saleTimeLayout)
 	}
@@ -142,7 +142,7 @@ func SaveChannelConnection(ctx context.Context, channelID string, in structs.Cha
 		}
 		ad.Prepare(cred)
 		// Akun/toko/lingkungan berganti → alamat webhook harus didaftarkan ulang.
-		for _, k := range []string{"client_id", "outlet_id", "environment", "phone_number_id"} {
+		for _, k := range []string{"client_id", "outlet_id", "merchant_id", "environment", "phone_number_id"} {
 			if lama[k] != cred[k] {
 				delete(cred, "subscribed_url")
 				break
@@ -299,37 +299,43 @@ func ProviderWebhookChallenge(ctx context.Context, provider, token string, q url
 
 // IngestProviderWebhook: tanda tangan diperiksa dengan rahasia milik kanal itu,
 // lalu tiap peristiwa disimpan (idempoten) untuk diproses pekerja — tidak ada
-// pemrosesan di jalur webhook (blueprint F.6 aturan 1).
-func IngestProviderWebhook(ctx context.Context, provider, token string, h http.Header, body []byte) (structs.ProviderWebhookResult, error) {
+// pemrosesan di jalur webhook (blueprint F.6 aturan 1). Sub-jalur yang
+// ditangani adaptor sendiri (mis. token OAuth GrabFood) dibalas langsung.
+func IngestProviderWebhook(ctx context.Context, provider, token, aksi string, h http.Header, body []byte) (structs.ProviderWebhookResult, *WebhookBalasan, error) {
 	var res structs.ProviderWebhookResult
 	ch, ad, cred, err := kanalWebhook(ctx, provider, token)
 	if errors.Is(err, repositories.ErrChannelNotFound) {
-		return res, ErrWebhookUnauthorized
+		return res, nil, ErrWebhookUnauthorized
 	}
 	if err != nil {
-		return res, err
+		return res, nil, err
+	}
+	if act, bisa := ad.(webhookActor); bisa {
+		if balasan, ditangani := act.WebhookAction(strings.Trim(aksi, "/"), h, body, cred); ditangani {
+			return res, &balasan, nil
+		}
 	}
 	if err := ad.VerifySignature(h, body, cred); err != nil {
-		return res, ErrWebhookUnauthorized
+		return res, nil, ErrWebhookUnauthorized
 	}
 	evs, err := ad.Events(body, cred)
 	if err != nil {
 		res.Ignored = "payload tidak dapat diurai: " + err.Error()
-		return res, nil
+		return res, nil, nil
 	}
 	if len(evs) == 0 {
 		res.Ignored = "bukan pesanan"
-		return res, nil
+		return res, nil, nil
 	}
 	for _, ev := range evs {
 		payload, err := genericFromEvent(ev, body)
 		if err != nil {
-			return res, err
+			return res, nil, err
 		}
 		created, err := repositories.InsertChannelEvent(ctx, ch.TenantID, ch.ID,
 			normalizeEventType(ev.EventType), ev.ExternalOrderID, payload)
 		if err != nil {
-			return res, err
+			return res, nil, err
 		}
 		if created {
 			res.Received++
@@ -337,5 +343,5 @@ func IngestProviderWebhook(ctx context.Context, provider, token string, h http.H
 			res.Duplicate++
 		}
 	}
-	return res, nil
+	return res, nil, nil
 }

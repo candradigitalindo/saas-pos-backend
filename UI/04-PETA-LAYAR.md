@@ -403,7 +403,7 @@ Jangan dirancang di UI sampai backendnya tersedia:
 
 | Fitur | Status backend |
 |---|---|
-| Sambungan API kanal dengan kredensial MILIK TENANT | `GET /channel-providers` · `GET\|PUT\|DELETE /channels/:id/connection` · `POST .../test` — dialog "Sambungan API" di kartu kanal. Tersedia: **WhatsApp Cloud API** (pesanan katalog) dan **GoFood** (GoBiz Direct Integration: pesanan diterima, status pengemudi, pembatalan; webhook didaftarkan otomatis). Menyusul per penyedia: GrabFood, Shopee, TikTok Shop/Tokopedia, Lazada |
+| Sambungan API kanal dengan kredensial MILIK TENANT | `GET /channel-providers` · `GET\|PUT\|DELETE /channels/:id/connection` · `POST .../test` — dialog "Sambungan API" di kartu kanal. Tersedia: **WhatsApp Cloud API** (pesanan katalog) **GoFood** (GoBiz Direct Integration: pesanan diterima, status pengemudi, pembatalan; webhook didaftarkan otomatis), dan **GrabFood** (Partner API: Grab memanggil server partner — OAuth per kanal, Submit Order & Push Order State). Menyusul per penyedia: Shopee, TikTok Shop/Tokopedia, Lazada |
 | Pengiriman email sungguhan | Alur outbox sudah utuh & teruji. WhatsApp **sudah** terkirim sungguhan lewat sidecar `wa-gateway/` (bila `WA_GATEWAY_URL` diisi); email masih mencatat ke log sampai penyedianya dipilih |
 | Deteksi kejanggalan mitra (merchant fiktif, pendaftaran beruntun) | Blueprint G.5 P1 — belum dibangun |
 | Laporan biaya akuisisi per mitra & wilayah | Blueprint G.5 P1 — belum dibangun |
