@@ -88,7 +88,7 @@ func respondServiceError(c *gin.Context, err error) {
 		})
 		return
 	}
-	msg := err.Error()
+	msg := helpers.PesanUntukPengguna(err)
 	c.JSON(status, structs.ErrorResponse{
 		Success: false,
 		Message: msg,

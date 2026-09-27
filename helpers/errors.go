@@ -1,6 +1,11 @@
 package helpers
 
-import "errors"
+import (
+	"errors"
+	"strings"
+	"unicode"
+	"unicode/utf8"
+)
 
 // Sentinel error lintas-lapisan (docs/TECHNICAL-BACKEND.md §7).
 //
@@ -38,4 +43,31 @@ func StatusForError(err error) int {
 	default:
 		return 500
 	}
+}
+
+// PesanUntukPengguna mengubah error layanan menjadi kalimat yang layak tampil
+// di layar: awalan sentinel dibuang dan huruf pertamanya dikapitalkan.
+//
+// Layanan membungkus sentinel dengan konteks —
+// fmt.Errorf("%w: username atau email sudah terpakai", ErrConflict) — sehingga
+// err.Error() berbunyi "data bentrok: username atau email sudah terpakai".
+// Awalan itu label internal untuk memetakan kode status, bukan bahasa orang
+// (ui/01 §2), tapi dulu ikut terkirim apa adanya dan tampil di layar pendaftaran,
+// riwayat penjualan, kasbon, dan halaman "perlu diperiksa".
+func PesanUntukPengguna(err error) string {
+	if err == nil {
+		return ""
+	}
+	pesan := err.Error()
+	for _, s := range []error{ErrNotFound, ErrConflict, ErrInsufficient, ErrForbidden, ErrValidation, ErrUnauthorized} {
+		if errors.Is(err, s) && strings.HasPrefix(pesan, s.Error()+": ") {
+			pesan = strings.TrimPrefix(pesan, s.Error()+": ")
+			break
+		}
+	}
+	r, ukuran := utf8.DecodeRuneInString(pesan)
+	if r == utf8.RuneError {
+		return pesan
+	}
+	return string(unicode.ToUpper(r)) + pesan[ukuran:]
 }

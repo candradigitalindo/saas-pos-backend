@@ -171,5 +171,5 @@ func cleanReason(err error) string {
 	if helpers.StatusForError(err) >= 500 {
 		return "kesalahan internal"
 	}
-	return err.Error()
+	return helpers.PesanUntukPengguna(err)
 }
