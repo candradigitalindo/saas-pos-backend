@@ -303,6 +303,7 @@ menyebut paket termurah yang membukanya.
 | `qris` | QRIS di `POST /sales` & `POST /receivable-payments` | `/sync/push` (transaksi offline sudah terjadi) |
 | `online_channel` | tulis `/channels/*`, `POST /channel-orders` | baca; proses/batal pesanan lama; pencairan |
 | `crm_freelance` | MEMBUAT prospek, aktivitas, penawaran, proyek, invoice, sumber & alur | baca; ubah/menangkan/kirim; bayar invoice lama |
+| `crm_sales` (Pro & Multi-Outlet, migrasi 000038) | rencana kunjungan, check-in langsung (`POST /visits`), target baru | kunjungan offline via `/sync/push`; check-out kunjungan berjalan; hitung/setujui/bayar komisi |
 | `multi_outlet` + `max_outlets` | `POST /outlets` (cabang ke-2 dst.) | cabang yang sudah ada |
 | `max_users` · `max_products` | `POST /users` · `POST /products` & impor CSV (dikunci per tenant → tidak bisa dibalap) | — |
 | `max_monthly_transactions` | — sengaja tidak ditegakkan: penjualan tidak pernah diblokir paket | |

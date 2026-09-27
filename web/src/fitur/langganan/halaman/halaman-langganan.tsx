@@ -81,8 +81,9 @@ export function HalamanLangganan() {
               Anda memakai paket {berlaku?.name ?? 'Gratis'}
             </p>
             <p className="text-isi text-teks-sekunder">
-              QRIS, kanal online, CRM, dan cabang tambahan terkunci. Paket berbayar
-              dimulai dengan masa coba gratis — pilih di bawah.
+              Gratis selamanya, tanpa batas barang maupun transaksi. Yang terkunci
+              hanya QRIS, kanal online, CRM, sales lapangan, dan cabang tambahan —
+              paket berbayar dimulai dengan masa coba gratis.
             </p>
           </Kartu>
         ) : berlaku && berlaku.code !== langganan.plan_code ? (
@@ -257,12 +258,13 @@ const NAMA_FITUR: Record<string, string> = {
   qris: 'Terima pembayaran QRIS',
   online_channel: 'Pesanan dari kanal online',
   crm_freelance: 'CRM: penawaran, proyek & invoice',
+  crm_sales: 'Sales lapangan: kunjungan, target & komisi',
   multi_outlet: 'Kelola banyak cabang',
 }
 
 /** Kalimat pendek di bawah nama paket — untuk siapa paket itu. */
 const UNTUK_SIAPA: Record<string, string> = {
-  free: 'Untuk mencoba dan usaha yang baru mulai',
+  free: 'Gratis selamanya untuk usaha yang baru mulai',
   basic: 'Untuk warung dan toko satu kasir',
   pro: 'Untuk toko yang juga berjualan online',
   multi: 'Untuk usaha dengan beberapa cabang',

@@ -39,6 +39,7 @@ const (
 	FeatureQRIS          = "qris"
 	FeatureOnlineChannel = "online_channel"
 	FeatureCRMFreelance  = "crm_freelance"
+	FeatureCRMSales      = "crm_sales"
 	FeatureMultiOutlet   = "multi_outlet"
 )
 
@@ -47,6 +48,7 @@ var namaFitur = map[string]string{
 	FeatureQRIS:          "Pembayaran QRIS",
 	FeatureOnlineChannel: "Kanal jualan online",
 	FeatureCRMFreelance:  "CRM (penawaran, proyek & invoice)",
+	FeatureCRMSales:      "Sales lapangan (kunjungan, target & komisi)",
 	FeatureMultiOutlet:   "Menambah cabang",
 }
 

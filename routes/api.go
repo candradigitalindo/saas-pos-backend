@@ -436,21 +436,27 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	visitView := middlewares.Require("crm.visit.checkin", "crm.lead.view.all")
 	visitEdit := middlewares.Require("crm.visit.checkin")
 	commView := middlewares.Require("crm.commission.view")
+	// Kunci paket crm_sales: hanya MEMULAI yang dikunci — rencana kunjungan,
+	// check-in langsung, target baru. Menyelesaikan kunjungan yang berjalan,
+	// membaca riwayat, dan menghitung/menyetujui/membayar komisi periode yang
+	// sudah lewat tetap boleh (sales yang sudah bekerja tetap dibayar).
+	// Kunjungan offline lewat /sync/push juga tidak dikunci: sudah terjadi.
+	salesBaru := middlewares.RequireFeatureForWrites(services.FeatureCRMSales)
 
 	vp := t.Group("/visit-plans")
 	vp.GET("", visitView, controllers.ListVisitPlans)
-	vp.POST("", visitEdit, controllers.CreateVisitPlan)
+	vp.POST("", visitEdit, salesBaru, controllers.CreateVisitPlan)
 	vp.GET("/:id", visitView, controllers.GetVisitPlan)
 
 	vis := t.Group("/visits")
 	vis.GET("", visitView, controllers.ListVisits)
-	vis.POST("", visitEdit, controllers.UpsertVisit)
+	vis.POST("", visitEdit, salesBaru, controllers.UpsertVisit)
 	vis.GET("/:id", visitView, controllers.GetVisit)
 	vis.POST("/:id/checkout", visitEdit, controllers.CheckoutVisit)
 
 	st := t.Group("/sales-targets")
 	st.GET("", commView, controllers.ListSalesTargets)
-	st.POST("", commView, controllers.SetSalesTarget)
+	st.POST("", commView, salesBaru, controllers.SetSalesTarget)
 
 	// POST /commissions = hitung (bukan /commissions/compute — path statis di
 	// posisi yang sama dengan :id membuat gin panik).

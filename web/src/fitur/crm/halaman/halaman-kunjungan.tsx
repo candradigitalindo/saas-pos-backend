@@ -17,6 +17,9 @@ import { useSinkron } from '@/lib/offline/mesin'
 import { formatJam, formatTanggal } from '@/bersama/util/tanggal'
 import { usePelanggan } from '@/bersama/hooks/use-katalog'
 import { crmApi, type Kunjungan } from '../api'
+import { useSesi } from '@/bersama/hooks/use-sesi'
+import { BannerKunciFitur } from '@/bersama/komponen/kunci-fitur'
+import { FITUR } from '@/lib/fitur'
 
 const HASIL = [
   { nilai: 'order', label: 'Pesan barang' },
@@ -35,6 +38,10 @@ const HASIL = [
  */
 export function HalamanKunjungan() {
   const sinkron = useSinkron()
+  // Kunci paket sales lapangan: check-in BARU terkunci; kunjungan yang sedang
+  // berjalan tetap bisa diselesaikan (check-out), riwayat tetap terbaca.
+  const { punyaFitur } = useSesi()
+  const bolehCheckin = punyaFitur(FITUR.salesLapangan)
   const [checkinUntuk, setCheckinUntuk] = useState(false)
   const [checkoutUntuk, setCheckoutUntuk] = useState<Kunjungan | null>(null)
 
@@ -58,11 +65,19 @@ export function HalamanKunjungan() {
     <div className="flex w-full max-w-2xl flex-col gap-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-judul font-bold text-teks-utama">Kunjungan</h1>
-        <Tombol onClick={() => setCheckinUntuk(true)}>
-          <MapPin className="h-5 w-5" aria-hidden />
-          Check-in
-        </Tombol>
+        {bolehCheckin && (
+          <Tombol onClick={() => setCheckinUntuk(true)}>
+            <MapPin className="h-5 w-5" aria-hidden />
+            Check-in
+          </Tombol>
+        )}
       </header>
+
+      <BannerKunciFitur
+        fitur={FITUR.salesLapangan}
+        nama="Sales lapangan"
+        penjelasan="Kunjungan yang sedang berjalan tetap bisa diselesaikan dan riwayatnya tetap terbaca — hanya check-in baru yang terkunci."
+      />
 
       <StatusKoneksi menunggu={sinkron.menunggu} />
 
@@ -99,7 +114,7 @@ export function HalamanKunjungan() {
             ikon={Navigation}
             judul="Belum ada kunjungan"
             penjelasan="Tekan Check-in saat Anda tiba di toko pelanggan. Bisa dilakukan walau sedang tidak ada sinyal."
-            aksi={{ label: 'Check-in Sekarang', onKlik: () => setCheckinUntuk(true) }}
+            aksi={bolehCheckin ? { label: 'Check-in Sekarang', onKlik: () => setCheckinUntuk(true) } : undefined}
           />
         ) : (
           <Kartu className="divide-y divide-garis">

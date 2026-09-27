@@ -76,7 +76,7 @@ export const MENU_LAINNYA: ItemMenu[] = [
   { ke: '/stok/transfer', label: 'Kirim Antar Toko', ikon: Truck, izin: [IZIN.stockTransfer] },
   { ke: '/kanal', label: 'Kanal Online', ikon: Store, izin: [IZIN.channelManage, IZIN.channelOrderAccept], fitur: FITUR.kanalOnline },
   { ke: '/crm', label: 'Prospek', ikon: Building2, izin: [IZIN.crmLeadViewOwn, IZIN.crmLeadViewAll], fitur: FITUR.crmFreelance },
-  { ke: '/crm/kunjungan', label: 'Kunjungan', ikon: MapPin, izin: [IZIN.crmVisitCheckin] },
+  { ke: '/crm/kunjungan', label: 'Kunjungan', ikon: MapPin, izin: [IZIN.crmVisitCheckin], fitur: FITUR.salesLapangan },
   { ke: '/sdm', label: 'Karyawan', ikon: UserCog, izin: [IZIN.hrEmployeeView, IZIN.hrEmployeeEdit] },
   { ke: '/sdm/gaji', label: 'Gaji', ikon: Wallet, izin: [IZIN.hrPayrollRun, IZIN.hrSalaryView] },
   { ke: '/langganan', label: 'Langganan', ikon: CreditCard, izin: [IZIN.billingManage] },
@@ -138,7 +138,7 @@ export const KELOMPOK_SAMPING: KelompokMenu[] = [
     judul: 'CRM',
     item: [
       { ke: '/crm', label: 'Prospek', ikon: Building2, izin: [IZIN.crmLeadViewOwn, IZIN.crmLeadViewAll], fitur: FITUR.crmFreelance },
-      { ke: '/crm/kunjungan', label: 'Kunjungan', ikon: MapPin, izin: [IZIN.crmVisitCheckin] },
+      { ke: '/crm/kunjungan', label: 'Kunjungan', ikon: MapPin, izin: [IZIN.crmVisitCheckin], fitur: FITUR.salesLapangan },
     ],
   },
   {

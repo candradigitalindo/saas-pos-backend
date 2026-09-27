@@ -11,6 +11,7 @@ export const FITUR = {
   qris: 'qris',
   kanalOnline: 'online_channel',
   crmFreelance: 'crm_freelance',
+  salesLapangan: 'crm_sales',
   banyakCabang: 'multi_outlet',
 } as const
 

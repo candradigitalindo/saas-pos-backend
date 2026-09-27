@@ -221,7 +221,7 @@ menyala — yang jalurnya paling spesifik (`menuAktif`).
 
 - Kasir: petak **QRIS** tetap tampil tapi terkunci, bertuliskan paket yang membukanya ("Paket
   Basic"). Setoran kasbon: opsi QRIS tertulis dengan paketnya dan tidak bisa dipilih.
-- Kanal Online & Prospek: menu bergembok; halamannya terbuka dan data lama terbaca, tombol
+- Kanal Online, Prospek & Kunjungan: menu bergembok; halamannya terbuka dan data lama terbaca, tombol
   "tambah"/"catat pesanan" disembunyikan, `BannerKunciFitur` menjelaskan paketnya (tombol "Lihat
   paket" hanya untuk `billing.manage`).
 - Toko & Cabang: "Tambah Cabang" hilang saat batas cabang paket tercapai.
