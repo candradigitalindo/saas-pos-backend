@@ -313,7 +313,13 @@ func awalPeriodeBerbayar(sub models.Subscription, now time.Time) time.Time {
 }
 
 // firstOfDay memangkas t ke tengah malam UTC.
+//
+// t diubah ke UTC DULU: tanggal diambil dari zona t sendiri, dan time.Now() di
+// server berzona WIB berbeda hari dengan UTC antara 00.00–07.00 WIB — periode
+// langganan sempat bergeser sehari tergantung jam berapa tagihan terbit
+// (nilai dari basis data sudah UTC, nilai dari time.Now() belum).
 func firstOfDay(t time.Time) time.Time {
+	t = t.UTC()
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 }
 
