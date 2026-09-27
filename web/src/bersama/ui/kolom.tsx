@@ -110,48 +110,9 @@ export const Kolom = forwardRef<HTMLInputElement, PropKolom>(function Kolom(
   )
 })
 
-/** Kolom pilihan. Bentuk visualnya sama persis dengan Kolom agar form rapi. */
-export interface PropPilihan extends React.SelectHTMLAttributes<HTMLSelectElement> {
-  label: string
-  bantuan?: string
-  galat?: string
-}
-
-export const Pilihan = forwardRef<HTMLSelectElement, PropPilihan>(function Pilihan(
-  { label, bantuan, galat, className, id, required, children, ...sisa },
-  ref,
-) {
-  const otomatis = useId()
-  const idKolom = id ?? otomatis
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label htmlFor={idKolom} className="text-label font-medium text-teks-sekunder">
-        {label}
-        {required && <span className="text-bahaya-teks"> *</span>}
-      </label>
-      <select
-        ref={ref}
-        id={idKolom}
-        required={required}
-        aria-invalid={!!galat}
-        className={cn(
-          'h-12 rounded-kontrol border bg-permukaan px-3 text-isi text-teks-utama',
-          galat ? 'border-bahaya' : 'border-garis',
-          className,
-        )}
-        {...sisa}
-      >
-        {children}
-      </select>
-      {galat ? (
-        <p className="flex items-start gap-1 text-keterangan text-bahaya-teks">
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-          {galat}
-        </p>
-      ) : (
-        bantuan && <p className="text-keterangan text-teks-redup">{bantuan}</p>
-      )}
-    </div>
-  )
-})
+/**
+ * Kolom pilihan — kini DENGAN PENCARIAN (lihat ./pilihan.tsx). Diekspor ulang di
+ * sini supaya semua pemakai lama (`import { Kolom, Pilihan } from '…/kolom'`)
+ * tetap berjalan tanpa diubah.
+ */
+export { Pilihan, type PropPilihan, type EventPilihan } from './pilihan'

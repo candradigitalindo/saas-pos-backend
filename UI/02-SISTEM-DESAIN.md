@@ -217,6 +217,14 @@ Harga Jual                          ← keadaan salah
 
 - Kolom uang: papan tik angka (`inputmode="numeric"`), format ribuan otomatis saat mengetik.
 - Kolom jumlah: tombol `−` dan `+` besar di kiri-kanan, karena mengetik angka di HP sambil berdiri itu susah.
+- **Kolom pilihan SELALU bisa dicari** (`Pilihan`, `bersama/ui/pilihan.tsx`), bukan
+  `<select>` bawaan: tombol setinggi kolom isian, daftar melayang dengan kotak
+  **Cari** di atasnya (tanpa peduli huruf besar & aksen; urutan daftar tetap),
+  panah/Enter/Esc berfungsi, dan tiap baris setinggi 48px. API-nya sama dengan
+  `<select>` (`value`, `onChange(e.target.value)`, anak `<option>`), jadi
+  pemakai lama tidak berubah. Dibangun dari Radix Popover + cmdk (pola Combobox
+  shadcn/ui): daftarnya dirender di portal sehingga tidak terpotong dialog
+  bergulir, dan membuka ke atas bila ruang di bawah sempit.
 
 ### Kartu ringkasan (dipakai di beranda)
 
