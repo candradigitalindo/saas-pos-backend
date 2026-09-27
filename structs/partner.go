@@ -26,6 +26,12 @@ type PartnerUserResponse struct {
 	Phone string `json:"phone,omitempty"`
 }
 
+// PartnerMeResponse: GET /partner/me — mitra & akun yang sedang masuk.
+type PartnerMeResponse struct {
+	Partner PartnerResponse     `json:"partner"`
+	User    PartnerUserResponse `json:"user"`
+}
+
 // ── Tingkat & mitra (panel internal) ─────────────────────────────────────
 
 type PartnerTierRequest struct {

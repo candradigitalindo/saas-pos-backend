@@ -338,7 +338,7 @@ mengira sedang melihat data operasional toko.
 | Layar | Endpoint | Catatan |
 |---|---|---|
 | Masuk mitra | `POST /partner/auth/login` | memakai **email** |
-| Profil mitra | `GET /partner/me` | |
+| Profil mitra | `GET /partner/me` → `{partner, user}` (bentuk sama dengan respons masuk) | |
 | Dashboard | `GET /partner/dashboard` | prospek, merchant aktif, komisi, pencairan terakhir |
 | Prospek | `GET\|POST /partner/leads` | |
 | Merchant binaan | `GET /partner/merchants` | **hanya** nama usaha, status langganan, jatuh tempo, aktif |

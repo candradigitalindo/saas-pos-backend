@@ -342,3 +342,19 @@ func TestPartnerClawback(t *testing.T) {
 		t.Fatalf("komisi clawed_back = %d, mau 1", len(clawed))
 	}
 }
+
+// Portal membaca `partner` & `user` dari /partner/me (bentuk yang sama dengan
+// respons login). Dulu endpoint ini hanya mengembalikan profil mitranya:
+// dasbor menyapa "Halo, Mitra" dan kode referralnya kosong.
+func TestPartnerMeMemuatMitraDanAkun(t *testing.T) {
+	requireDB(t)
+	makePartnerTier(t, "Tingkat Me Portal", "0.10", 1, 0, 0)
+	_, kode, email, sandi := makeActivePartner(t, "Tingkat Me Portal", "meportal")
+	tok := partnerToken(t, email, sandi)
+	d := call(t, "GET", "/api/v1/partner/me", tok, nil).mustOK(t, "me").data(t)
+	mitra, _ := d["partner"].(map[string]any)
+	akun, _ := d["user"].(map[string]any)
+	if mitra == nil || mitra["referral_code"] != kode || akun == nil || akun["email"] != email {
+		t.Fatalf("/partner/me = %v", d)
+	}
+}

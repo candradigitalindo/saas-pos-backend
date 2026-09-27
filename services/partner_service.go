@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"math/big"
 	"strings"
@@ -71,13 +72,23 @@ func PartnerLogin(ctx context.Context, email, password string) (structs.PartnerA
 
 // ── Portal mitra (realm partner) ────────────────────────────────────────
 
-// PartnerProfile mengembalikan profil mitra permintaan ini.
-func PartnerProfile(ctx context.Context) (structs.PartnerResponse, error) {
+// PartnerProfile mengembalikan profil mitra permintaan ini BESERTA akun yang
+// sedang masuk — bentuk yang sama dengan respons login. Dulu hanya profil
+// mitranya, sedangkan portal membaca `partner` & `user`: sapaan dasbor selalu
+// "Halo, Mitra", kode referral kosong, dan kepala portal tanpa nama.
+func PartnerProfile(ctx context.Context) (structs.PartnerMeResponse, error) {
+	var out structs.PartnerMeResponse
 	partner, err := repositories.FindPartnerByID(ctx, reqctx.PartnerID(ctx))
 	if err != nil {
-		return structs.PartnerResponse{}, err
+		return out, err
 	}
-	return partnerToResponse(partner), nil
+	out.Partner = partnerToResponse(partner)
+	if pu, err := repositories.FindPartnerUserByID(ctx, reqctx.PartnerUserID(ctx)); err == nil {
+		out.User = structs.PartnerUserResponse{ID: pu.ID, Name: pu.Name, Email: pu.Email, Phone: pu.Phone}
+	} else if !errors.Is(err, repositories.ErrPartnerUserNotFound) {
+		return out, err
+	}
+	return out, nil
 }
 
 // PartnerDashboard merangkum prospek, merchant aktif, komisi, dan pencairan

@@ -38,7 +38,7 @@ func PartnerMe(c *gin.Context) {
 		respondServiceError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, structs.SuccessResponse[structs.PartnerResponse]{
+	c.JSON(http.StatusOK, structs.SuccessResponse[structs.PartnerMeResponse]{
 		Success: true, Message: "Profil mitra", Data: res,
 	})
 }
