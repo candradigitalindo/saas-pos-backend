@@ -18,6 +18,8 @@ import { formatRupiah } from '@/bersama/util/uang'
 import { formatTanggalJam } from '@/bersama/util/tanggal'
 import type { Produk } from '@/bersama/tipe/katalog'
 import { kanalApi, type Kanal } from '../api'
+import { FITUR } from '@/lib/fitur'
+import { BannerKunciFitur } from '@/bersama/komponen/kunci-fitur'
 
 const JENIS_KANAL = [
   { nilai: 'delivery_app', label: 'Aplikasi antar (GoFood, GrabFood)' },
@@ -35,7 +37,10 @@ const JENIS_KANAL = [
  * yang tidak akan muncul.
  */
 export function HalamanKanal() {
-  const { boleh } = useSesi()
+  const { boleh, punyaFitur } = useSesi()
+  // Kunci paket: menambah kanal & mencatat pesanan BARU butuh fitur kanal
+  // online. Pesanan yang sudah masuk tetap bisa diproses (server sama).
+  const fiturKanal = punyaFitur(FITUR.kanalOnline)
   const [buatKanal, setBuatKanal] = useState(false)
   const [pesananUntuk, setPesananUntuk] = useState<Kanal | null>(null)
 
@@ -56,13 +61,19 @@ export function HalamanKanal() {
     <div className="flex w-full max-w-2xl flex-col gap-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-judul font-bold text-teks-utama">Kanal Online</h1>
-        {boleh(IZIN.channelManage) && (
+        {boleh(IZIN.channelManage) && fiturKanal && (
           <Tombol onClick={() => setBuatKanal(true)}>
             <Plus className="h-5 w-5" aria-hidden />
             Tambah Kanal
           </Tombol>
         )}
       </header>
+
+      <BannerKunciFitur
+        fitur={FITUR.kanalOnline}
+        nama="Kanal online"
+        penjelasan="Kanal dan pesanan yang sudah tercatat tetap bisa dilihat dan diselesaikan — hanya menambah kanal atau pesanan baru yang terkunci."
+      />
 
       <p className="flex items-start gap-2 rounded-kontrol bg-info-teks/10 px-3 py-2 text-keterangan text-info-teks">
         <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
@@ -79,7 +90,7 @@ export function HalamanKanal() {
           judul="Belum ada kanal"
           penjelasan="Tambahkan kanal seperti GoFood atau WhatsApp supaya penjualan dari sana ikut tercatat dan untungnya bisa dibandingkan."
           aksi={
-            boleh(IZIN.channelManage)
+            boleh(IZIN.channelManage) && fiturKanal
               ? { label: 'Tambah Kanal', onKlik: () => setBuatKanal(true) }
               : undefined
           }
@@ -144,7 +155,10 @@ function KartuKanal({
   kanal: Kanal
   onCatatPesanan: () => void
 }) {
-  const { boleh } = useSesi()
+  const { boleh, punyaFitur } = useSesi()
+  // Terkunci paket: mencatat pesanan baru & mengubah kanal ditolak server,
+  // jadi tombolnya tidak ditawarkan (lihat BannerKunciFitur di atas daftar).
+  const fiturKanal = punyaFitur(FITUR.kanalOnline)
   const toast = useToast()
   const qc = useQueryClient()
 
@@ -174,12 +188,12 @@ function KartuKanal({
         ) : (
           <LencanaStatus nada="netral" anak="Nonaktif" />
         )}
-        {boleh(IZIN.channelOrderAccept, IZIN.channelManage) && (
+        {fiturKanal && boleh(IZIN.channelOrderAccept, IZIN.channelManage) && (
           <Tombol jenis="kedua" ukuran="padat" onClick={onCatatPesanan}>
             Catat Pesanan
           </Tombol>
         )}
-        {boleh(IZIN.channelManage) && (
+        {fiturKanal && boleh(IZIN.channelManage) && (
           <button
             type="button"
             onClick={() => hapus.mutate()}

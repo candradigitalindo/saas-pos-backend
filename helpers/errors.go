@@ -20,6 +20,11 @@ var (
 	ErrForbidden    = errors.New("tidak punya akses")
 	ErrValidation   = errors.New("input tidak valid")
 	ErrUnauthorized = errors.New("kredensial tidak valid")
+	// ErrPlanRequired: tindakan butuh fitur/kuota yang tidak termasuk paket
+	// langganan yang sedang berlaku → 402 Payment Required. Dibedakan dari
+	// ErrForbidden (403, izin PERAN) karena jalan keluarnya lain: bukan minta
+	// izin ke pemilik, tapi naik paket — klien menampilkan ajakan ke Langganan.
+	ErrPlanRequired = errors.New("butuh paket lebih tinggi")
 )
 
 // StatusForError memetakan sentinel di atas ke kode status HTTP. Error yang tidak
@@ -40,6 +45,8 @@ func StatusForError(err error) int {
 		return 403
 	case errors.Is(err, ErrUnauthorized):
 		return 401
+	case errors.Is(err, ErrPlanRequired):
+		return 402
 	default:
 		return 500
 	}
@@ -59,7 +66,7 @@ func PesanUntukPengguna(err error) string {
 		return ""
 	}
 	pesan := err.Error()
-	for _, s := range []error{ErrNotFound, ErrConflict, ErrInsufficient, ErrForbidden, ErrValidation, ErrUnauthorized} {
+	for _, s := range []error{ErrNotFound, ErrConflict, ErrInsufficient, ErrForbidden, ErrValidation, ErrUnauthorized, ErrPlanRequired} {
 		if errors.Is(err, s) && strings.HasPrefix(pesan, s.Error()+": ") {
 			pesan = strings.TrimPrefix(pesan, s.Error()+": ")
 			break

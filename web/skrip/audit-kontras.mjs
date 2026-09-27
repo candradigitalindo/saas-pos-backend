@@ -165,8 +165,9 @@ for (const mode of ['light','dark']) {
 
   // Halaman dengan keadaan berwarna: galat, lencana, peringatan, kartu sorotan.
   // /barang & /kasir: petak warna kategori; /pelanggan: avatar berwarna;
-  // /langganan: daftar fitur paket (✓ dan yang redup).
-  for (const jalur of ['/', '/laporan', '/kasir', '/stok', '/barang', '/pelanggan', '/kasbon', '/langganan', '/pengaturan', '/sdm', '/sdm/gaji']) {
+  // /langganan: daftar fitur paket (✓ dan yang redup); /kanal, /crm,
+  // /pengaturan/toko: kartu kunci paket (sari di DB dev memakai paket Gratis).
+  for (const jalur of ['/', '/laporan', '/kasir', '/stok', '/barang', '/pelanggan', '/kasbon', '/langganan', '/kanal', '/crm', '/pengaturan', '/pengaturan/toko', '/sdm', '/sdm/gaji']) {
     await p.goto('http://localhost:5173' + jalur, { waitUntil: 'networkidle' })
     await p.waitForTimeout(1200)
     terender.push(...(await bacaTerender()))

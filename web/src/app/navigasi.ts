@@ -22,6 +22,7 @@ import {
   Wallet,
 } from 'lucide-react'
 import { IZIN, type KodeIzin } from '@/lib/izin'
+import { FITUR, type KodeFitur } from '@/lib/fitur'
 
 /**
  * Menu DIBANGUN DARI IZIN, bukan dari daftar tetap.
@@ -40,6 +41,12 @@ export interface ItemMenu {
   izin?: KodeIzin[]
   /** Butuh internet — ditandai, bukan disembunyikan, saat offline. */
   butuhInternet?: boolean
+  /**
+   * Fitur paket yang membuka menu ini. Menu TETAP tampil bila fiturnya
+   * terkunci — diberi ikon gembok, dan halamannya menjelaskan paket mana yang
+   * membukanya. Disembunyikan, pemilik tidak pernah tahu fitur itu ada.
+   */
+  fitur?: KodeFitur
 }
 
 /** Lima menu bawah di HP: yang paling sering dipakai, tidak lebih. */
@@ -67,8 +74,8 @@ export const MENU_LAINNYA: ItemMenu[] = [
   { ke: '/kasbon', label: 'Kasbon', ikon: NotebookPen, izin: [IZIN.receivableManage] },
   { ke: '/stok/opname', label: 'Hitung Fisik', ikon: ClipboardList, izin: [IZIN.stockOpname] },
   { ke: '/stok/transfer', label: 'Kirim Antar Toko', ikon: Truck, izin: [IZIN.stockTransfer] },
-  { ke: '/kanal', label: 'Kanal Online', ikon: Store, izin: [IZIN.channelManage, IZIN.channelOrderAccept] },
-  { ke: '/crm', label: 'Prospek', ikon: Building2, izin: [IZIN.crmLeadViewOwn, IZIN.crmLeadViewAll] },
+  { ke: '/kanal', label: 'Kanal Online', ikon: Store, izin: [IZIN.channelManage, IZIN.channelOrderAccept], fitur: FITUR.kanalOnline },
+  { ke: '/crm', label: 'Prospek', ikon: Building2, izin: [IZIN.crmLeadViewOwn, IZIN.crmLeadViewAll], fitur: FITUR.crmFreelance },
   { ke: '/crm/kunjungan', label: 'Kunjungan', ikon: MapPin, izin: [IZIN.crmVisitCheckin] },
   { ke: '/sdm', label: 'Karyawan', ikon: UserCog, izin: [IZIN.hrEmployeeView, IZIN.hrEmployeeEdit] },
   { ke: '/sdm/gaji', label: 'Gaji', ikon: Wallet, izin: [IZIN.hrPayrollRun, IZIN.hrSalaryView] },
@@ -101,7 +108,7 @@ export const KELOMPOK_SAMPING: KelompokMenu[] = [
       // Serah terima butuh KEDUA izin — menutup shift lama dan membuka yang baru.
       { ke: '/kasir/ganti-shift', label: 'Ganti Shift', ikon: ArrowRightLeft, izin: [IZIN.shiftClose, IZIN.shiftOpen] },
       { ke: '/kasir/kas', label: 'Uang Masuk & Keluar', ikon: Wallet, izin: [IZIN.cashMovement] },
-      { ke: '/kanal', label: 'Kanal Online', ikon: Store, izin: [IZIN.channelManage, IZIN.channelOrderAccept] },
+      { ke: '/kanal', label: 'Kanal Online', ikon: Store, izin: [IZIN.channelManage, IZIN.channelOrderAccept], fitur: FITUR.kanalOnline },
     ],
   },
   {
@@ -130,7 +137,7 @@ export const KELOMPOK_SAMPING: KelompokMenu[] = [
   {
     judul: 'CRM',
     item: [
-      { ke: '/crm', label: 'Prospek', ikon: Building2, izin: [IZIN.crmLeadViewOwn, IZIN.crmLeadViewAll] },
+      { ke: '/crm', label: 'Prospek', ikon: Building2, izin: [IZIN.crmLeadViewOwn, IZIN.crmLeadViewAll], fitur: FITUR.crmFreelance },
       { ke: '/crm/kunjungan', label: 'Kunjungan', ikon: MapPin, izin: [IZIN.crmVisitCheckin] },
     ],
   },

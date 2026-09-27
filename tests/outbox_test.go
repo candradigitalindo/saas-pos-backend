@@ -16,7 +16,7 @@ import (
 // yang sama. Tidak ada tagihan tanpa pemberitahuan.
 func TestOutboxEnqueuedWithBusinessTransaction(t *testing.T) {
 	requireDB(t)
-	f := registerTenant(t, "outbox1")
+	f := registerTenantPolos(t, "outbox1")
 
 	var sebelum int64
 	database.DB.Table("outbox_events").
@@ -37,7 +37,7 @@ func TestOutboxEnqueuedWithBusinessTransaction(t *testing.T) {
 // putaran berikutnya tidak mengirim ulang yang sudah selesai.
 func TestOutboxWorkerSendsAndIsIdempotent(t *testing.T) {
 	requireDB(t)
-	f := registerTenant(t, "outbox2")
+	f := registerTenantPolos(t, "outbox2")
 	startBasic12(t, f)
 
 	res, err := services.ProcessOutbox(bg())
@@ -75,7 +75,7 @@ func TestOutboxTemplateRendered(t *testing.T) {
 	requireDB(t)
 	_, email, pass := makePlatformAdmin(t, "outbox", "superadmin")
 	adm := platformToken(t, email, pass)
-	f := registerTenant(t, "outbox3")
+	f := registerTenantPolos(t, "outbox3")
 
 	// Template khusus tenant ini.
 	call(t, "POST", "/api/v1/platform/notification-templates", adm, map[string]any{

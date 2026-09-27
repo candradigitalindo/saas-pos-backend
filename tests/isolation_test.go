@@ -13,7 +13,22 @@ type tenantFixture struct {
 
 // registerTenant mendaftarkan satu usaha baru lewat endpoint publik dan
 // mengembalikan token + id entitas yang lahir. slug harus unik per test.
+// registerTenant mendaftarkan tenant uji DENGAN masa coba paket Multi-Outlet —
+// semua fitur berbayar terbuka. Sejak kunci paket ditegakkan, tenant tanpa
+// langganan jatuh ke paket Gratis (tanpa QRIS, kanal online, CRM, cabang
+// kedua); tes fitur-fitur itu menguji fiturnya, bukan paketnya, jadi mereka
+// mendapat paket penuh. Tes paket & langganan memakai registerTenantPolos.
 func registerTenant(t *testing.T, slug string) tenantFixture {
+	t.Helper()
+	f := registerTenantPolos(t, slug)
+	call(t, "POST", "/api/v1/subscription", f.token, map[string]any{
+		"plan_code": "multi", "term_months": 1,
+	}).mustCode(t, "masa coba multi "+slug, 201)
+	return f
+}
+
+// registerTenantPolos mendaftarkan tenant uji TANPA langganan (paket Gratis).
+func registerTenantPolos(t *testing.T, slug string) tenantFixture {
 	t.Helper()
 	payload := map[string]any{
 		"business_name": "Usaha " + slug,

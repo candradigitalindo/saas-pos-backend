@@ -2091,8 +2091,15 @@ var (
     ErrInsufficient  = errors.New("stok tidak mencukupi")
     ErrForbidden     = errors.New("tidak punya akses")
     ErrValidation    = errors.New("input tidak valid")
+    ErrUnauthorized  = errors.New("kredensial tidak valid")
+    ErrPlanRequired  = errors.New("butuh paket lebih tinggi") // → 402
 )
 ```
+
+`ErrPlanRequired` (402) dibedakan dari `ErrForbidden` (403): yang pertama berarti fitur/kuota di luar
+paket langganan yang berlaku (jalan keluarnya naik paket), yang kedua berarti izin PERAN (jalan
+keluarnya minta izin). Middleware `RequireFeatureForWrites` dipasang SETELAH `Require`, sehingga
+orang tanpa izin mendapat 403, bukan ajakan naik paket yang tidak bisa ia putuskan.
 
 Service mengembalikan error sentinel; controller memetakannya ke kode HTTP. **Detail error internal
 tidak pernah dikirim ke klien** — sesuai CONVENTIONS bagian 4; yang dikirim adalah pesan yang sudah

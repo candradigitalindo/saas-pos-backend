@@ -26,6 +26,7 @@ import { itemUntukCheckout, useKeranjang } from '../keranjang'
 import { kunciBaru, useCheckout, useKatalogKasir, useShiftAktif } from '../hooks'
 import { HalamanBukaShift } from './halaman-buka-shift'
 import { kelasPetak } from '@/bersama/util/warna-kategori'
+import { FITUR } from '@/lib/fitur'
 
 /**
  * Layar kasir — yang paling sering dilihat sepanjang hari.
@@ -35,7 +36,7 @@ import { kelasPetak } from '@/bersama/util/warna-kategori'
  * yang SELALU KELIHATAN (bukan geser atau tekan-lama).
  */
 export function HalamanKasir() {
-  const { tokoAktif, rincianToko } = useSesi()
+  const { tokoAktif, rincianToko, punyaFitur, paketUntuk } = useSesi()
   const qc = useQueryClient()
   const toast = useToast()
   const sinkron = useSinkron()
@@ -313,6 +314,9 @@ export function HalamanKasir() {
         mengirim={checkout.isPending}
         galat={galatBayar}
         onSelesai={selesaikan}
+        kunciQris={
+          punyaFitur(FITUR.qris) ? undefined : `Paket ${paketUntuk(FITUR.qris) ?? 'berbayar'}`
+        }
       />
 
       {struk && (

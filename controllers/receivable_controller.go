@@ -61,6 +61,12 @@ func AddReceivablePayment(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
+	if req.Method == "qris" {
+		if err := services.RequireFeature(ctx, services.FeatureQRIS); err != nil {
+			respondServiceError(c, err)
+			return
+		}
+	}
 	collectedBy := reqctx.UserID(ctx)
 	// PaidAt dan BusinessDate sengaja TIDAK diisi di sini: business_date harus
 	// dihitung dari zona waktu outlet, dan itu urusan service.

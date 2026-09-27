@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Banknote, NotebookPen, QrCode } from 'lucide-react'
+import { Banknote, Lock, NotebookPen, QrCode } from 'lucide-react'
 import { Dialog, IsiDialog } from '@/bersama/ui/dialog'
 import { Tombol } from '@/bersama/ui/tombol'
 import { KolomUang } from '@/bersama/ui/kolom-uang'
@@ -27,6 +27,7 @@ export function LayarBayar({
   mengirim,
   galat,
   onSelesai,
+  kunciQris,
 }: {
   terbuka: boolean
   onTutup: () => void
@@ -35,6 +36,13 @@ export function LayarBayar({
   mengirim: boolean
   galat?: string | null
   onSelesai: (metode: MetodeBayar, dibayar: number) => void
+  /**
+   * Diisi bila QRIS tidak termasuk paket langganan: teks paket yang
+   * membukanya, mis. "Paket Basic". Petaknya tetap ada tapi tidak bisa
+   * dipilih — kalau dihilangkan, kasir yang biasa melihatnya mengira
+   * aplikasinya rusak; kalau bisa ditekan, server menolaknya di tengah antrean.
+   */
+  kunciQris?: string
 }) {
   const [metode, setMetode] = useState<MetodeBayar>('cash')
   const [diterima, setDiterima] = useState(0)
@@ -77,23 +85,35 @@ export function LayarBayar({
             Cara bayar
           </legend>
           <div className="grid grid-cols-3 gap-2">
-            {CARA_BAYAR.map((c) => (
-              <button
-                key={c.nilai}
-                type="button"
-                onClick={() => setMetode(c.nilai)}
-                aria-pressed={metode === c.nilai}
-                className={cn(
-                  'flex h-20 flex-col items-center justify-center gap-1 rounded-kartu border',
-                  metode === c.nilai
-                    ? 'border-utama bg-sorot text-utama'
-                    : 'border-garis bg-permukaan text-teks-sekunder hover:bg-permukaan-2',
-                )}
-              >
-                <c.ikon className="h-6 w-6" aria-hidden />
-                <span className="text-label font-semibold">{c.label}</span>
-              </button>
-            ))}
+            {CARA_BAYAR.map((c) => {
+              const terkunci = c.nilai === 'qris' && !!kunciQris
+              return (
+                <button
+                  key={c.nilai}
+                  type="button"
+                  disabled={terkunci}
+                  onClick={() => setMetode(c.nilai)}
+                  aria-pressed={metode === c.nilai}
+                  aria-label={terkunci ? `${c.label}, terkunci — tersedia di ${kunciQris}` : undefined}
+                  className={cn(
+                    'flex h-20 flex-col items-center justify-center gap-1 rounded-kartu border',
+                    terkunci
+                      ? 'cursor-not-allowed border-dashed border-garis bg-permukaan-2 text-teks-redup'
+                      : metode === c.nilai
+                        ? 'border-utama bg-sorot text-utama'
+                        : 'border-garis bg-permukaan text-teks-sekunder hover:bg-permukaan-2',
+                  )}
+                >
+                  {terkunci ? (
+                    <Lock className="h-5 w-5" aria-hidden />
+                  ) : (
+                    <c.ikon className="h-6 w-6" aria-hidden />
+                  )}
+                  <span className="text-label font-semibold">{c.label}</span>
+                  {terkunci && <span className="text-keterangan leading-none">{kunciQris}</span>}
+                </button>
+              )
+            })}
           </div>
         </fieldset>
 

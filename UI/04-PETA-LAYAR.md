@@ -215,6 +215,18 @@ menyala — yang jalurnya paling spesifik (`menuAktif`).
 | Tagihan | `GET\|POST /subscription/invoices` | `billing.manage` |
 | Bayar | `POST /subscription-payments` + `Idempotency-Key` | `billing.manage` |
 | Ganti paket / berhenti | `POST /subscription/change-plan` · `POST /subscription/cancel` | `billing.manage` |
+| Bayar sekarang (masa coba / habis / tenggang) | `POST /subscription/invoices` lalu bayar | `billing.manage` |
+
+**Kunci paket di layar** (dari `plan` di `GET /me`; penegakannya tetap di server, 402):
+
+- Kasir: petak **QRIS** tetap tampil tapi terkunci, bertuliskan paket yang membukanya ("Paket
+  Basic"). Setoran kasbon: opsi QRIS tertulis dengan paketnya dan tidak bisa dipilih.
+- Kanal Online & Prospek: menu bergembok; halamannya terbuka dan data lama terbaca, tombol
+  "tambah"/"catat pesanan" disembunyikan, `BannerKunciFitur` menjelaskan paketnya (tombol "Lihat
+  paket" hanya untuk `billing.manage`).
+- Toko & Cabang: "Tambah Cabang" hilang saat batas cabang paket tercapai.
+- Langganan: kartu status mengikuti paket yang BERLAKU — masa coba, masa coba habis, tenggang,
+  berhenti — dengan tombol bayar yang menerbitkan tagihan bila belum ada.
 
 ---
 

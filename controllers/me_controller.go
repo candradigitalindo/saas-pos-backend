@@ -7,6 +7,7 @@ import (
 	"candra/backend-api/middlewares"
 	"candra/backend-api/models"
 	"candra/backend-api/repositories"
+	"candra/backend-api/services"
 	"candra/backend-api/structs"
 
 	"github.com/gin-gonic/gin"
@@ -69,6 +70,21 @@ func Me(c *gin.Context) {
 		perms = []string{}
 	}
 
+	hak, err := services.CurrentEntitlement(ctx)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	paket := structs.PlanEntitlementResponse{
+		Code: hak.PlanCode, Name: hak.PlanName, Status: hak.Status,
+		Features: hak.Features, MaxOutlets: hak.OutletLimit(),
+		MaxUsers: hak.MaxUsers, MaxProducts: hak.MaxProducts,
+		UpgradeFor: services.UpgradeFor(ctx, hak),
+	}
+	if hak.BerlakuSampai != nil {
+		paket.ActiveUntil = hak.BerlakuSampai.UTC().Format(timeLayout)
+	}
+
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.MeResponse]{
 		Success: true,
 		Message: "Profil pengguna",
@@ -78,6 +94,7 @@ func Me(c *gin.Context) {
 			Permissions: perms,
 			OutletIDs:   outletIDs,
 			Outlets:     outlets,
+			Plan:        paket,
 		},
 	})
 }

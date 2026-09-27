@@ -10,6 +10,7 @@ import (
 	"candra/backend-api/internal/timez"
 	"candra/backend-api/models"
 	"candra/backend-api/repositories"
+	"candra/backend-api/services"
 	"candra/backend-api/structs"
 
 	"github.com/gin-gonic/gin"
@@ -109,6 +110,10 @@ func CreateOutlet(c *gin.Context) {
 	}
 
 	if err := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
+		// Cabang kedua dst. butuh fitur multi_outlet (dan tunduk max_outlets).
+		if err := services.EnsureQuota(ctx, tx, services.KuotaCabang, 1); err != nil {
+			return err
+		}
 		return repositories.CreateOutlet(ctx, tx, &outlet)
 	}); err != nil {
 		respondServiceError(c, err)

@@ -19,7 +19,14 @@ type posFixture struct {
 
 func setupPOS(t *testing.T, slug string) posFixture {
 	t.Helper()
-	f := registerTenant(t, slug)
+	return setupPOSDengan(t, slug, registerTenant)
+}
+
+// setupPOSDengan seperti setupPOS, dengan cara mendaftar tenant yang dipilih —
+// mis. registerTenantPolos untuk menguji kunci paket Gratis.
+func setupPOSDengan(t *testing.T, slug string, daftar func(*testing.T, string) tenantFixture) posFixture {
+	t.Helper()
+	f := daftar(t, slug)
 	unit := makeUnit(t, f, "pcs")
 
 	mk := func(name string, sell, cost int64) string {

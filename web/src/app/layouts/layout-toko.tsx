@@ -1,5 +1,5 @@
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
-import { Home } from 'lucide-react'
+import { Home, Lock } from 'lucide-react'
 import {
   IKON_LAINNYA,
   MENU_LAINNYA,
@@ -180,6 +180,8 @@ function SampingBesar() {
 }
 
 function TautanSamping({ item, aktif }: { item: ItemMenu; aktif: boolean }) {
+  const { punyaFitur } = useSesi()
+  const terkunci = !!item.fitur && !punyaFitur(item.fitur)
   return (
     <Link
       to={item.ke}
@@ -190,7 +192,13 @@ function TautanSamping({ item, aktif }: { item: ItemMenu; aktif: boolean }) {
       )}
     >
       <item.ikon className="h-5 w-5 shrink-0" aria-hidden />
-      {item.label}
+      <span className="flex-1">{item.label}</span>
+      {terkunci && (
+        <>
+          <Lock className="h-4 w-4 shrink-0 text-teks-redup" aria-hidden />
+          <span className="sr-only">(terkunci paket)</span>
+        </>
+      )}
     </Link>
   )
 }

@@ -11,6 +11,7 @@ import (
 	"candra/backend-api/internal/reqctx"
 	"candra/backend-api/models"
 	"candra/backend-api/repositories"
+	"candra/backend-api/services"
 	"candra/backend-api/structs"
 
 	"github.com/gin-gonic/gin"
@@ -149,6 +150,9 @@ func CreateUser(c *gin.Context) {
 		IsActive: true,
 	}
 	if err := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
+		if err := services.EnsureQuota(ctx, tx, services.KuotaPengguna, 1); err != nil {
+			return err
+		}
 		if err := repositories.CreateUser(ctx, tx, &user); err != nil {
 			return err
 		}

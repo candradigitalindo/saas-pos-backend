@@ -88,4 +88,23 @@ describe('layar bayar', () => {
     tampilkan({ mengirim: true })
     expect(screen.getByRole('button', { name: /menyimpan transaksi/i })).toBeDisabled()
   })
+
+  it('QRIS terkunci paket: petaknya tetap ada, tidak bisa dipilih, dan menyebut paketnya', async () => {
+    const p = userEvent.setup()
+    const { onSelesai } = tampilkan({ total: 15000, kunciQris: 'Paket Basic' })
+
+    const qris = screen.getByRole('button', { name: /QRIS, terkunci — tersedia di Paket Basic/ })
+    expect(qris).toBeDisabled()
+    expect(screen.getByText('Paket Basic')).toBeInTheDocument()
+
+    // Ketukan pada petak terkunci tidak mengganti cara bayar: tetap tunai.
+    await p.click(qris)
+    expect(screen.getByLabelText(/uang diterima/i)).toBeInTheDocument()
+    expect(onSelesai).not.toHaveBeenCalled()
+  })
+
+  it('tanpa kunci, QRIS bisa dipilih seperti biasa', () => {
+    tampilkan()
+    expect(screen.getByRole('button', { name: 'QRIS' })).toBeEnabled()
+  })
 })

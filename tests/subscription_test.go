@@ -37,7 +37,7 @@ func paySub(t *testing.T, token, key, invoiceID string, amount int64) apiResp {
 // bulanan NORMAL.
 func TestSubscriptionPrepaidCancelRefund(t *testing.T) {
 	requireDB(t)
-	f := registerTenant(t, "sub12")
+	f := registerTenantPolos(t, "sub12")
 
 	inv := startBasic12(t, f)
 	// Basic Rp79.000/bln, 12 bln, diskon 16,7%.
@@ -117,7 +117,7 @@ func TestSubscriptionPrepaidCancelRefund(t *testing.T) {
 // TestSubscriptionPaymentIdempotent — kunci sama → replay, satu baris pembayaran.
 func TestSubscriptionPaymentIdempotent(t *testing.T) {
 	requireDB(t)
-	f := registerTenant(t, "subidem")
+	f := registerTenantPolos(t, "subidem")
 	invID := startBasic12(t, f)["id"].(string)
 
 	key := "K-" + ulid.New()
@@ -146,7 +146,7 @@ func TestSubscriptionPaymentIdempotent(t *testing.T) {
 // TestSubscriptionPartialPayment — pembayaran sebagian lalu pelunasan.
 func TestSubscriptionPartialPayment(t *testing.T) {
 	requireDB(t)
-	f := registerTenant(t, "subpartial")
+	f := registerTenantPolos(t, "subpartial")
 	invID := startBasic12(t, f)["id"].(string)
 
 	half := paySub(t, f.token, "H1-"+ulid.New(), invID, 400000).mustCode(t, "bayar sebagian", 201).data(t)
@@ -180,7 +180,7 @@ func TestSubscriptionPartialPayment(t *testing.T) {
 // terakhir agar totalnya persis.
 func TestDeferredRemainderInLastMonth(t *testing.T) {
 	requireDB(t)
-	f := registerTenant(t, "subremain")
+	f := registerTenantPolos(t, "subremain")
 
 	// Harga ganjil supaya total tak habis dibagi 12.
 	if err := database.DB.Exec(`UPDATE plans SET monthly_price = 79001 WHERE code = 'basic'`).Error; err != nil {
@@ -216,7 +216,7 @@ func TestDeferredRemainderInLastMonth(t *testing.T) {
 // TestRevenueRecognitionJob — pengakuan hanya menyentuh bulan yang sudah tiba.
 func TestRevenueRecognitionJob(t *testing.T) {
 	requireDB(t)
-	f := registerTenant(t, "subrecog")
+	f := registerTenantPolos(t, "subrecog")
 
 	// Basic 3 bulan.
 	call(t, "POST", "/api/v1/subscription", f.token, map[string]any{"plan_code": "basic", "term_months": 3}).
@@ -255,7 +255,7 @@ func TestRevenueRecognitionJob(t *testing.T) {
 // sisa masa paket lama (harga bulanan normal).
 func TestSubscriptionChangePlanProration(t *testing.T) {
 	requireDB(t)
-	f := registerTenant(t, "subchange")
+	f := registerTenantPolos(t, "subchange")
 
 	// Basic 3 bulan, bayar lunas.
 	call(t, "POST", "/api/v1/subscription", f.token, map[string]any{"plan_code": "basic", "term_months": 3}).
@@ -284,8 +284,8 @@ func TestSubscriptionChangePlanProration(t *testing.T) {
 // TestSubscriptionIsolation — tenant B tak melihat / tak bisa membayar tagihan A.
 func TestSubscriptionIsolation(t *testing.T) {
 	requireDB(t)
-	a := registerTenant(t, "subisoA")
-	b := registerTenant(t, "subisoB")
+	a := registerTenantPolos(t, "subisoA")
+	b := registerTenantPolos(t, "subisoB")
 
 	invA := startBasic12(t, a)["id"].(string)
 
@@ -300,7 +300,7 @@ func TestSubscriptionIsolation(t *testing.T) {
 // paket cukup terautentikasi.
 func TestSubscriptionPermission(t *testing.T) {
 	requireDB(t)
-	f := registerTenant(t, "subperm")
+	f := registerTenantPolos(t, "subperm")
 	kasir := staffToken(t, f, roleID(t, f, "Kasir"), "kasir_subperm")
 
 	call(t, "GET", "/api/v1/plans", kasir, nil).mustOK(t, "kasir lihat paket")
@@ -312,7 +312,7 @@ func TestSubscriptionPermission(t *testing.T) {
 // TestPlansCatalog — katalog paket ter-seed dengan tabel harga per masa.
 func TestPlansCatalog(t *testing.T) {
 	requireDB(t)
-	f := registerTenant(t, "subplans")
+	f := registerTenantPolos(t, "subplans")
 
 	resp := call(t, "GET", "/api/v1/plans", f.token, nil).mustOK(t, "plans")
 	plans, ok := resp.Body["data"].([]any)

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, Lock } from 'lucide-react'
 import { MENU_LAINNYA, saringMenu } from '@/app/navigasi'
 import { Kartu } from '@/bersama/ui/kartu'
 import { TombolKeluar } from '@/bersama/komponen/tombol-keluar'
@@ -7,7 +7,7 @@ import { useSesi } from '@/bersama/hooks/use-sesi'
 
 /** Menu "Lainnya" di HP: isinya persis yang boleh dikerjakan pengguna ini. */
 export function HalamanLainnya() {
-  const { boleh, profil } = useSesi()
+  const { boleh, profil, punyaFitur } = useSesi()
   const menu = saringMenu(MENU_LAINNYA, boleh)
 
   return (
@@ -31,6 +31,12 @@ export function HalamanLainnya() {
             >
               <m.ikon className="h-5 w-5 shrink-0 text-teks-sekunder" aria-hidden />
               <span className="flex-1 text-isi text-teks-utama">{m.label}</span>
+              {m.fitur && !punyaFitur(m.fitur) && (
+                <>
+                  <Lock className="h-4 w-4 text-teks-redup" aria-hidden />
+                  <span className="sr-only">(terkunci paket)</span>
+                </>
+              )}
               <ChevronRight className="h-5 w-5 text-teks-redup" aria-hidden />
             </Link>
           ))}

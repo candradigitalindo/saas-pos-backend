@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -15,6 +16,7 @@ import (
 	"candra/backend-api/structs"
 
 	"github.com/shopspring/decimal"
+	"gorm.io/gorm"
 )
 
 // importMaxRows membatasi jumlah baris data agar satu unggahan tidak bisa
@@ -179,7 +181,11 @@ func ImportProductsCSV(ctx context.Context, raw []byte, dryRun bool) (*structs.P
 	result.Imported = len(valid)
 
 	if !dryRun && len(valid) > 0 {
-		if err := repositories.CreateProductsBulk(ctx, valid); err != nil {
+		kuota := func(tx *gorm.DB) error { return EnsureQuota(ctx, tx, KuotaBarang, len(valid)) }
+		if err := repositories.CreateProductsBulk(ctx, valid, kuota); err != nil {
+			if errors.Is(err, helpers.ErrPlanRequired) {
+				return nil, err
+			}
 			return nil, fmt.Errorf("gagal menyimpan produk terimpor: %w", err)
 		}
 	}

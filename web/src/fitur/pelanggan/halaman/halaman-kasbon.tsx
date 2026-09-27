@@ -19,6 +19,8 @@ import { pelangganApi, type Kasbon } from '../api'
 import { SegmenPilihan } from '@/bersama/ui/segmen'
 import { KartuAngka } from '@/bersama/komponen/kartu-angka'
 import { HandCoins } from 'lucide-react'
+import { FITUR } from '@/lib/fitur'
+import { useSesi } from '@/bersama/hooks/use-sesi'
 
 /**
  * Kasbon — utang pelanggan.
@@ -164,6 +166,7 @@ function DialogSetoran({
   const toast = useToast()
   const qc = useQueryClient()
   const [nominal, setNominal] = useState(kasbon.outstanding)
+  const { punyaFitur, paketUntuk } = useSesi()
   const [cara, setCara] = useState<'cash' | 'qris' | 'transfer'>('cash')
   const [galat, setGalat] = useState<string | null>(null)
 
@@ -220,7 +223,11 @@ function DialogSetoran({
           onChange={(e) => setCara(e.target.value as typeof cara)}
         >
           <option value="cash">Tunai</option>
-          <option value="qris">QRIS</option>
+          {/* Terkunci paket: tetap tertulis (dengan alasannya) tapi tidak
+              bisa dipilih — server menolak setoran QRIS di paket tanpa QRIS. */}
+          <option value="qris" disabled={!punyaFitur(FITUR.qris)}>
+            {punyaFitur(FITUR.qris) ? 'QRIS' : `QRIS — paket ${paketUntuk(FITUR.qris) ?? 'berbayar'}`}
+          </option>
           <option value="transfer">Transfer</option>
         </Pilihan>
 

@@ -17,6 +17,8 @@ import { GalatAPI } from '@/lib/api-client'
 import { galatKolom } from '@/lib/galat-kolom'
 import type { Toko } from '@/bersama/tipe/organisasi'
 import { pengaturanApi } from '../api'
+import { BannerKunciFitur } from '@/bersama/komponen/kunci-fitur'
+import { FITUR } from '@/lib/fitur'
 
 const ZONA = [
   { nilai: 'Asia/Jakarta', label: 'WIB — Jakarta, Sumatera, Jawa' },
@@ -35,7 +37,7 @@ const ZONA = [
  * memungut PB1 dan toko kelontong yang tidak.
  */
 export function HalamanToko() {
-  const { tokoAktif, gantiToko } = useSesi()
+  const { tokoAktif, gantiToko, profil, punyaFitur } = useSesi()
   const [formUntuk, setFormUntuk] = useState<Toko | 'baru' | null>(null)
 
   const toko = useQuery({
@@ -44,16 +46,39 @@ export function HalamanToko() {
   })
 
   const daftar = toko.data?.data ?? []
+  // Batas cabang paket (sudah memperhitungkan fitur multi_outlet; null =
+  // tanpa batas). Profil lama tanpa `plan` → tidak dibatasi di layar; server
+  // tetap menegakkan.
+  const batasCabang = profil?.plan ? profil.plan.max_outlets : null
+  const penuh = !!toko.data && batasCabang !== null && daftar.length >= batasCabang
 
   return (
     <div className="flex w-full max-w-2xl flex-col gap-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-judul font-bold text-teks-utama">Toko & Cabang</h1>
-        <Tombol onClick={() => setFormUntuk('baru')}>
-          <Plus className="h-5 w-5" aria-hidden />
-          Tambah Cabang
-        </Tombol>
+        {!penuh && (
+          <Tombol onClick={() => setFormUntuk('baru')}>
+            <Plus className="h-5 w-5" aria-hidden />
+            Tambah Cabang
+          </Tombol>
+        )}
       </header>
+
+      {/* Tanpa fitur banyak cabang: ajakan naik paket. Dengan fiturnya tapi
+          kuota penuh: sebut batasnya. Cabang yang sudah ada tetap bisa diubah. */}
+      {penuh &&
+        (punyaFitur(FITUR.banyakCabang) ? (
+          <p className="rounded-kontrol border border-garis bg-permukaan-2 px-3 py-2 text-label text-teks-sekunder">
+            Paket {profil?.plan?.name} dibatasi {batasCabang} cabang. Naikkan paket di menu
+            Langganan untuk menambah cabang lagi.
+          </p>
+        ) : (
+          <BannerKunciFitur
+            fitur={FITUR.banyakCabang}
+            nama="Menambah cabang"
+            penjelasan="Cabang yang sudah ada tetap bisa dipakai dan diubah."
+          />
+        ))}
 
       {toko.isLoading ? (
         <KerangkaBaris jumlah={3} />

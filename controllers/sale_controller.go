@@ -30,6 +30,18 @@ func Checkout(c *gin.Context) {
 		return
 	}
 
+	// Kunci paket QRIS — HANYA di jalur checkout langsung ini. /sync/push
+	// memanggil services.Checkout yang sama untuk transaksi offline; di sana
+	// pembelinya SUDAH membayar, jadi menolak hanya menghilangkan catatan
+	// penjualan yang benar-benar terjadi. Layar kasir sendiri tidak
+	// menawarkan QRIS bila paketnya tidak memuatnya.
+	if pakaiQRIS(req.Payments) {
+		if err := services.RequireFeature(c.Request.Context(), services.FeatureQRIS); err != nil {
+			respondServiceError(c, err)
+			return
+		}
+	}
+
 	in, err := services.BuildCheckoutInput(req, c.GetHeader("Idempotency-Key"), helpers.SHA256Hex(raw))
 	if err != nil {
 		respondServiceError(c, err)
@@ -133,4 +145,14 @@ func SalesSummary(c *gin.Context) {
 	c.JSON(http.StatusOK, structs.SuccessResponse[repositories.SalesSummary]{
 		Success: true, Message: "Ringkasan transaksi", Data: s,
 	})
+}
+
+// pakaiQRIS melaporkan apakah salah satu tender memakai QRIS.
+func pakaiQRIS(bayar []structs.CheckoutPaymentRequest) bool {
+	for _, b := range bayar {
+		if b.Method == "qris" {
+			return true
+		}
+	}
+	return false
 }

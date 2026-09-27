@@ -123,7 +123,7 @@ func TestWhatsAppNotifikasiSampaiKeSidecar(t *testing.T) {
 
 	s := pasangSidecarTiruan(t, nil) // semua berhasil
 
-	f := registerTenant(t, "wanotif1")
+	f := registerTenantPolos(t, "wanotif1")
 	setelNomorTenant(t, f.tenantID, diketik)
 	startBasic12(t, f) // menerbitkan tagihan → peristiwa outbox
 
@@ -161,7 +161,7 @@ func TestWhatsAppNomorTidakTerdaftarLangsungMati(t *testing.T) {
 		return 0, ""
 	})
 
-	f := registerTenant(t, "wanotif2")
+	f := registerTenantPolos(t, "wanotif2")
 	setelNomorTenant(t, f.tenantID, diketik)
 	startBasic12(t, f)
 
@@ -195,7 +195,7 @@ func TestWhatsAppSidecarMatiTetapDiantrekan(t *testing.T) {
 		return 0, ""
 	})
 
-	f := registerTenant(t, "wanotif3")
+	f := registerTenantPolos(t, "wanotif3")
 	setelNomorTenant(t, f.tenantID, diketik)
 	startBasic12(t, f)
 

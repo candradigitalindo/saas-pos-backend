@@ -77,6 +77,13 @@ export const langgananApi = {
       subscription: Langganan
     }>('/subscription/cancel', { reason }),
 
+  /**
+   * Menerbitkan tagihan untuk paket & masa langganan yang dipilih. Dulu tidak
+   * ada tombol yang memanggilnya: memilih paket hanya memulai masa coba, dan
+   * setelah masa coba habis pemilik tidak punya jalan untuk membayar.
+   */
+  buatTagihan: () => api.post<TagihanLangganan>('/subscription/invoices'),
+
   tagihan: () => api.get<Halaman<TagihanLangganan>>('/subscription/invoices', {
     query: { limit: 50 },
   }),

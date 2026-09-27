@@ -381,16 +381,21 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	// tulis butuh crm.deal.edit. Visibilitas kepemilikan (lapis 3) dijaga repo.
 	crmView := middlewares.Require("crm.lead.view.own", "crm.lead.view.all")
 	crmEdit := middlewares.Require("crm.deal.edit")
+	// Kunci paket: MEMULAI hal baru di CRM butuh fitur crm_freelance. Yang
+	// sudah berjalan (ubah, menangkan, kirim, terima bayaran invoice lama)
+	// sengaja tidak dikunci — turun paket tidak boleh membuat pekerjaan yang
+	// sudah setengah jalan tidak bisa diselesaikan atau ditagih.
+	crmBaru := middlewares.RequireFeatureForWrites(services.FeatureCRMFreelance)
 
 	t.GET("/lead-sources", crmView, controllers.ListLeadSources)
-	t.POST("/lead-sources", crmEdit, controllers.CreateLeadSource)
+	t.POST("/lead-sources", crmEdit, crmBaru, controllers.CreateLeadSource)
 
 	t.GET("/pipelines", crmView, controllers.ListPipelines)
-	t.POST("/pipelines", crmEdit, controllers.CreatePipeline)
+	t.POST("/pipelines", crmEdit, crmBaru, controllers.CreatePipeline)
 
 	deal := t.Group("/deals")
 	deal.GET("", crmView, controllers.ListDeals)
-	deal.POST("", crmEdit, controllers.CreateDeal)
+	deal.POST("", crmEdit, crmBaru, controllers.CreateDeal)
 	deal.GET("/:id", crmView, controllers.GetDeal)
 	deal.PUT("/:id", crmEdit, controllers.UpdateDeal)
 	deal.POST("/:id/win", crmEdit, controllers.WinDeal)
@@ -398,13 +403,13 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 
 	act := t.Group("/activities")
 	act.GET("", crmView, controllers.ListActivities)
-	act.POST("", crmEdit, controllers.CreateActivity)
+	act.POST("", crmEdit, crmBaru, controllers.CreateActivity)
 	act.POST("/:id/complete", crmEdit, controllers.CompleteActivity)
 	act.POST("/:id/cancel", crmEdit, controllers.CancelActivity)
 
 	quo := t.Group("/quotations")
 	quo.GET("", crmView, controllers.ListQuotations)
-	quo.POST("", crmEdit, controllers.CreateQuotation)
+	quo.POST("", crmEdit, crmBaru, controllers.CreateQuotation)
 	quo.GET("/:id", crmView, controllers.GetQuotation)
 	quo.POST("/:id/send", crmEdit, controllers.SendQuotation)
 	quo.POST("/:id/accept", middlewares.Require("quotation.approve"), controllers.AcceptQuotation)
@@ -412,7 +417,7 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 
 	proj := t.Group("/projects")
 	proj.GET("", crmView, controllers.ListProjects)
-	proj.POST("", crmEdit, controllers.CreateProject)
+	proj.POST("", crmEdit, crmBaru, controllers.CreateProject)
 	proj.GET("/:id", crmView, controllers.GetProject)
 	proj.PUT("/:id", crmEdit, controllers.UpdateProject)
 	proj.POST("/:id/tasks", crmEdit, controllers.AddProjectTask)
@@ -420,7 +425,7 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 
 	inv := t.Group("/invoices")
 	inv.GET("", crmView, controllers.ListInvoices)
-	inv.POST("", middlewares.Require("invoice.issue"), controllers.CreateInvoice)
+	inv.POST("", middlewares.Require("invoice.issue"), crmBaru, controllers.CreateInvoice)
 	inv.GET("/:id", crmView, controllers.GetInvoice)
 	inv.POST("/:id/send", middlewares.Require("invoice.issue"), controllers.SendInvoice)
 	inv.POST("/:id/void", middlewares.Require("invoice.void"), controllers.VoidInvoice)
@@ -460,8 +465,13 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	// channel.order.accept. Laba bersih per kanal keluar lewat /reports/profit.
 	chMgr := middlewares.Require("channel.manage")
 	chOrd := middlewares.Require("channel.order.accept", "channel.manage")
+	// Kunci paket: membuat/mengubah kanal & pemetaan barang serta MEMASUKKAN
+	// pesanan baru butuh fitur online_channel. Pesanan yang sudah masuk tetap
+	// bisa diproses/dibatalkan dan pencairan tetap bisa dicatat — itu
+	// pembukuan penjualan yang sudah terjadi.
+	chFitur := middlewares.RequireFeatureForWrites(services.FeatureOnlineChannel)
 
-	ch := t.Group("/channels", chMgr)
+	ch := t.Group("/channels", chMgr, chFitur)
 	ch.GET("", controllers.ListChannels)
 	ch.POST("", controllers.CreateChannel)
 	ch.GET("/:id", controllers.GetChannel)
@@ -474,7 +484,7 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 
 	co := t.Group("/channel-orders", chOrd)
 	co.GET("", controllers.ListChannelOrders)
-	co.POST("", controllers.CreateChannelOrder)
+	co.POST("", chFitur, controllers.CreateChannelOrder)
 	co.GET("/:id", controllers.GetChannelOrder)
 	co.POST("/:id/status", controllers.UpdateChannelOrderStatus)
 	co.POST("/:id/cancel", controllers.CancelChannelOrder)

@@ -87,6 +87,22 @@ func StartSubscription(ctx context.Context, planCode string, term int) (structs.
 
 		existing, ferr := repositories.FindSubscriptionByTenant(ctx, tx)
 		switch {
+		case ferr == nil && existing.Status == "trial":
+			// Masih (atau sudah selesai) masa coba: GANTI PAKET TANPA mengubah
+			// tanggal masa cobanya. Dulu tenant dalam masa coba tidak bisa
+			// berpindah paket sama sekali — memilih paket ditolak ("langganan
+			// berjalan") dan ganti paket butuh status "active". Lebih parah
+			// setelah masa coba habis (status tetap "trial" karena belum ada
+			// pekerjaan terjadwal yang memindahkannya): sejak kunci paket
+			// ditegakkan, tenant itu jatuh ke Gratis dan terjebak di sana.
+			// Tanggal tidak diubah, jadi memilih ulang tidak pernah memberi masa
+			// coba baru; langkah berikutnya adalah tagihan & bayar.
+			existing.PlanID = plan.ID
+			existing.TermMonths = term
+			existing.DiscountRate = rate
+			if err := repositories.SaveSubscription(ctx, tx, &existing); err != nil {
+				return err
+			}
 		case ferr == nil:
 			if existing.Status == "trial" || existing.Status == "active" || existing.Status == "past_due" {
 				return fmt.Errorf("%w: tenant sudah punya langganan berjalan", helpers.ErrConflict)

@@ -18,6 +18,26 @@ export interface ProfilSaya {
   outlet_ids: string[]
   /** Rincian cabang pada outlet_ids (pajak, biaya layanan, zona waktu). */
   outlets?: Toko[]
+  /**
+   * Paket langganan yang SEDANG BERLAKU (bukan sekadar yang dipilih). Opsional:
+   * profil yang tersimpan dari versi lama belum memuatnya.
+   */
+  plan?: PaketBerlaku
+}
+
+/** structs.PlanEntitlementResponse */
+export interface PaketBerlaku {
+  code: string
+  name: string
+  /** 'trial' | 'active' | 'past_due' — atau 'none' untuk paket Gratis. */
+  status: string
+  active_until?: string
+  features: Record<string, boolean>
+  max_outlets: number | null
+  max_users: number | null
+  max_products: number | null
+  /** Fitur yang terkunci → nama paket termurah yang membukanya. */
+  upgrade_for?: Record<string, string>
 }
 
 export interface HasilDaftar {

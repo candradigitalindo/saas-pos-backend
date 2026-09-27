@@ -286,11 +286,26 @@ Semua endpoint bisnis di bawah prefiks `/api/v1`.
 | `POST /api/v1/sync/push` | `sale.create` atau `crm.visit.checkin` | Batch operasi offline; hasil per operasi (applied/duplicate/rejected). Izin diperiksa lagi **per operasi**: `sale.create` untuk `op: sale.create`, `crm.visit.checkin` untuk `op: visit.upsert` |
 | `GET  /api/v1/sync/pull?since=&outlet_id=&limit=` | `sale.create` atau `crm.visit.checkin` | Master data + stok + batu nisan sejak kursor `sync_version` |
 | `GET  /api/v1/plans` | token | Katalog paket + harga per masa langganan |
-| `GET/POST /api/v1/subscription` | `billing.manage` | Status langganan / mulai (trial) |
+| `GET/POST /api/v1/subscription` | `billing.manage` | Status langganan / mulai (trial). Selama masa coba (atau setelah habis) POST mengganti paket TANPA menggeser tanggal masa coba |
 | `POST /api/v1/subscription/invoices` · `GET` | `billing.manage` | Terbitkan / daftar tagihan langganan |
 | `POST /api/v1/subscription-payments` (header `Idempotency-Key`) | `billing.manage` | Bayar tagihan; lunas → aktif + `deferred_revenue_entries` |
 | `POST /api/v1/subscription/cancel` | `billing.manage` | Batal + refund (harga bulanan normal) |
 | `POST /api/v1/subscription/change-plan` | `billing.manage` | Ganti paket dengan kredit prorata |
+
+**Kunci paket** (`services/plan_entitlement_service.go`). Paket yang BERLAKU dihitung dari waktu:
+langganan `trial` s.d. `trial_ends_at`, `active`/`past_due` s.d. `current_period_end` +
+`SUBSCRIPTION_GRACE_DAYS`; tanpa langganan / berhenti / lewat → paket **Gratis**. `GET /me` memuat
+`plan` (kode, status, `features`, batas, `upgrade_for`). Pelanggaran → **402** dengan pesan yang
+menyebut paket termurah yang membukanya.
+
+| Fitur / kuota | Yang dikunci | Yang TIDAK dikunci |
+|---|---|---|
+| `qris` | QRIS di `POST /sales` & `POST /receivable-payments` | `/sync/push` (transaksi offline sudah terjadi) |
+| `online_channel` | tulis `/channels/*`, `POST /channel-orders` | baca; proses/batal pesanan lama; pencairan |
+| `crm_freelance` | MEMBUAT prospek, aktivitas, penawaran, proyek, invoice, sumber & alur | baca; ubah/menangkan/kirim; bayar invoice lama |
+| `multi_outlet` + `max_outlets` | `POST /outlets` (cabang ke-2 dst.) | cabang yang sudah ada |
+| `max_users` · `max_products` | `POST /users` · `POST /products` & impor CSV (dikunci per tenant → tidak bisa dibalap) | — |
+| `max_monthly_transactions` | — sengaja tidak ditegakkan: penjualan tidak pernah diblokir paket | |
 | `GET/POST /api/v1/pipelines` · `/lead-sources` | `crm.lead.view.*` / `crm.deal.edit` | Konfigurasi pipeline & sumber prospek |
 | `GET/POST/PUT /api/v1/deals[/:id]` · `.../win` · `.../lose` | `crm.lead.view.*` / `crm.deal.edit` | Deal + menang/kalah (alasan wajib) |
 | `GET/POST /api/v1/activities` · `.../complete` · `.../cancel` | `crm.lead.view.*` / `crm.deal.edit` | Aktivitas follow-up |

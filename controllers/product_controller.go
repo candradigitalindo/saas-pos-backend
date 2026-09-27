@@ -126,6 +126,9 @@ func CreateProduct(c *gin.Context) {
 		ImageURL:   req.ImageURL,
 	}
 	if err := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
+		if err := services.EnsureQuota(ctx, tx, services.KuotaBarang, 1); err != nil {
+			return err
+		}
 		return repositories.CreateProduct(ctx, tx, &row)
 	}); err != nil {
 		if helpers.IsDuplicateEntryError(err) {

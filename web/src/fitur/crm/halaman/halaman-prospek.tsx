@@ -16,6 +16,8 @@ import { formatRupiah } from '@/bersama/util/uang'
 import { formatTanggal } from '@/bersama/util/tanggal'
 import { cn } from '@/bersama/util/cn'
 import { crmApi, type Prospek } from '../api'
+import { FITUR } from '@/lib/fitur'
+import { BannerKunciFitur } from '@/bersama/komponen/kunci-fitur'
 
 /**
  * Prospek (deal) per tahap.
@@ -28,7 +30,7 @@ import { crmApi, type Prospek } from '../api'
  * menampilkan penyaring "semua sales" kalau izinnya tidak ada.
  */
 export function HalamanProspek() {
-  const { boleh } = useSesi()
+  const { boleh, punyaFitur } = useSesi()
   const [buatBaru, setBuatBaru] = useState(false)
   const [kalahUntuk, setKalahUntuk] = useState<Prospek | null>(null)
 
@@ -52,18 +54,27 @@ export function HalamanProspek() {
 
   const selesai = daftar.filter((d) => d.status !== 'open')
   const bolehUbah = boleh(IZIN.crmDealEdit)
+  // Kunci paket menutup MEMULAI prospek baru; prospek yang sudah ada tetap
+  // bisa dipindah tahap, dimenangkan, atau ditutup (server sama).
+  const bolehBaru = bolehUbah && punyaFitur(FITUR.crmFreelance)
 
   return (
     <div className="flex flex-col gap-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-judul font-bold text-teks-utama">Prospek</h1>
-        {bolehUbah && (
+        {bolehBaru && (
           <Tombol onClick={() => setBuatBaru(true)}>
             <Plus className="h-5 w-5" aria-hidden />
             Tambah Prospek
           </Tombol>
         )}
       </header>
+
+      <BannerKunciFitur
+        fitur={FITUR.crmFreelance}
+        nama="CRM"
+        penjelasan="Prospek yang sudah ada tetap bisa dilihat, dipindah tahap, dan ditutup — hanya menambah prospek baru yang terkunci."
+      />
 
       {pipeline.isLoading || prospek.isLoading ? (
         <KerangkaBaris jumlah={4} />
@@ -78,7 +89,7 @@ export function HalamanProspek() {
           ikon={Building2}
           judul="Belum ada prospek"
           penjelasan="Catat calon pelanggan yang sedang Anda dekati supaya tidak ada yang terlupa ditindaklanjuti."
-          aksi={bolehUbah ? { label: 'Tambah Prospek', onKlik: () => setBuatBaru(true) } : undefined}
+          aksi={bolehBaru ? { label: 'Tambah Prospek', onKlik: () => setBuatBaru(true) } : undefined}
         />
       ) : (
         <div className="flex gap-3 overflow-x-auto pb-2">

@@ -120,11 +120,18 @@ func CreateProduct(ctx context.Context, tx *gorm.DB, row *models.Product) error 
 // CreateProductsBulk menyisipkan banyak produk sekaligus dalam satu transaksi
 // (dipakai impor CSV, setelah controller memvalidasi tiap baris). Semua-atau-
 // tidak: bila satu baris gagal di database, seluruh batch batal.
-func CreateProductsBulk(ctx context.Context, rows []models.Product) error {
+func CreateProductsBulk(ctx context.Context, rows []models.Product, sebelum func(tx *gorm.DB) error) error {
 	if len(rows) == 0 {
 		return nil
 	}
 	return WithTenant(ctx, func(tx *gorm.DB) error {
+		// `sebelum` berjalan di transaksi yang SAMA — dipakai pemeriksaan
+		// kuota paket, yang harus mengunci & menghitung sebelum menyimpan.
+		if sebelum != nil {
+			if err := sebelum(tx); err != nil {
+				return err
+			}
+		}
 		return tx.Omit("Unit", "Category").CreateInBatches(rows, 200).Error
 	})
 }

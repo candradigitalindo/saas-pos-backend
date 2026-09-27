@@ -22,6 +22,7 @@ import { adaSesi, ambilSesi, hapusSesi, langganSesi, simpanSesi } from '@/lib/pe
 import { db, kosongkanDB } from '@/lib/offline/db'
 import { ingat, ingatan, lupakanSemua } from '@/lib/offline/ingatan'
 import type { KodeIzin } from '@/lib/izin'
+import type { KodeFitur } from '@/lib/fitur'
 
 interface NilaiSesi {
   profil: ProfilSaya | undefined
@@ -29,6 +30,14 @@ interface NilaiSesi {
   sudahMasuk: boolean
   /** true bila salah satu kode izin dimiliki (sama seperti Require di backend). */
   boleh: (...kode: KodeIzin[]) => boolean
+  /**
+   * true bila fitur termasuk paket yang berlaku. Profil lama tanpa `plan`
+   * dianggap boleh: server tetap menegakkan, dan menyembunyikan QRIS karena
+   * profil tersimpan kedaluwarsa lebih merugikan daripada satu penolakan.
+   */
+  punyaFitur: (kode: KodeFitur) => boolean
+  /** Nama paket termurah yang membuka fitur ini, bila terkunci. */
+  paketUntuk: (kode: KodeFitur) => string | undefined
   /** Toko yang sedang dipakai. Kasir hampir selalu hanya punya satu. */
   tokoAktif: string | undefined
   /** Rincian toko aktif — pajak & biaya layanan untuk total kasir. */
@@ -97,6 +106,15 @@ export function PenyediaSesi({ children }: { children: ReactNode }) {
   const boleh = useCallback(
     (...kode: KodeIzin[]) => kode.some((k) => izin.has(k)),
     [izin],
+  )
+
+  const punyaFitur = useCallback(
+    (kode: KodeFitur) => (profil?.plan ? !!profil.plan.features[kode] : true),
+    [profil],
+  )
+  const paketUntuk = useCallback(
+    (kode: KodeFitur) => profil?.plan?.upgrade_for?.[kode],
+    [profil],
   )
 
   const tokoAktif = useMemo(() => {
@@ -171,6 +189,8 @@ export function PenyediaSesi({ children }: { children: ReactNode }) {
       memuat: punyaSesi && isLoading,
       sudahMasuk: punyaSesi && !!profil,
       boleh,
+      punyaFitur,
+      paketUntuk,
       tokoAktif,
       rincianToko,
       gantiToko,
@@ -183,6 +203,8 @@ export function PenyediaSesi({ children }: { children: ReactNode }) {
       punyaSesi,
       isLoading,
       boleh,
+      punyaFitur,
+      paketUntuk,
       tokoAktif,
       rincianToko,
       gantiToko,
