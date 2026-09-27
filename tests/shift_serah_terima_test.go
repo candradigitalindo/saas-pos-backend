@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"candra/backend-api/database"
+	"candra/backend-api/internal/ulid"
 )
 
 // Uji serah terima shift: tutup + buka dalam SATU transaksi.
@@ -133,5 +134,69 @@ func TestSerahTerimaTolakShiftYangSudahDitutup(t *testing.T) {
 	}
 	if n := shiftTerbukaDi(t, f.outletID); n != 0 {
 		t.Fatalf("%d shift terbuka setelah penolakan, mau 0 — transaksi tidak dibatalkan utuh", n)
+	}
+}
+
+// Layar serah terima menampilkan siapa kasirnya dan apa yang sudah ia jual
+// sebelum laci dihitung. Ringkasan itu harus terbatas pada SHIFT-nya — shift
+// berikutnya mulai dari nol, walau hari usahanya sama.
+func TestRincianShiftMemuatKasirDanPenjualan(t *testing.T) {
+	requireDB(t)
+	f := setupPOS(t, "serah-rinci")
+	pelanggan := makeCustomer(t, f.token, "Bu Rina Shift")
+
+	jual := func(nama string, payload map[string]any) map[string]any {
+		t.Helper()
+		payload["outlet_id"] = f.outletID
+		return checkout(t, f.token, ulid.New(), payload).mustCode(t, nama, 201).data(t)
+	}
+	// Tunai 38.000 dibayar 50.000 (kembalian 12.000), QRIS 15.000, kasbon 8.000.
+	jual("tunai", map[string]any{
+		"items": []map[string]any{
+			{"product_id": f.prodA, "qty": "2"}, {"product_id": f.prodB, "qty": "1"},
+		},
+		"payments": []map[string]any{{"method": "cash", "amount": 50000}},
+	})
+	jual("qris", map[string]any{
+		"items":    []map[string]any{{"product_id": f.prodA, "qty": "1"}},
+		"payments": []map[string]any{{"method": "qris", "amount": 15000}},
+	})
+	jual("kasbon", map[string]any{
+		"customer_id": pelanggan,
+		"items":       []map[string]any{{"product_id": f.prodB, "qty": "1"}},
+		"payments":    []map[string]any{{"method": "credit", "amount": 8000}},
+	})
+	batal := jual("dibatalkan", map[string]any{
+		"items":    []map[string]any{{"product_id": f.prodB, "qty": "1"}},
+		"payments": []map[string]any{{"method": "cash", "amount": 8000}},
+	})
+	call(t, "POST", "/api/v1/sales/"+batal["id"].(string)+"/void", f.token, map[string]any{"reason": "salah input"}).
+		mustOK(t, "batalkan")
+
+	d := call(t, "GET", "/api/v1/shifts/"+f.shiftID, f.token, nil).mustOK(t, "rincian shift").data(t)
+	if nama, _ := d["opened_by_name"].(string); nama == "" {
+		t.Fatalf("nama kasir pembuka kosong: %v", d)
+	}
+	// Uang laci: modal 100.000 + tunai bersih 38.000 (yang dibatalkan tidak ikut).
+	assertI64(t, d, "expected_cash", 138000)
+	p := d["sales"].(map[string]any)
+	assertI64(t, p, "sales_count", 3)
+	assertI64(t, p, "sales_total", 61000)
+	assertI64(t, p, "canceled_count", 1)
+	perCara := map[string]int64{}
+	for _, c := range p["by_method"].([]any) {
+		m := c.(map[string]any)
+		perCara[m["method"].(string)] = int64(m["amount"].(float64))
+	}
+	if perCara["cash"] != 38000 || perCara["qris"] != 15000 || perCara["credit"] != 8000 {
+		t.Fatalf("per cara bayar shift = %v", perCara)
+	}
+
+	baru := serahTerima(t, f, f.shiftID, map[string]any{"counted_cash": 138000}).
+		mustOK(t, "serah terima").data(t)["dibuka"].(map[string]any)
+	b := call(t, "GET", "/api/v1/shifts/"+baru["id"].(string), f.token, nil).mustOK(t, "shift baru").data(t)
+	assertI64(t, b["sales"].(map[string]any), "sales_count", 0)
+	if cara := b["sales"].(map[string]any)["by_method"].([]any); len(cara) != 0 {
+		t.Fatalf("shift baru membawa penjualan shift lama: %v", cara)
 	}
 }

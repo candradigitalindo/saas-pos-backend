@@ -26,6 +26,11 @@ export interface PropKolom extends React.InputHTMLAttributes<HTMLInputElement> {
    * disembunyikan dari pembaca layar.
    */
   sisipanAkhir?: React.ReactNode
+  /**
+   * Keterangan pendek di ujung kanan baris label, mis. "Seharusnya Rp 413.000"
+   * — angka pembanding yang perlu terlihat saat mengisi, tanpa menambah baris.
+   */
+  labelKanan?: React.ReactNode
 }
 
 export const Kolom = forwardRef<HTMLInputElement, PropKolom>(function Kolom(
@@ -37,6 +42,7 @@ export const Kolom = forwardRef<HTMLInputElement, PropKolom>(function Kolom(
     akhiran,
     ikon: Ikon,
     sisipanAkhir,
+    labelKanan,
     className,
     id,
     required,
@@ -51,10 +57,13 @@ export const Kolom = forwardRef<HTMLInputElement, PropKolom>(function Kolom(
 
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={idKolom} className="text-label font-medium text-teks-sekunder">
-        {label}
-        {required && <span className="text-bahaya-teks"> *</span>}
-      </label>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+        <label htmlFor={idKolom} className="text-label font-medium text-teks-sekunder">
+          {label}
+          {required && <span className="text-bahaya-teks"> *</span>}
+        </label>
+        {labelKanan}
+      </div>
 
       <div
         className={cn(

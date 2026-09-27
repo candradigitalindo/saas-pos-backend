@@ -93,7 +93,7 @@ menu aktif selalu digulir ke dalam pandangan.
 | Retur barang | `POST /sales/:id/refund` | `sale.refund` |
 | Uang masuk/keluar laci | `POST /cash-movements` · `GET /cash-movements` | `cash.movement` |
 | Tutup shift | `POST /shifts/:id/close` | `shift.close` |
-| Ganti Shift (serah terima kasir) | `POST /shifts/:id/handover` | `shift.close` + `shift.open` |
+| Ganti Shift — satu layar tanpa digulir (≥360×640): siapa → siapa, hitung laci (total, atau per pecahan di dialog), tinggal semua/setor sebagian, catatan opsional; rincian penjualan & rumus laci di dialog "Rincian shift" (di layar lebar rumusnya tampil di kolom kiri); layar hasil; "Masuk sebagai kasir lain" kembali ke layar ini setelah masuk | `GET /shifts/:id` · `POST /shifts/:id/handover` | `shift.close` + `shift.open` |
 | Daftar & detail shift | `GET /shifts` · `GET /shifts/:id` | `shift.open` / `shift.close` |
 
 ---

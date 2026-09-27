@@ -18,6 +18,10 @@ export interface Shift {
   cash_sales?: number
   cash_in?: number
   cash_out?: number
+  /** Juga hanya pada GET /shifts/:id: nama kasir & ringkasan penjualan shift. */
+  opened_by_name?: string
+  closed_by_name?: string
+  sales?: RingkasanPenjualan
 }
 
 export interface GerakanKas {

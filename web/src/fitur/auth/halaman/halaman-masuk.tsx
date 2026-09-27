@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { UserRound } from 'lucide-react'
 import { Kolom } from '@/bersama/ui/kolom'
 import { KolomSandi } from '@/bersama/ui/kolom-sandi'
 import { Tombol } from '@/bersama/ui/tombol'
 import { useSesi } from '@/bersama/hooks/use-sesi'
 import { GALAT_SESI_HABIS, GalatAPI } from '@/lib/api-client'
+import { tujuanSetelahMasuk } from '@/bersama/util/tujuan-masuk'
 
 /**
  * Masuk ke toko.
@@ -24,6 +25,7 @@ import { GALAT_SESI_HABIS, GalatAPI } from '@/lib/api-client'
 export function HalamanMasuk() {
   const { masuk } = useSesi()
   const navigate = useNavigate()
+  const lokasi = useLocation()
 
   const [username, setUsername] = useState('')
   const [sandi, setSandi] = useState('')
@@ -44,7 +46,9 @@ export function HalamanMasuk() {
     setMengirim(true)
     try {
       await masuk(username.trim(), sandi)
-      navigate('/', { replace: true })
+      // Kembali ke halaman yang tadi hendak dibuka — mis. kasir berikutnya yang
+      // masuk dari layar Ganti Shift langsung kembali ke sana.
+      navigate(tujuanSetelahMasuk(lokasi.state), { replace: true })
     } catch (e) {
       if (e instanceof GalatAPI) {
         setKolomGalat(e.kolom)

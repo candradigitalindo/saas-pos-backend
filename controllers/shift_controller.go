@@ -119,6 +119,26 @@ func GetShift(c *gin.Context) {
 		res.ExpectedCash = sh.OpeningCash + cashSales + cashIn - cashOut
 	}
 
+	ids := []string{sh.OpenedBy}
+	if sh.ClosedBy != nil {
+		ids = append(ids, *sh.ClosedBy)
+	}
+	nama, err := repositories.UserNames(ctx, ids)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	res.OpenedByName = nama[sh.OpenedBy]
+	if sh.ClosedBy != nil {
+		res.ClosedByName = nama[*sh.ClosedBy]
+	}
+	penjualan, err := services.ShiftSalesSummary(ctx, sh.ID)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	res.Sales = &penjualan
+
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.ShiftResponse]{
 		Success: true, Message: "Berhasil mengambil data shift", Data: res,
 	})

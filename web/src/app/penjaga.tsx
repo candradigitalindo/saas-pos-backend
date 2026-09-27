@@ -5,6 +5,7 @@ import { KeadaanKosong } from '@/bersama/komponen/keadaan-kosong'
 import { KerangkaKartuAngka } from '@/bersama/komponen/kerangka'
 import { ShieldOff } from 'lucide-react'
 import type { KodeIzin } from '@/lib/izin'
+import { tujuanSetelahMasuk } from '@/bersama/util/tujuan-masuk'
 
 /** Rute yang wajib masuk dulu. */
 export function ButuhMasuk({ children }: { children: ReactNode }) {
@@ -19,8 +20,9 @@ export function ButuhMasuk({ children }: { children: ReactNode }) {
 /** Rute publik yang tidak boleh dibuka lagi setelah masuk. */
 export function TamuSaja({ children }: { children: ReactNode }) {
   const { sudahMasuk, memuat } = useSesi()
+  const lokasi = useLocation()
   if (memuat) return <MemuatHalaman />
-  if (sudahMasuk) return <Navigate to="/" replace />
+  if (sudahMasuk) return <Navigate to={tujuanSetelahMasuk(lokasi.state)} replace />
   return <>{children}</>
 }
 

@@ -112,6 +112,13 @@ type ShiftResponse struct {
 	CashSales *int64 `json:"cash_sales,omitempty"`
 	CashIn    *int64 `json:"cash_in,omitempty"`
 	CashOut   *int64 `json:"cash_out,omitempty"`
+
+	// Juga hanya pada GET /shifts/:id: siapa kasirnya, dan ringkasan
+	// penjualannya — layar serah terima menampilkan keduanya sebelum laci
+	// dihitung, supaya dua orang yang berganti tahu apa yang diserahkan.
+	OpenedByName string               `json:"opened_by_name,omitempty"`
+	ClosedByName string               `json:"closed_by_name,omitempty"`
+	Sales        *SaleSummaryResponse `json:"sales,omitempty"`
 }
 
 // ── Cash movement ──────────────────────────────────────────────────────────

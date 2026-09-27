@@ -346,6 +346,8 @@ menyebut paket termurah yang membukanya.
 | `GET /api/v1/payroll-periods/:id/payslips` · `/payslips/:id` | `hr.salary.view` | Slip gaji + rincian baris (izin paling sensitif) |
 | `POST /api/v1/employee-advances[/:id/disburse]` | `hr.advance.approve` | Kasbon → cair (kas keluar) → potong bertahap di gaji |
 | `POST /api/v1/shifts/open` · `/shifts/:id/close` | `shift.open` / `shift.close` | Buka / tutup shift |
+| `POST /api/v1/shifts/:id/handover` | `shift.close` + `shift.open` | Serah terima: tutup + buka shift baru dalam satu transaksi (shift baru atas nama akun yang masuk) |
+| `GET  /api/v1/shifts` · `GET /api/v1/shifts/:id` | `shift.open` / `shift.close` | Daftar / detail shift. Detail membawa rincian laci (`cash_sales`, `cash_in`, `cash_out`), `opened_by_name`/`closed_by_name`, dan `sales` (ringkasan penjualan shift: jumlah, total, retur, batal, per cara bayar) |
 | `POST/GET /api/v1/cash-movements` | `cash.movement` | Kas masuk/keluar |
 | `GET  /api/v1/stocks?outlet_id=&low=&q=&product_ids=` | `stock.view` | Saldo stok; `q` cari nama/SKU/barcode, `product_ids` (dipisah koma) untuk barang tertentu |
 | `GET  /api/v1/stocks/summary?outlet_id=` | `stock.view` | Ringkasan SELURUH barang: `total`, `safe`, `low`, `out`, `negative`, `stock_value` (harga modal) |
