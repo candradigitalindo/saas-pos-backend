@@ -82,9 +82,36 @@ export interface Transaksi {
   business_date: string
   voided_at?: string
   void_reason?: string
+  /** Hanya di daftar riwayat (GET /sales). */
+  customer_name?: string
+  cashier_name?: string
+  /** Hanya di daftar riwayat: nota yang diretur (baris retur) / nota returnya (penjualan asal). */
+  return_of_receipt_no?: string
+  returned_by_receipt_no?: string
   items?: ItemTransaksi[]
   payments?: PembayaranTransaksi[]
   created_at: string
+}
+
+/**
+ * Ringkasan penjualan satu hari (GET /sales/day-summary) atau satu shift
+ * (`sales` pada GET /shifts/:id).
+ */
+export interface RingkasanPenjualan {
+  /** Hanya pada ringkasan harian. */
+  business_date?: string
+  sales_count: number
+  sales_total: number
+  average_sale: number
+  returns_count: number
+  /** Positif: nilai yang dikembalikan ke pembeli. */
+  returns_total: number
+  canceled_count: number
+  canceled_total: number
+  /** Penjualan − retur. */
+  net_total: number
+  /** Uang masuk per cara bayar; tunai sudah dikurangi kembalian. */
+  by_method: { method: string; count: number; amount: number }[]
 }
 
 /** Ringkasan belanja pelanggan — hanya ada di daftar (GET /customers). */

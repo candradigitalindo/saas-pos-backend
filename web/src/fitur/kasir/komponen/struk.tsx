@@ -6,15 +6,8 @@ import { formatRupiah } from '@/bersama/util/uang'
 import { formatQty } from '@/bersama/util/desimal'
 import { formatTanggalJam } from '@/bersama/util/tanggal'
 import type { Transaksi } from '@/bersama/tipe/pos'
+import { NAMA_METODE } from '../label-transaksi'
 
-const NAMA_METODE: Record<string, string> = {
-  cash: 'Tunai',
-  qris: 'QRIS',
-  transfer: 'Transfer',
-  card: 'Kartu',
-  ewallet: 'Dompet digital',
-  credit: 'Kasbon',
-}
 
 /**
  * Struk.

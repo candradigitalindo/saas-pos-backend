@@ -1,5 +1,5 @@
 import { api, type Halaman } from '@/lib/api-client'
-import type {
+import type { RingkasanPenjualan,
   GerakanKas,
   MetodeBayar,
   Shift,
@@ -86,10 +86,22 @@ export const kasirApi = {
     api.post<Transaksi>('/sales', input, { idempotencyKey: kunci }),
 
   daftarTransaksi: (
-    filter: { outlet_id?: string; business_date?: string; status?: string; shift_id?: string },
+    filter: {
+      outlet_id?: string
+      business_date?: string
+      status?: string
+      shift_id?: string
+      /** Potongan nomor nota. */
+      search?: string
+      /** cash | qris | credit | … */
+      method?: string
+    },
     page = 1,
     limit = 20,
   ) => api.get<Halaman<Transaksi>>('/sales', { query: { ...filter, page, limit } }),
+
+  ringkasanHari: (outlet_id: string | undefined, business_date: string) =>
+    api.get<RingkasanPenjualan>('/sales/day-summary', { query: { outlet_id, business_date } }),
 
   transaksi: (id: string) => api.get<Transaksi>(`/sales/${id}`),
 

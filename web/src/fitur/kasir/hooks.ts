@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ulid } from 'ulid'
 import { useSesi } from '@/bersama/hooks/use-sesi'
 import { GalatAPI } from '@/lib/api-client'
@@ -266,6 +266,37 @@ export function useRiwayatTransaksi(filter: {
   return useQuery({
     queryKey: ['riwayat-transaksi', filter],
     queryFn: () => kasirApi.daftarTransaksi(filter),
+    staleTime: 15_000,
+  })
+}
+
+/**
+ * Riwayat bertahap: 30 transaksi per halaman, "Muat lebih banyak" meminta
+ * halaman berikutnya. Dulu layar riwayat hanya meminta 20 transaksi pertama
+ * tanpa kelanjutan — hari yang ramai tampil terpotong tanpa tanda apa pun.
+ */
+export function useRiwayatBertahap(filter: {
+  outlet_id?: string
+  business_date?: string
+  status?: string
+  search?: string
+  method?: string
+}) {
+  return useInfiniteQuery({
+    queryKey: ['riwayat-transaksi', 'bertahap', filter],
+    queryFn: ({ pageParam }) => kasirApi.daftarTransaksi(filter, pageParam, 30),
+    initialPageParam: 1,
+    getNextPageParam: (akhir) =>
+      akhir.current_page < akhir.last_page ? akhir.current_page + 1 : undefined,
+    staleTime: 15_000,
+  })
+}
+
+export function useRingkasanHari(outletId: string | undefined, tanggal: string) {
+  return useQuery({
+    queryKey: ['riwayat-transaksi', 'ringkasan', outletId, tanggal],
+    queryFn: () => kasirApi.ringkasanHari(outletId, tanggal),
+    enabled: !!outletId,
     staleTime: 15_000,
   })
 }

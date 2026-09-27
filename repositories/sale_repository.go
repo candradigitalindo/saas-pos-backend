@@ -3,6 +3,8 @@ package repositories
 import (
 	"context"
 	"errors"
+	"sort"
+	"strings"
 	"time"
 
 	"candra/backend-api/internal/reqctx"
@@ -84,6 +86,11 @@ type SaleFilter struct {
 	BusinessDate string // "YYYY-MM-DD"
 	Status       string
 	ShiftID      string
+	// Search: potongan nomor nota (tanpa peduli huruf besar).
+	Search string
+	// Method: hanya transaksi yang punya pembayaran dengan cara ini
+	// (cash | qris | credit | ...).
+	Method string
 }
 
 // ListSales mengembalikan satu halaman transaksi milik tenant konteks (tanpa
@@ -102,6 +109,13 @@ func ListSales(ctx context.Context, f SaleFilter, limit, offset int) ([]models.S
 	}
 	if f.ShiftID != "" {
 		conds, args = append(conds, "shift_id = ?"), append(args, f.ShiftID)
+	}
+	if q := strings.TrimSpace(f.Search); q != "" {
+		conds, args = append(conds, "receipt_no ILIKE ?"), append(args, "%"+escapeLike(q)+"%")
+	}
+	if f.Method != "" {
+		conds = append(conds, "EXISTS (SELECT 1 FROM sale_payments sp WHERE sp.sale_id = sales.id AND sp.method = ?)")
+		args = append(args, f.Method)
 	}
 	where := ""
 	for i, c := range conds {
@@ -174,4 +188,211 @@ func SummarizeSales(ctx context.Context, outletID, from, to string) (SalesSummar
 		COALESCE(SUM(change_amount), 0)       AS change_total`).
 		Scan(&s).Error
 	return s, err
+}
+
+// AttachSaleLines memuat item & pembayaran untuk SATU HALAMAN transaksi dalam
+// dua kueri (bukan satu per baris) — riwayat menampilkan isi belanja dan cara
+// bayarnya langsung di daftar.
+func AttachSaleLines(ctx context.Context, sales []models.Sale) error {
+	if len(sales) == 0 {
+		return nil
+	}
+	ids := make([]string, len(sales))
+	idx := make(map[string]int, len(sales))
+	for i, s := range sales {
+		ids[i], idx[s.ID] = s.ID, i
+	}
+	var items []models.SaleItem
+	if err := scopeTenant(ctx, tenantDB(ctx, nil)).Where("sale_id IN ?", ids).
+		Order("created_at, id").Find(&items).Error; err != nil {
+		return err
+	}
+	var pays []models.SalePayment
+	if err := scopeTenant(ctx, tenantDB(ctx, nil)).Where("sale_id IN ?", ids).
+		Order("paid_at, id").Find(&pays).Error; err != nil {
+		return err
+	}
+	for _, it := range items {
+		sales[idx[it.SaleID]].Items = append(sales[idx[it.SaleID]].Items, it)
+	}
+	for _, p := range pays {
+		sales[idx[p.SaleID]].Payments = append(sales[idx[p.SaleID]].Payments, p)
+	}
+	return nil
+}
+
+// SaleNames: nama pelanggan & kasir (pembuat) untuk satu halaman transaksi.
+func SaleNames(ctx context.Context, sales []models.Sale) (pelanggan, kasir map[string]string, err error) {
+	pelanggan = map[string]string{}
+	var custIDs, userIDs []string
+	for _, s := range sales {
+		if s.CustomerID != nil {
+			custIDs = append(custIDs, *s.CustomerID)
+		}
+		if s.CreatedBy != "" {
+			userIDs = append(userIDs, s.CreatedBy)
+		}
+	}
+	type baris struct{ ID, Name string }
+	if len(custIDs) > 0 {
+		var rows []baris
+		if err = scopeTenant(ctx, tenantDB(ctx, nil).Table("customers")).
+			Where("id IN ?", custIDs).Select("id, name").Scan(&rows).Error; err != nil {
+			return
+		}
+		for _, r := range rows {
+			pelanggan[r.ID] = r.Name
+		}
+	}
+	kasir, err = UserNames(ctx, userIDs)
+	return
+}
+
+// UserNames: nama pengguna (kasir) per id, satu kueri.
+func UserNames(ctx context.Context, ids []string) (map[string]string, error) {
+	nama := map[string]string{}
+	if len(ids) == 0 {
+		return nama, nil
+	}
+	var rows []struct{ ID, Name string }
+	if err := scopeTenant(ctx, tenantDB(ctx, nil).Table("users")).
+		Where("id IN ?", ids).Select("id, name").Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		nama[r.ID] = r.Name
+	}
+	return nama, nil
+}
+
+// SaleReturnLinks menghubungkan retur dengan penjualan asalnya, dua arah:
+// asal[idRetur] = nomor nota penjualan yang diretur; diretur[idAsal] = nomor
+// nota returnya. Tanpa ini baris retur di riwayat tidak menyebut nota mana yang
+// dikembalikan, dan penjualan yang sudah diretur tampak "Lunas" biasa.
+func SaleReturnLinks(ctx context.Context, sales []models.Sale) (asal, diretur map[string]string, err error) {
+	asal, diretur = map[string]string{}, map[string]string{}
+	if len(sales) == 0 {
+		return
+	}
+	ids := make([]string, 0, len(sales))
+	var asalIDs []string
+	for _, s := range sales {
+		ids = append(ids, s.ID)
+		if s.ReturnOfSaleID != nil {
+			asalIDs = append(asalIDs, *s.ReturnOfSaleID)
+		}
+	}
+	if len(asalIDs) > 0 {
+		var rows []struct{ ID, ReceiptNo string }
+		if err = scopeTenant(ctx, tenantDB(ctx, nil).Table("sales")).
+			Where("id IN ?", asalIDs).Select("id, receipt_no").Scan(&rows).Error; err != nil {
+			return
+		}
+		nota := make(map[string]string, len(rows))
+		for _, r := range rows {
+			nota[r.ID] = r.ReceiptNo
+		}
+		for _, s := range sales {
+			if s.ReturnOfSaleID != nil {
+				asal[s.ID] = nota[*s.ReturnOfSaleID]
+			}
+		}
+	}
+	var rets []struct{ ReturnOfSaleID, ReceiptNo string }
+	if err = scopeTenant(ctx, tenantDB(ctx, nil).Table("sales")).
+		Where("return_of_sale_id IN ? AND status = 'returned'", ids).
+		Select("return_of_sale_id, receipt_no").Scan(&rets).Error; err != nil {
+		return
+	}
+	for _, r := range rets {
+		diretur[r.ReturnOfSaleID] = r.ReceiptNo
+	}
+	return
+}
+
+// SaleScope membatasi ringkasan penjualan: satu hari usaha, satu shift, atau
+// keduanya. Kosong = tidak dibatasi pada dimensi itu.
+type SaleScope struct {
+	OutletID     string
+	BusinessDate string // "YYYY-MM-DD"
+	ShiftID      string
+}
+
+func (s SaleScope) apply(ctx context.Context, q *gorm.DB, kolom string) *gorm.DB {
+	if s.OutletID != "" {
+		q = q.Where(kolom+"outlet_id = ?", s.OutletID)
+	}
+	if s.BusinessDate != "" {
+		q = q.Where(kolom+"business_date = ?", s.BusinessDate)
+	}
+	if s.ShiftID != "" {
+		q = q.Where(kolom+"shift_id = ?", s.ShiftID)
+	}
+	return scopeOutlet(ctx, q, kolom+"outlet_id")
+}
+
+// SaleDayCounts: jumlah & nilai transaksi per status dalam satu SaleScope.
+type SaleDayCounts struct {
+	SalesCount    int64
+	SalesTotal    int64
+	ReturnsCount  int64
+	ReturnsTotal  int64 // bernilai negatif (baris retur)
+	CanceledCount int64
+	CanceledTotal int64
+}
+
+// CountSales merangkum transaksi dalam satu SaleScope per status.
+func CountSales(ctx context.Context, sc SaleScope) (SaleDayCounts, error) {
+	q := sc.apply(ctx, scopeTenant(ctx, tenantDB(ctx, nil).Model(&models.Sale{})), "")
+	var c SaleDayCounts
+	err := q.Select(`
+		COUNT(*) FILTER (WHERE status = 'completed')                 AS sales_count,
+		COALESCE(SUM(total) FILTER (WHERE status = 'completed'), 0)  AS sales_total,
+		COUNT(*) FILTER (WHERE status = 'returned')                  AS returns_count,
+		COALESCE(SUM(total) FILTER (WHERE status = 'returned'), 0)   AS returns_total,
+		COUNT(*) FILTER (WHERE status = 'canceled')                  AS canceled_count,
+		COALESCE(SUM(total) FILTER (WHERE status = 'canceled'), 0)   AS canceled_total`).
+		Scan(&c).Error
+	return c, err
+}
+
+// MethodTotal: uang masuk lewat satu cara bayar.
+type MethodTotal struct {
+	Method     string
+	SalesCount int64
+	Amount     int64
+}
+
+// SalesByMethod: uang masuk per cara bayar dari penjualan 'completed' dalam
+// satu SaleScope, terbesar dulu. Rumusnya sama dengan laporan
+// (SalesByPaymentMethod): kembalian dikurangkan dari baris tunai, dihitung
+// terpisah supaya transaksi dengan beberapa baris pembayaran tidak
+// menguranginya berkali-kali.
+func SalesByMethod(ctx context.Context, sc SaleScope) ([]MethodTotal, error) {
+	q := tenantDB(ctx, nil).
+		Table("sale_payments sp").
+		Joins("JOIN sales s ON s.tenant_id = sp.tenant_id AND s.id = sp.sale_id").
+		Where("s.tenant_id = ? AND s.status = 'completed'", currentTenantID(ctx))
+	var rows []MethodTotal
+	if err := sc.apply(ctx, q, "s.").Select(`
+		sp.method                   AS method,
+		COUNT(DISTINCT sp.sale_id)  AS sales_count,
+		COALESCE(SUM(sp.amount), 0) AS amount`).
+		Group("sp.method").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	var kembalian int64
+	kq := sc.apply(ctx, scopeTenant(ctx, tenantDB(ctx, nil).Model(&models.Sale{})), "").
+		Where("status = 'completed'")
+	if err := kq.Select("COALESCE(SUM(change_amount), 0)").Scan(&kembalian).Error; err != nil {
+		return nil, err
+	}
+	for i := range rows {
+		if rows[i].Method == "cash" {
+			rows[i].Amount -= kembalian
+		}
+	}
+	sort.SliceStable(rows, func(a, b int) bool { return rows[a].Amount > rows[b].Amount })
+	return rows, nil
 }

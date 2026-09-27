@@ -71,30 +71,60 @@ type SalePaymentResponse struct {
 }
 
 type SaleResponse struct {
-	ID             string                `json:"id"`
-	OutletID       string                `json:"outlet_id"`
-	ShiftID        string                `json:"shift_id,omitempty"`
-	CustomerID     string                `json:"customer_id,omitempty"`
-	ReceiptNo      string                `json:"receipt_no"`
-	OrderType      string                `json:"order_type"`
-	Status         string                `json:"status"`
-	Subtotal       int64                 `json:"subtotal"`
-	DiscountAmount int64                 `json:"discount_amount"`
-	TaxAmount      int64                 `json:"tax_amount"`
-	ServiceAmount  int64                 `json:"service_amount"`
-	RoundingAmount int64                 `json:"rounding_amount"`
-	Total          int64                 `json:"total"`
-	PaidAmount     int64                 `json:"paid_amount"`
-	ChangeAmount   int64                 `json:"change_amount"`
-	CostTotal      int64                 `json:"cost_total"`
-	GrossProfit    int64                 `json:"gross_profit"` // total - cost_total
-	ReturnOfSaleID string                `json:"return_of_sale_id,omitempty"`
-	Note           string                `json:"note,omitempty"`
-	OccurredAt     string                `json:"occurred_at"`
-	BusinessDate   string                `json:"business_date"`
-	VoidedAt       string                `json:"voided_at,omitempty"`
-	VoidReason     string                `json:"void_reason,omitempty"`
-	Items          []SaleItemResponse    `json:"items,omitempty"`
-	Payments       []SalePaymentResponse `json:"payments,omitempty"`
-	CreatedAt      string                `json:"created_at"`
+	ID             string `json:"id"`
+	OutletID       string `json:"outlet_id"`
+	ShiftID        string `json:"shift_id,omitempty"`
+	CustomerID     string `json:"customer_id,omitempty"`
+	ReceiptNo      string `json:"receipt_no"`
+	OrderType      string `json:"order_type"`
+	Status         string `json:"status"`
+	Subtotal       int64  `json:"subtotal"`
+	DiscountAmount int64  `json:"discount_amount"`
+	TaxAmount      int64  `json:"tax_amount"`
+	ServiceAmount  int64  `json:"service_amount"`
+	RoundingAmount int64  `json:"rounding_amount"`
+	Total          int64  `json:"total"`
+	PaidAmount     int64  `json:"paid_amount"`
+	ChangeAmount   int64  `json:"change_amount"`
+	CostTotal      int64  `json:"cost_total"`
+	GrossProfit    int64  `json:"gross_profit"` // total - cost_total
+	ReturnOfSaleID string `json:"return_of_sale_id,omitempty"`
+	Note           string `json:"note,omitempty"`
+	OccurredAt     string `json:"occurred_at"`
+	BusinessDate   string `json:"business_date"`
+	VoidedAt       string `json:"voided_at,omitempty"`
+	VoidReason     string `json:"void_reason,omitempty"`
+	// Hanya di daftar riwayat (GET /sales): nama pelanggan & kasir pembuatnya.
+	CustomerName string `json:"customer_name,omitempty"`
+	CashierName  string `json:"cashier_name,omitempty"`
+	// Hanya di daftar riwayat: nota penjualan yang diretur (pada baris retur),
+	// dan nota retur (pada penjualan yang sudah diretur).
+	ReturnOfReceiptNo   string                `json:"return_of_receipt_no,omitempty"`
+	ReturnedByReceiptNo string                `json:"returned_by_receipt_no,omitempty"`
+	Items               []SaleItemResponse    `json:"items,omitempty"`
+	Payments            []SalePaymentResponse `json:"payments,omitempty"`
+	CreatedAt           string                `json:"created_at"`
+}
+
+// SaleSummaryResponse: ringkasan penjualan satu hari (layar riwayat) atau satu
+// shift (layar ganti/tutup shift). Penjualan = transaksi selesai; retur & batal
+// disebut terpisah (tidak disembunyikan di dalam angka bersih).
+type SaleSummaryResponse struct {
+	BusinessDate  string            `json:"business_date,omitempty"`
+	SalesCount    int64             `json:"sales_count"`
+	SalesTotal    int64             `json:"sales_total"`
+	AverageSale   int64             `json:"average_sale"`
+	ReturnsCount  int64             `json:"returns_count"`
+	ReturnsTotal  int64             `json:"returns_total"` // positif: nilai yang dikembalikan
+	CanceledCount int64             `json:"canceled_count"`
+	CanceledTotal int64             `json:"canceled_total"`
+	NetTotal      int64             `json:"net_total"` // penjualan − retur
+	ByMethod      []SaleMethodTotal `json:"by_method"`
+}
+
+// SaleMethodTotal: uang masuk per cara bayar (tunai sudah dikurangi kembalian).
+type SaleMethodTotal struct {
+	Method string `json:"method"`
+	Count  int64  `json:"count"`
+	Amount int64  `json:"amount"`
 }

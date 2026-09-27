@@ -64,15 +64,13 @@ func ListSales(c *gin.Context) {
 		BusinessDate: c.Query("business_date"),
 		Status:       c.Query("status"),
 		ShiftID:      c.Query("shift_id"),
+		Search:       c.Query("search"),
+		Method:       c.Query("method"),
 	}
-	rows, total, err := repositories.ListSales(c.Request.Context(), f, limit, offset)
+	items, total, err := services.ListSalesDetailed(c.Request.Context(), f, limit, offset)
 	if err != nil {
 		respondServiceError(c, err)
 		return
-	}
-	items := make([]structs.SaleResponse, len(rows))
-	for i := range rows {
-		items[i] = services.SaleToResponse(&rows[i])
 	}
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.PaginatedResponse[structs.SaleResponse]]{
 		Success: true, Message: "Berhasil mengambil data transaksi",
@@ -155,4 +153,18 @@ func pakaiQRIS(bayar []structs.CheckoutPaymentRequest) bool {
 		}
 	}
 	return false
+}
+
+// SalesDaySummary: GET /api/v1/sales/day-summary?business_date=&outlet_id= —
+// ringkasan satu hari untuk layar riwayat (penjualan, retur, batal, per cara
+// bayar). Tanpa laba: izinnya sama dengan daftar transaksi.
+func SalesDaySummary(c *gin.Context) {
+	res, err := services.SalesDaySummary(c.Request.Context(), c.Query("outlet_id"), c.Query("business_date"))
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[structs.SaleSummaryResponse]{
+		Success: true, Message: "Ringkasan penjualan harian", Data: res,
+	})
 }

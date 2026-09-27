@@ -278,7 +278,8 @@ Semua endpoint bisnis di bawah prefiks `/api/v1`.
 | `POST /api/v1/products/import?dry_run=` | `product.import` | Impor CSV (pratinjau + laporan baris gagal) |
 | `GET/POST/PUT/DELETE /api/v1/customers[/:id]` | `customer.view` / `customer.edit` | CRUD pelanggan; daftar membawa `stats` (kedatangan, belanja bersih, terakhir datang; `receivable_outstanding` hanya untuk `receivable.manage`) |
 | `POST /api/v1/sales` (header `Idempotency-Key`) | `sale.create` | Checkout |
-| `GET  /api/v1/sales` · `GET /api/v1/sales/:id` | `sale.create` | Daftar / detail transaksi |
+| `GET  /api/v1/sales` · `GET /api/v1/sales/:id` | `sale.create` | Daftar / detail transaksi. Daftar bisa disaring `search` (nomor nota) & `method` (cara bayar); tiap baris membawa `items`, `payments`, `customer_name`, `cashier_name`, serta `return_of_receipt_no` / `returned_by_receipt_no` (retur ↔ nota asal) |
+| `GET  /api/v1/sales/day-summary?outlet_id=&business_date=` | `sale.create` | Ringkasan satu hari untuk layar riwayat: penjualan, rata-rata, retur, batal, bersih, per cara bayar (tunai dikurangi kembalian) |
 | `POST /api/v1/sales/:id/void` · `.../refund` | `sale.void` / `sale.refund` | Batal / retur penuh |
 | `GET  /api/v1/sales-summary?from=&to=` | `report.view` | Ringkasan omzet/laba (langsung dari `sales`) |
 | `GET  /api/v1/reports/dashboard?outlet_id=&date=` | `report.view` | Ringkasan hari + bulan berjalan + per kanal (dari agregat) |

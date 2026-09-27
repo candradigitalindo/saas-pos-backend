@@ -342,6 +342,7 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	// wildcard :id di pohon rute GET.)
 	t.POST("/sales", middlewares.Require("sale.create"), controllers.Checkout)
 	t.GET("/sales", middlewares.Require("sale.create"), controllers.ListSales)
+	t.GET("/sales/day-summary", middlewares.Require("sale.create"), controllers.SalesDaySummary)
 	t.GET("/sales-summary", middlewares.Require("report.view"), controllers.SalesSummary)
 	t.GET("/sales/:id", middlewares.Require("sale.create"), controllers.GetSale)
 	t.POST("/sales/:id/void", middlewares.Require("sale.void"), controllers.VoidSale)
