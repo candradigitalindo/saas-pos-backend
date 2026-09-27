@@ -229,6 +229,9 @@ menampilkan rekening tujuan (`payment_instructions`; bila kosong, arahan menghub
 WhatsApp), lalu meminta cara bayar + nama pengirim/nomor referensi. Setelah terkirim, kartu tagihan
 berganti "Menunggu verifikasi" (tanpa tombol bayar); bila ditolak, alasan dari staf tampil beserta
 tombol "Kirim Konfirmasi Baru". Paket berubah HANYA setelah staf keuangan menyetujui di panel.
+Membayar di tengah masa coba tidak menghanguskan sisanya: masa berbayar dimulai saat masa coba
+berakhir. Kartu status menyebutnya ("Sudah dibayar. Masa berbayar mulai …"), dan kartu tagihan
+menampilkan periode yang dibayar.
 
 **Kunci paket di layar** (dari `plan` di `GET /me`; penegakannya tetap di server, 402):
 

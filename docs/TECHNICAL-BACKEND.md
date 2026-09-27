@@ -2540,6 +2540,12 @@ untuk setiap partner_referrals berstatus 'active':
 
 ### 13.4 Pengakuan pendapatan diterima di muka
 
+Periode tagihan (`services.awalPeriodeBerbayar`): perpanjangan langganan aktif mulai tepat di akhir
+periode berjalan; tagihan di masa coba mulai saat **masa coba berakhir** dan dihitung ulang saat
+lunas (dibayar setelah masa coba habis → mulai hari bayar). Membayar lebih awal tidak menghanguskan
+sisa masa coba, dan pengakuan pendapatannya ikut mulai di bulan masa berbayar — bukan bulan uangnya
+masuk. Berhenti sebelum masa berbayar dimulai = 0 bulan terpakai (bukan minimal 1).
+
 ```
 Saat subscription_invoice berstatus 'paid' untuk term_months = N:
   buat N baris deferred_revenue_entries, masing-masing total_amount/N

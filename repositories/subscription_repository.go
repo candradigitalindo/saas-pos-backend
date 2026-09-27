@@ -192,7 +192,11 @@ func SaveSubInvoice(ctx context.Context, tx *gorm.DB, in *models.SubscriptionInv
 			"paid_amount":     in.PaidAmount,
 			"status":          in.Status,
 			"paid_at":         in.PaidAt,
-			"updated_at":      time.Now().UTC(),
+			// Periode bisa digeser saat lunas (tagihan masa coba, lihat
+			// services.terapkanPembayaran).
+			"period_start": in.PeriodStart,
+			"period_end":   in.PeriodEnd,
+			"updated_at":   time.Now().UTC(),
 		}).Error
 }
 

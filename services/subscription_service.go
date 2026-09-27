@@ -210,10 +210,7 @@ func buildInvoice(ctx context.Context, tx *gorm.DB, sub models.Subscription, pla
 	now := time.Now().UTC()
 	today := firstOfDay(now)
 
-	periodStart := today
-	if sub.Status == "active" && sub.CurrentPeriodEnd.After(now) {
-		periodStart = firstOfDay(sub.CurrentPeriodEnd)
-	}
+	periodStart := awalPeriodeBerbayar(sub, now)
 	periodEnd := periodStart.AddDate(0, term, 0)
 
 	gross := plan.MonthlyPrice * int64(term)
@@ -239,6 +236,24 @@ func buildInvoice(ctx context.Context, tx *gorm.DB, sub models.Subscription, pla
 		DueDate:        today.AddDate(0, 0, subscriptionDueDays()),
 		Status:         "open",
 	}, nil
+}
+
+// awalPeriodeBerbayar menentukan kapan masa berbayar sebuah tagihan dimulai:
+//   - perpanjangan langganan aktif → tepat saat periode berjalan berakhir;
+//   - masih dalam masa coba → saat masa coba berakhir, supaya membayar lebih
+//     awal tidak menghanguskan sisa masa coba (dulu masa berbayar dimulai hari
+//     itu juga, jadi pemilik yang rajin membayar di hari pertama kehilangan 14
+//     hari gratisnya);
+//   - selain itu (masa coba habis, langganan lewat) → hari ini.
+func awalPeriodeBerbayar(sub models.Subscription, now time.Time) time.Time {
+	switch {
+	case sub.Status == "active" && sub.CurrentPeriodEnd.After(now):
+		return firstOfDay(sub.CurrentPeriodEnd)
+	case sub.Status == "trial" && sub.TrialEndsAt != nil && sub.TrialEndsAt.After(now):
+		return firstOfDay(*sub.TrialEndsAt)
+	default:
+		return firstOfDay(now)
+	}
 }
 
 // firstOfDay memangkas t ke tengah malam UTC.
@@ -292,6 +307,14 @@ func terapkanPembayaran(ctx context.Context, tx *gorm.DB, invoiceID string, amou
 		sub, err := repositories.FindSubscriptionByTenant(ctx, tx)
 		if err != nil {
 			return inv, bayar, err
+		}
+		// Tagihan masa coba dihitung ulang periodenya SAAT LUNAS, bukan saat
+		// terbit: tagihan yang terbit di tengah masa coba tapi baru dibayar
+		// setelah masa coba habis mulai berlaku hari pembayaran — hari-hari
+		// di antaranya tenant memakai paket Gratis, jadi tidak ditagihkan.
+		if sub.Status == "trial" {
+			inv.PeriodStart = awalPeriodeBerbayar(sub, now)
+			inv.PeriodEnd = inv.PeriodStart.AddDate(0, inv.TermMonths, 0)
 		}
 		sub.Status = "active"
 		sub.CurrentPeriodStart = inv.PeriodStart
@@ -367,7 +390,12 @@ func CancelSubscription(ctx context.Context, reason string) (structs.Subscriptio
 				return err
 			}
 			monthsUsed = wholeMonthsBetween(inv.PeriodStart, now)
-			if monthsUsed < 1 {
+			switch {
+			case now.Before(inv.PeriodStart):
+				// Dibayar di masa coba lalu berhenti sebelum masa berbayarnya
+				// mulai: belum ada bulan yang terpakai, uangnya kembali utuh.
+				monthsUsed = 0
+			case monthsUsed < 1:
 				monthsUsed = 1
 			}
 			if monthsUsed > inv.TermMonths {

@@ -264,6 +264,11 @@ func TestRevenueRecognitionJob(t *testing.T) {
 	// Basic 3 bulan.
 	call(t, "POST", "/api/v1/subscription", f.token, map[string]any{"plan_code": "basic", "term_months": 3}).
 		mustCode(t, "start", 201)
+	// Masa coba dihabiskan dulu: dibayar di tengah masa coba, masa berbayarnya
+	// mulai saat masa coba berakhir — bisa jatuh di bulan depan, dan uji ini
+	// butuh bulan pertama = bulan berjalan.
+	lewat := time.Now().UTC().Add(-time.Hour)
+	aturLangganan(t, f.tenantID, map[string]any{"trial_ends_at": lewat, "current_period_end": lewat})
 	invID := call(t, "POST", "/api/v1/subscription/invoices", f.token, nil).mustCode(t, "invoice", 201).data(t)["id"].(string)
 	total := int64(call(t, "GET", "/api/v1/subscription", f.token, nil).mustOK(t, "ov").data(t)["open_invoice"].(map[string]any)["total_amount"].(float64))
 	paySub(t, f.token, "RJ-"+ulid.New(), invID, total).mustCode(t, "bayar", 201)

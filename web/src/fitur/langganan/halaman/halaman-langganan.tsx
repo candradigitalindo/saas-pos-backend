@@ -158,9 +158,19 @@ export function HalamanLangganan() {
             {langganan.trial_ends_at && langganan.status === 'trial' && (
               <p className="mt-1 text-keterangan text-teks-redup">
                 Masa coba gratis berakhir {formatTanggal(langganan.trial_ends_at)}. Bayar
-                sebelum itu supaya fitur tidak terkunci.
+                kapan saja sebelum itu supaya fitur tidak terkunci — masa berbayar baru
+                dimulai setelah masa coba berakhir, jadi sisa masa coba tidak hangus.
               </p>
             )}
+            {/* Dibayar di tengah masa coba: masa berbayarnya belum mulai. */}
+            {langganan.status === 'active' &&
+              new Date(langganan.current_period_start) > new Date() && (
+                <p className="mt-1 text-keterangan text-teks-redup">
+                  Sudah dibayar. Masa berbayar mulai{' '}
+                  {formatTanggal(langganan.current_period_start)} — sampai itu sisa masa coba
+                  Anda tetap berjalan.
+                </p>
+              )}
             {/* Dalam tenggang: masa bayar sudah lewat, fitur masih jalan. */}
             {langganan.status !== 'trial' &&
               berlaku?.active_until &&
@@ -193,7 +203,9 @@ export function HalamanLangganan() {
               {formatRupiah(tagihanTerbuka.total_amount - tagihanTerbuka.paid_amount)}
             </p>
             <p className="mt-1 text-keterangan text-jingga-700">
-              Nomor {tagihanTerbuka.number} · jatuh tempo{' '}
+              Nomor {tagihanTerbuka.number} · untuk{' '}
+              {formatTanggal(tagihanTerbuka.period_start)} –{' '}
+              {formatTanggal(tagihanTerbuka.period_end)} · jatuh tempo{' '}
               {formatTanggal(tagihanTerbuka.due_date)}
             </p>
             {konfirmasi?.status === 'pending' ? (

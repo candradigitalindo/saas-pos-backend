@@ -287,11 +287,11 @@ Semua endpoint bisnis di bawah prefiks `/api/v1`.
 | `GET  /api/v1/sync/pull?since=&outlet_id=&limit=` | `sale.create` atau `crm.visit.checkin` | Master data + stok + batu nisan sejak kursor `sync_version` |
 | `GET  /api/v1/plans` | token | Katalog paket + harga per masa langganan |
 | `GET/POST /api/v1/subscription` | `billing.manage` | Status langganan / mulai (trial). Selama masa coba (atau setelah habis) POST mengganti paket TANPA menggeser tanggal masa coba |
-| `POST /api/v1/subscription/invoices` · `GET` | `billing.manage` | Terbitkan / daftar tagihan langganan |
+| `POST /api/v1/subscription/invoices` · `GET` | `billing.manage` | Terbitkan / daftar tagihan langganan. Periode: perpanjangan mulai di akhir periode berjalan; **di masa coba mulai saat masa coba berakhir** (dihitung ulang saat lunas — dibayar setelah masa coba habis → mulai hari bayar), jadi membayar lebih awal tidak menghanguskan sisa masa coba |
 | `POST /api/v1/subscription-payment-claims` (header `Idempotency-Key`) · `GET` | `billing.manage` | Konfirmasi sudah membayar (nominal, cara, nama pengirim/ref). **Tidak** mengaktifkan apa pun; satu konfirmasi menunggu per tagihan (kedua → 409). `GET /subscription` memuat `payment_claim` terakhir + `payment_instructions` (rekening dari `SUBSCRIPTION_BANK_*`) |
 | `GET /api/v1/platform/subscription-payment-claims?status=` | panel: `billing.verify` (superadmin, finance) | Antrean verifikasi (`pending` bawaan, terlama dulu; `approved`\|`rejected`\|`all`) dengan nama usaha, nomor & sisa tagihan |
 | `POST /api/v1/platform/subscription-payment-claims/:id/approve` · `/reject` (`reason` ≥ 3 huruf) | panel: `billing.verify` | Setujui → pembayaran dicatat, lunas → aktif + `deferred_revenue_entries`. Tolak → tagihan tetap terbuka, tenant boleh mengirim ulang. Keduanya memberi tahu tenant (WhatsApp) dan tercatat di `audit_logs`; yang sudah diputus → 409 |
-| `POST /api/v1/subscription/cancel` | `billing.manage` | Batal + refund (harga bulanan normal) |
+| `POST /api/v1/subscription/cancel` | `billing.manage` | Batal + refund (harga bulanan normal); berhenti sebelum masa berbayar dimulai → 0 bulan terpakai, uang kembali utuh |
 | `POST /api/v1/subscription/change-plan` | `billing.manage` | Ganti paket dengan kredit prorata |
 
 **Kunci paket** (`services/plan_entitlement_service.go`). Paket yang BERLAKU dihitung dari waktu:
