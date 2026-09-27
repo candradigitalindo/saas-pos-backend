@@ -298,6 +298,34 @@ diri bila kurang dari dua hari berisi** — satu batang di antara garis tipis
 terlihat seperti komponen rusak, dan warung yang baru mulai justru persis ada di
 keadaan itu.
 
+### Halaman masuk & daftar
+
+Layar pertama yang dilihat setiap orang, jadi di sinilah identitas produk
+paling perlu terlihat (`app/layouts/layout-kosong.tsx`).
+
+- **Layar besar:** panel merek `.permukaan-sorotan` + `text-utama-teks` di kiri
+  (logo, "Kasir UMKM", kalimat utama, tiga label keunggulan yang BENAR ada, lalu
+  **etalase layar aplikasi sungguhan**: kasir dalam bingkai tablet, laporan
+  dalam bingkai HP), formulir dalam kartu di kanan.
+- Pola etalase diambil dari halaman masuk SaaS kasir pembanding (Pawoon,
+  Square): perlihatkan produknya, jangan menjelaskannya dengan paragraf.
+  Tablet sengaja menjulur keluar panel (`w-[max(46rem,118%)]`) — yang muat utuh
+  terbaca sebagai gambar tempelan. Bingkai memakai token `bingkai` (gelap tetap).
+- Gambarnya (`public/gambar/pratinjau-*.jpg`) dibuat dari aplikasi yang
+  berjalan: **`npm run foto:pratinjau`** — jalankan ulang setiap tampilan kasir
+  atau laporan berubah. Laporan diambil periode "Bulan ini", bukan beranda /
+  "Hari ini", supaya etalase tidak memamerkan "Rp 0".
+- **HP:** pita merek di atas, kartu formulir menumpang di bawahnya, keunggulan
+  ringkas di bawah kartu (`bg-sorot` + `text-hijau-800`).
+- Ikon & cincin di atas panel **bergaris**, bukan berisi — latar di balik teks
+  tetap warna yang sudah diverifikasi.
+- Tombol **Masuk selalu aktif**; kolom kosong dijawab di bawah kolomnya. Tombol
+  abu-abu nonaktif di layar pertama terbaca "rusak".
+- Judul besar ditulis **tanpa tanda baca**: koma & titik Plus Jakarta Sans lebar
+  (koma 15,5px pada 40px/800), di ukuran judul tampak terlepas dari katanya.
+- `periksa:kontras` dan `periksa:tataletak` memeriksa `/masuk` & `/daftar`
+  SEBELUM masuk, di layar lebar dan HP.
+
 ### Kartu barang di kasir
 
 ```

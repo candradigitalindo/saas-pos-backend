@@ -1,10 +1,21 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { UserRound } from 'lucide-react'
 import { Kolom } from '@/bersama/ui/kolom'
+import { KolomSandi } from '@/bersama/ui/kolom-sandi'
 import { Tombol } from '@/bersama/ui/tombol'
 import { useSesi } from '@/bersama/hooks/use-sesi'
 import { GALAT_SESI_HABIS, GalatAPI } from '@/lib/api-client'
 
+/**
+ * Masuk ke toko.
+ *
+ * Tombol "Masuk" SELALU aktif dan berwarna penuh. Versi sebelumnya menonaktifkan
+ * tombolnya sampai dua kolom terisi, sehingga layar pertama yang dilihat
+ * setiap orang didominasi tombol abu-abu yang terbaca "rusak". Kolom kosong
+ * kini dijawab dengan kalimat di bawah kolomnya (ui/01 §7), sama seperti form
+ * lain di aplikasi.
+ */
 export function HalamanMasuk() {
   const { masuk } = useSesi()
   const navigate = useNavigate()
@@ -18,7 +29,13 @@ export function HalamanMasuk() {
   async function kirim(e: React.FormEvent) {
     e.preventDefault()
     setGalat(null)
-    setKolomGalat({})
+
+    const kosong: Record<string, string> = {}
+    if (!username.trim()) kosong.username = 'Nama pengguna belum diisi.'
+    if (!sandi) kosong.password = 'Kata sandi belum diisi.'
+    setKolomGalat(kosong)
+    if (Object.keys(kosong).length > 0) return
+
     setMengirim(true)
     try {
       await masuk(username.trim(), sandi)
@@ -42,8 +59,8 @@ export function HalamanMasuk() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="text-center">
-        <h1 className="text-judul font-bold text-teks-utama">Masuk</h1>
+      <div>
+        <h1 className="text-judul font-bold text-teks-utama">Masuk ke toko Anda</h1>
         <p className="mt-1 text-isi text-teks-sekunder">
           Selamat datang kembali. Ayo jualan lagi.
         </p>
@@ -52,16 +69,17 @@ export function HalamanMasuk() {
       <form onSubmit={kirim} className="flex flex-col gap-4" noValidate>
         <Kolom
           label="Nama pengguna"
+          ikon={UserRound}
           autoComplete="username"
           autoCapitalize="none"
+          autoFocus
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           galat={kolomGalat.username}
           required
         />
-        <Kolom
+        <KolomSandi
           label="Kata sandi"
-          type="password"
           autoComplete="current-password"
           value={sandi}
           onChange={(e) => setSandi(e.target.value)}
@@ -70,28 +88,28 @@ export function HalamanMasuk() {
         />
 
         {galat && (
-          <p className="rounded-kontrol border border-bahaya bg-bahaya-teks/10 px-3 py-2 text-label text-bahaya-teks">
+          <p
+            role="alert"
+            className="rounded-kontrol border border-bahaya bg-bahaya-teks/10 px-3 py-2 text-label text-bahaya-teks"
+          >
             {galat}
           </p>
         )}
 
-        <Tombol
-          type="submit"
-          lebarPenuh
-          memuat={mengirim}
-          labelMemuat="Sedang masuk…"
-          disabled={!username || !sandi}
-        >
+        <Tombol type="submit" lebarPenuh memuat={mengirim} labelMemuat="Sedang masuk…">
           Masuk
         </Tombol>
       </form>
 
-      <p className="text-center text-label text-teks-sekunder">
-        Belum punya akun?{' '}
-        <Link to="/daftar" className="font-semibold text-utama underline underline-offset-2">
-          Daftarkan usaha Anda
-        </Link>
-      </p>
+      <div className="flex items-center gap-3 text-keterangan text-teks-redup" aria-hidden>
+        <span className="h-px flex-1 bg-garis" />
+        Belum punya akun?
+        <span className="h-px flex-1 bg-garis" />
+      </div>
+
+      <Tombol asChild jenis="kedua" lebarPenuh>
+        <Link to="/daftar">Daftarkan usaha Anda — gratis</Link>
+      </Tombol>
     </div>
   )
 }

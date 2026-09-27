@@ -27,13 +27,19 @@ const b = await chromium.launch({ channel: 'chrome' })
 const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true })
 const p = await ctx.newPage()
 
+const temuan = []
+
+// Halaman PUBLIK diperiksa sebelum masuk: layar pertama yang dilihat setiap
+// orang, dan satu-satunya yang tidak bisa dicapai setelah sesi terbentuk.
+for (const [nama, jalur] of [['masuk', '/masuk'], ['daftar', '/daftar']]) {
+  await periksa(nama, jalur)
+}
+
 await p.goto(`${BASE}/masuk`, { waitUntil: 'networkidle' })
 await p.getByLabel('Nama pengguna').fill('sari')
 await p.getByLabel('Kata sandi').fill('rahasia123')
-await p.getByRole('button', { name: 'Masuk' }).click()
+await p.getByRole('button', { name: 'Masuk', exact: true }).click()
 await p.waitForURL((u) => !u.pathname.includes('masuk'), { timeout: 15000 })
-
-const temuan = []
 
 /** Menemukan alamat halaman detail dari daftarnya. */
 async function jalurDetail(dariJalur, pemilih) {
@@ -52,7 +58,10 @@ for (const [nama, dari, pemilih] of DETAIL) {
   else console.error(`(lewat ${nama}: tidak ada tautan di ${dari})`)
 }
 
-for (const [nama, jalur] of SEMUA) {
+for (const [nama, jalur] of SEMUA) await periksa(nama, jalur)
+
+/** Memeriksa satu halaman dan mencatat pelanggarannya ke `temuan`. */
+async function periksa(nama, jalur) {
   await p.goto(BASE + jalur, { waitUntil: 'networkidle', timeout: 20000 })
   await p.waitForTimeout(1200)
 

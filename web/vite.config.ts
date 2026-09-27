@@ -38,7 +38,9 @@ export default defineConfig({
       },
       workbox: {
         // Kerangka aplikasi di-cache supaya kasir tetap terbuka tanpa internet.
-        globPatterns: ['**/*.{js,css,html,woff2}'],
+        // jpg: gambar etalase halaman masuk — tanpa ini, aplikasi yang dibuka
+        // tanpa sinyal menampilkan ikon gambar rusak di layar pertamanya.
+        globPatterns: ['**/*.{js,css,html,woff2,jpg}'],
         navigateFallback: 'index.html',
         // Permintaan API TIDAK di-cache: data basi yang terlihat segar lebih
         // berbahaya daripada layar yang jujur mengaku offline. Antrean Dexie

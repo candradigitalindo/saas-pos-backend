@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatJam, keDate } from './tanggal'
+import { formatJam, keDate, zonaIndonesiaPerangkat } from './tanggal'
 
 describe('tanggal', () => {
   it('RFC 3339 UTC dari server tampil dalam jam WIB', () => {
@@ -13,5 +13,14 @@ describe('tanggal', () => {
 
   it('string yang sudah membawa zona tidak diubah', () => {
     expect(keDate('2026-09-26T07:22:10+07:00').toISOString()).toBe('2026-09-26T00:22:10.000Z')
+  })
+
+  it('zona perangkat dipetakan ke tiga zona yang diterima server', () => {
+    expect(zonaIndonesiaPerangkat('Asia/Jakarta')).toBe('Asia/Jakarta')
+    expect(zonaIndonesiaPerangkat('Asia/Pontianak')).toBe('Asia/Jakarta')
+    expect(zonaIndonesiaPerangkat('Asia/Makassar')).toBe('Asia/Makassar')
+    expect(zonaIndonesiaPerangkat('Asia/Ujung_Pandang')).toBe('Asia/Makassar')
+    expect(zonaIndonesiaPerangkat('Asia/Jayapura')).toBe('Asia/Jayapura')
+    expect(zonaIndonesiaPerangkat('Asia/Singapore')).toBeUndefined()
   })
 })

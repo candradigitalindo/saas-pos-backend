@@ -68,3 +68,30 @@ export function formatTanggalAkrab(iso: string, zona = ZONA_BAWAAN): string {
 export function tanggalISO(d = new Date(), zona = ZONA_BAWAAN): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: zona }).format(d)
 }
+
+/** Zona waktu outlet yang diterima server. */
+export type ZonaIndonesia = 'Asia/Jakarta' | 'Asia/Makassar' | 'Asia/Jayapura'
+
+const ZONA_PERANGKAT: Record<string, ZonaIndonesia> = {
+  'Asia/Jakarta': 'Asia/Jakarta',
+  'Asia/Pontianak': 'Asia/Jakarta', // WIB juga, tapi server hanya kenal satu nama per zona
+  'Asia/Makassar': 'Asia/Makassar',
+  'Asia/Ujung_Pandang': 'Asia/Makassar', // nama lama Makassar di basis data IANA
+  'Asia/Jayapura': 'Asia/Jayapura',
+}
+
+/**
+ * Zona waktu perangkat, bila termasuk WIB/WITA/WIT; selain itu undefined
+ * (server lalu memakai WIB).
+ *
+ * Dipakai saat mendaftar. Dulu zona tidak dikirim sama sekali, jadi usaha di
+ * Makassar atau Jayapura terdaftar sebagai WIB dan penjualan pukul 00.30
+ * waktu setempat masuk ke hari kemarin. Jam HP tidak dipercaya untuk
+ * menghitung hari penjualan, tapi ZONA-nya adalah tebakan awal terbaik —
+ * dan tetap bisa diubah di Pengaturan → Toko.
+ */
+export function zonaIndonesiaPerangkat(
+  zona: string = Intl.DateTimeFormat().resolvedOptions().timeZone,
+): ZonaIndonesia | undefined {
+  return ZONA_PERANGKAT[zona]
+}

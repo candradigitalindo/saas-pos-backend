@@ -1,5 +1,5 @@
 import { forwardRef, useId } from 'react'
-import { AlertCircle } from 'lucide-react'
+import { AlertCircle, type LucideIcon } from 'lucide-react'
 import { cn } from '@/bersama/util/cn'
 
 /**
@@ -18,10 +18,30 @@ export interface PropKolom extends React.InputHTMLAttributes<HTMLInputElement> {
   /** Teks awalan satuan di dalam kotak, mis. "Rp". */
   awalan?: string
   akhiran?: string
+  /** Ikon penanda di awal kotak (dekoratif — labelnya tetap yang menjelaskan). */
+  ikon?: LucideIcon
+  /**
+   * Kendali di ujung kanan kotak, mis. tombol "lihat sandi". Berbeda dari
+   * `akhiran` yang hanya teks satuan: ini boleh interaktif, jadi tidak
+   * disembunyikan dari pembaca layar.
+   */
+  sisipanAkhir?: React.ReactNode
 }
 
 export const Kolom = forwardRef<HTMLInputElement, PropKolom>(function Kolom(
-  { label, bantuan, galat, awalan, akhiran, className, id, required, ...sisa },
+  {
+    label,
+    bantuan,
+    galat,
+    awalan,
+    akhiran,
+    ikon: Ikon,
+    sisipanAkhir,
+    className,
+    id,
+    required,
+    ...sisa
+  },
   ref,
 ) {
   const otomatis = useId()
@@ -44,6 +64,7 @@ export const Kolom = forwardRef<HTMLInputElement, PropKolom>(function Kolom(
           galat ? 'border-bahaya' : 'border-garis',
         )}
       >
+        {Ikon && <Ikon className="h-5 w-5 shrink-0 text-teks-redup" aria-hidden />}
         {awalan && (
           <span className="shrink-0 text-teks-redup" aria-hidden>
             {awalan}
@@ -70,6 +91,7 @@ export const Kolom = forwardRef<HTMLInputElement, PropKolom>(function Kolom(
             {akhiran}
           </span>
         )}
+        {sisipanAkhir}
       </div>
 
       {galat ? (

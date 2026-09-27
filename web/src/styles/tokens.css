@@ -23,6 +23,12 @@
      bisa dipakai: ia berubah jadi putih di mode gelap, dan putih di atas
      #FBBF24 hanya 1,8:1. */
   --color-teks-di-jingga: #1c1917;
+
+  /* Bingkai perangkat (tablet/HP) di etalase halaman masuk. Gelap TETAP di
+     kedua mode: bingkai perangkat sungguhan tidak ikut berganti tema, dan
+     tangkapan layar di dalamnya juga selalu mode terang. Hanya hiasan — tidak
+     pernah menjadi latar teks. */
+  --color-bingkai: #1c1917;
   --color-jingga-600: #d97706;
   --color-jingga-700: var(--warna-jingga-teks);
 

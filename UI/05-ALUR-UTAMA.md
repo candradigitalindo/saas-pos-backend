@@ -11,10 +11,14 @@ Ini momen paling menentukan. Kalau pemilik warung tidak berhasil menjual barang
 pertamanya di hari pertama, dia tidak akan kembali.
 
 ```
-Daftar (1 layar, 6 kolom)
+Daftar — langkah 1 dari 2: Usaha Anda
    │  Nama usaha · Jenis usaha · No. HP
-   │  Nama Anda · Username · Kata sandi
    │  ▸ Punya kode dari agen?   ← tertutup, agar tidak membingungkan
+   │  [ Lanjut ]
+   ▼
+Daftar — langkah 2 dari 2: Akun pemilik
+   │  Nama Anda · Nama pengguna · Email · Kata sandi
+   │  [ Buat Usaha Saya ]       ← zona waktu diambil dari perangkat
    ▼
 Selamat datang, Bu Sari! 🎉
    │  Usaha Anda sudah siap. Tinggal 3 langkah lagi:
@@ -34,6 +38,11 @@ Isi stok awal  →  Coba transaksi  →  🎉 "Penjualan pertama Anda tercatat!"
 
 **Keputusan penting:**
 - Pendaftaran **tidak** menanyakan alamat, NPWP, logo. Semua itu bisa menyusul.
+- Pendaftaran **dua langkah pendek**, bukan satu layar panjang: tujuh isian dalam
+  satu layar setinggi ±1.000px memaksa calon pengguna menggulir sebelum melihat
+  tombol daftar. Tiap langkah muat satu layar (diukur: laptop 1280×800, HP
+  390×844 dan 360×740). Isian tetap tersimpan saat mundur, dan galat server untuk
+  isian langkah 1 membawa formulir kembali ke langkah itu.
 - Langkah onboarding **bisa dilewati**, tapi tetap ditampilkan di Beranda sampai selesai.
 - Perayaan kecil di transaksi pertama — ini satu-satunya tempat **Jingga Semangat**
   dipakai penuh. Momen ini yang membuat orang merasa "saya bisa".

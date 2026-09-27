@@ -53,8 +53,7 @@ for (const mode of ['light','dark']) {
   // ── Kontras yang BENAR-BENAR TERENDER ────────────────────────────────
   //
   // Diperiksa di BEBERAPA HALAMAN, bukan hanya layar masuk: penjaga yang cuma
-  // melihat satu layar tidak menjaga apa pun. Layar masuk sendiri hanya punya
-  // enam teks.
+  // melihat satu layar tidak menjaga apa pun.
   //
   // Memeriksa pasangan token saja tidak cukup, dan itu terbukti mahal:
   // pesan galat di 20-an layar memakai `bg-red-50` — warna palet Tailwind
@@ -65,12 +64,6 @@ for (const mode of ['light','dark']) {
   //
   // Di sini yang diukur adalah piksel sungguhan: warna teks terhadap latar
   // efektif setelah komposisi, pada halaman nyata, di kedua mode.
-  await p.getByLabel('Nama pengguna').fill('sari')
-  await p.getByLabel('Kata sandi').fill('rahasia123')
-  await p.getByRole('button', { name: 'Masuk' }).click()
-  await p.waitForURL((u) => !u.pathname.includes('masuk'), { timeout: 15000 })
-  await p.waitForTimeout(1500)
-
   const bacaTerender = () => p.evaluate(() => {
     const c = document.createElement('canvas')
     c.width = c.height = 1
@@ -146,8 +139,31 @@ for (const mode of ['light','dark']) {
   const keHex = ([r, g, b]) =>
     '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')
 
-  // Halaman dengan keadaan berwarna: galat, lencana, peringatan, kartu sorotan.
   const terender = []
+
+  // Halaman PUBLIK diukur sebelum masuk, di layar lebar dan di HP: layar ini
+  // yang pertama dilihat setiap orang, dan daftar keunggulan berlatar `sorot`
+  // hanya tampil di HP. Teks di atas panel merek (gradien) tercatat "tak
+  // terukur" — pasangannya sama dengan kartu sorotan beranda, yang kedua ujung
+  // gradiennya sudah diverifikasi di ui/02.
+  for (const lebar of [1280, 390]) {
+    await p.setViewportSize({ width: lebar, height: 844 })
+    for (const jalur of ['/masuk', '/daftar']) {
+      await p.goto('http://localhost:5173' + jalur, { waitUntil: 'networkidle' })
+      await p.waitForTimeout(600)
+      terender.push(...(await bacaTerender()))
+    }
+  }
+  await p.setViewportSize({ width: 1280, height: 720 })
+  await p.goto('http://localhost:5173/masuk', { waitUntil: 'networkidle' })
+
+  await p.getByLabel('Nama pengguna').fill('sari')
+  await p.getByLabel('Kata sandi').fill('rahasia123')
+  await p.getByRole('button', { name: 'Masuk', exact: true }).click()
+  await p.waitForURL((u) => !u.pathname.includes('masuk'), { timeout: 15000 })
+  await p.waitForTimeout(1500)
+
+  // Halaman dengan keadaan berwarna: galat, lencana, peringatan, kartu sorotan.
   for (const jalur of ['/', '/laporan', '/kasir', '/stok', '/kasbon', '/pengaturan', '/sdm/gaji']) {
     await p.goto('http://localhost:5173' + jalur, { waitUntil: 'networkidle' })
     await p.waitForTimeout(1200)
