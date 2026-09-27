@@ -70,8 +70,10 @@ export function HalamanKas() {
   }
 
   return (
-    <div className="flex w-full max-w-lg flex-col gap-4">
-      <h1 className="text-judul font-bold text-teks-utama">Uang Masuk & Keluar</h1>
+    // Layar lebar: formulir di kiri, catatan hari ini di kanan — dulu keduanya
+    // bertumpuk di kolom 512px dan dua pertiga layar kosong.
+    <div className="flex w-full max-w-lg flex-col gap-4 lg:grid lg:max-w-5xl lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:items-start lg:gap-x-6">
+      <h1 className="text-judul font-bold text-teks-utama lg:col-span-2">Uang Masuk & Keluar</h1>
 
       <Kartu className="p-4">
         <form onSubmit={kirim} className="flex flex-col gap-4">
@@ -139,9 +141,11 @@ export function HalamanKas() {
         {daftar.isLoading ? (
           <KerangkaBaris jumlah={2} />
         ) : (daftar.data?.data.length ?? 0) === 0 ? (
-          <p className="text-isi text-teks-redup">
-            Belum ada uang masuk atau keluar di shift ini.
-          </p>
+          <Kartu className="p-6 text-center">
+            <p className="text-isi text-teks-redup">
+              Belum ada uang masuk atau keluar di shift ini.
+            </p>
+          </Kartu>
         ) : (
           <ul className="flex flex-col gap-2">
             {daftar.data?.data.map((g) => (
@@ -160,7 +164,7 @@ export function HalamanKas() {
                     )}
                   >
                     {g.direction === 'in' ? '+' : '−'}
-                    {formatRupiah(g.amount).replace('Rp ', 'Rp ')}
+                    {formatRupiah(g.amount)}
                   </p>
                 </Kartu>
               </li>

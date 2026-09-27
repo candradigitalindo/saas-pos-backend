@@ -150,8 +150,11 @@ export function HalamanOpname() {
               ))}
             </Kartu>
 
+            {/* Menempel di atas navigasi bawah: daftar barangnya panjang, dan
+                dulu tombol ini baru terlihat setelah digulir sampai habis. */}
             <Tombol
               lebarPenuh
+              className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-10 shadow-melayang lg:bottom-4"
               disabled={terpilih.size === 0}
               onClick={() => {
                 setHitungan(

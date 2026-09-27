@@ -90,10 +90,12 @@ export function HalamanBarangMasuk() {
   }
 
   return (
-    <div className="flex w-full max-w-lg flex-col gap-4">
-      <h1 className="text-judul font-bold text-teks-utama">Barang Masuk</h1>
+    // Layar lebar: nota & total (menempel saat digulir) di kiri, daftar barang
+    // di kanan — dulu semuanya satu kolom 512px dengan dua pertiga layar kosong.
+    <div className="flex w-full max-w-lg flex-col gap-4 lg:grid lg:max-w-5xl lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:items-start lg:gap-x-6">
+      <h1 className="text-judul font-bold text-teks-utama lg:col-span-2">Barang Masuk</h1>
 
-      <Kartu className="flex flex-col gap-4 p-4">
+      <Kartu className="flex flex-col gap-4 p-4 lg:col-start-1">
         <Pilihan
           label="Dari pemasok"
           value={pemasokId}
@@ -116,7 +118,7 @@ export function HalamanBarangMasuk() {
         />
       </Kartu>
 
-      <section className="flex flex-col gap-2">
+      <section className="flex flex-col gap-2 lg:col-start-2 lg:row-span-2 lg:row-start-2">
         <div className="flex items-center justify-between">
           <h2 className="text-judul-kartu font-semibold text-teks-utama">Barang</h2>
           <Tombol jenis="kedua" ukuran="padat" onClick={() => setBukaPemilih(true)}>
@@ -152,24 +154,33 @@ export function HalamanBarangMasuk() {
                     </button>
                   </div>
 
-                  <StepperJumlah
-                    nilai={b.qty}
-                    onNilai={(q) =>
-                      setBaris((l) => l.map((x, j) => (j === i ? { ...x, qty: q } : x)))
-                    }
-                    satuan={b.produk.unit_name}
-                    minimal="1"
-                    label={`Jumlah ${b.produk.name}`}
-                  />
+                  <div className="grid gap-3 sm:grid-cols-2 sm:items-start">
+                    {/* Label tampak supaya sejajar dengan kolom harga di
+                        sebelahnya; nama aksesibelnya tetap dari `label`. */}
+                    <div className="flex flex-col gap-1.5">
+                      <span aria-hidden className="text-label font-medium text-teks-sekunder">
+                        Jumlah
+                      </span>
+                      <StepperJumlah
+                        nilai={b.qty}
+                        onNilai={(q) =>
+                          setBaris((l) => l.map((x, j) => (j === i ? { ...x, qty: q } : x)))
+                        }
+                        satuan={b.produk.unit_name}
+                        minimal="1"
+                        label={`Jumlah ${b.produk.name}`}
+                      />
+                    </div>
 
-                  <KolomUang
-                    label="Harga beli satuan"
-                    nilai={b.hargaBeli}
-                    onNilai={(n) =>
-                      setBaris((l) => l.map((x, j) => (j === i ? { ...x, hargaBeli: n } : x)))
-                    }
-                    bantuan="Modal per satuan dari pemasok."
-                  />
+                    <KolomUang
+                      label="Harga beli satuan"
+                      nilai={b.hargaBeli}
+                      onNilai={(n) =>
+                        setBaris((l) => l.map((x, j) => (j === i ? { ...x, hargaBeli: n } : x)))
+                      }
+                      bantuan="Modal per satuan dari pemasok."
+                    />
+                  </div>
 
                   <div className="flex items-baseline justify-between border-t border-garis pt-2">
                     <span className="text-label text-teks-sekunder">Subtotal</span>
@@ -185,7 +196,7 @@ export function HalamanBarangMasuk() {
       </section>
 
       {baris.length > 0 && (
-        <Kartu className="flex flex-col gap-3 p-4">
+        <Kartu className="flex flex-col gap-3 p-4 lg:sticky lg:top-4 lg:col-start-1 lg:row-start-3">
           <div className="flex items-baseline justify-between">
             <span className="text-isi text-teks-sekunder">Total bayar</span>
             <span className="text-judul font-extrabold tabular-nums text-teks-utama">

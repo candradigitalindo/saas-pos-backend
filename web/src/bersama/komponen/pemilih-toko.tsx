@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import * as Popover from '@radix-ui/react-popover'
-import { Check, ChevronsUpDown, Store } from 'lucide-react'
+import { Command } from 'cmdk'
+import { Check, ChevronsUpDown, Search, Store } from 'lucide-react'
 import { LogoKasir } from '@/bersama/komponen/logo'
 import { useToast } from '@/bersama/komponen/toast'
 import { useSesi } from '@/bersama/hooks/use-sesi'
@@ -18,11 +19,15 @@ import { cn } from '@/bersama/util/cn'
  *
  * Pengguna satu toko (hampir semua kasir) melihat kepala yang sama tanpa
  * tombol — tidak ada pilihan yang pura-pura bisa dipilih.
+ *
+ * Daftarnya bisa dicari seperti setiap pilihan lain di aplikasi (lihat
+ * `Pilihan`): pemilik belasan cabang tidak perlu menggulir sambil membaca.
  */
 export function PemilihToko({ ringkas = false }: { ringkas?: boolean }) {
   const { profil, tokoAktif, rincianToko, gantiToko } = useSesi()
   const toast = useToast()
   const [buka, setBuka] = useState(false)
+  const [cari, setCari] = useState('')
 
   const daftar = profil?.outlets ?? []
   const namaUsaha = profil?.tenant.business_name ?? 'Usaha Saya'
@@ -71,7 +76,13 @@ export function PemilihToko({ ringkas = false }: { ringkas?: boolean }) {
   }
 
   return (
-    <Popover.Root open={buka} onOpenChange={setBuka}>
+    <Popover.Root
+      open={buka}
+      onOpenChange={(o) => {
+        setBuka(o)
+        setCari('')
+      }}
+    >
       <Popover.Trigger asChild>
         <button
           type="button"
@@ -97,38 +108,58 @@ export function PemilihToko({ ringkas = false }: { ringkas?: boolean }) {
           side={ringkas ? 'right' : 'bottom'}
           className="gerak-lapis z-[60] w-[var(--radix-popover-trigger-width)] min-w-60 rounded-kontrol border border-garis bg-permukaan p-1 shadow-melayang"
         >
-          <p className="px-3 pb-1 pt-2 text-keterangan font-semibold uppercase tracking-wide text-teks-redup">
-            Pindah toko
-          </p>
-          <ul>
-            {daftar.map((t) => {
-              const aktif = t.id === tokoAktif
-              return (
-                <li key={t.id}>
-                  <button
-                    type="button"
-                    aria-current={aktif ? 'true' : undefined}
-                    onClick={() => {
-                      setBuka(false)
-                      if (aktif) return
-                      gantiToko(t.id)
-                      toast.berhasil(`Sekarang memakai ${t.name}`)
-                    }}
-                    className="flex min-h-12 w-full items-center gap-3 rounded-kontrol px-3 text-left text-label text-teks-utama hover:bg-permukaan-2"
-                  >
-                    <Store className="h-4 w-4 shrink-0 text-teks-redup" aria-hidden />
-                    <span className="min-w-0 flex-1 truncate">{t.name}</span>
-                    <Check
-                      className={cn('h-4 w-4 shrink-0 text-utama', aktif ? 'opacity-100' : 'opacity-0')}
-                      aria-hidden
-                    />
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
+          <Command shouldFilter={false} label="Cari toko" loop>
+            <div className="flex items-center gap-2 border-b border-garis px-3">
+              <Search className="h-4 w-4 shrink-0 text-teks-redup" aria-hidden />
+              <Command.Input
+                value={cari}
+                onValueChange={setCari}
+                placeholder="Cari toko…"
+                className="h-12 min-w-0 flex-1 bg-transparent text-isi text-teks-utama outline-none placeholder:text-teks-redup"
+              />
+            </div>
+            <p className="px-3 pb-1 pt-2 text-keterangan font-semibold uppercase tracking-wide text-teks-redup">
+              Pindah toko
+            </p>
+            <Command.List className="max-h-72 overflow-y-auto overscroll-contain">
+              <Command.Empty className="px-3 py-6 text-center text-label text-teks-redup">
+                Tidak ada toko bernama &ldquo;{cari.trim()}&rdquo;.
+              </Command.Empty>
+              {daftar
+                .filter((t) => normal(t.name).includes(normal(cari.trim())))
+                .map((t) => {
+                  const aktif = t.id === tokoAktif
+                  return (
+                    <Command.Item
+                      key={t.id}
+                      value={t.id}
+                      aria-current={aktif ? 'true' : undefined}
+                      onSelect={() => {
+                        setBuka(false)
+                        if (aktif) return
+                        gantiToko(t.id)
+                        toast.berhasil(`Sekarang memakai ${t.name}`)
+                      }}
+                      className="flex min-h-12 cursor-pointer items-center gap-3 rounded-kontrol px-3 text-left text-label text-teks-utama data-[selected=true]:bg-permukaan-2"
+                    >
+                      <Store className="h-4 w-4 shrink-0 text-teks-redup" aria-hidden />
+                      <span className="min-w-0 flex-1 truncate">{t.name}</span>
+                      <Check
+                        className={cn('h-4 w-4 shrink-0 text-utama', aktif ? 'opacity-100' : 'opacity-0')}
+                        aria-hidden
+                      />
+                    </Command.Item>
+                  )
+                })}
+            </Command.List>
+          </Command>
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>
   )
+}
+
+/** Huruf kecil tanpa tanda aksen: "Café" dicari dengan "cafe". */
+function normal(t: string): string {
+  return t.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
 }

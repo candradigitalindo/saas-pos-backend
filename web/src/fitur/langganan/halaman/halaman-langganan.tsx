@@ -170,7 +170,7 @@ export function HalamanLangganan() {
               <button
                 type="button"
                 onClick={() => setBerhenti(true)}
-                className="text-label font-medium text-teks-sekunder underline underline-offset-4 hover:text-teks-utama focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-utama"
+                className="inline-flex min-h-11 items-center rounded-kontrol px-2 text-label font-medium text-teks-sekunder underline underline-offset-4 hover:text-teks-utama focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-utama"
               >
                 Tetap pakai Gratis
               </button>
@@ -239,7 +239,7 @@ export function HalamanLangganan() {
             <button
               type="button"
               onClick={() => setBerhenti(true)}
-              className="mt-3 self-start text-label font-medium text-teks-sekunder underline underline-offset-4 hover:text-bahaya-teks focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-utama"
+              className="-mx-2 mt-1 inline-flex min-h-11 items-center self-start rounded-kontrol px-2 text-label font-medium text-teks-sekunder underline underline-offset-4 hover:text-bahaya-teks focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-utama"
             >
               Berhenti berlangganan
             </button>
@@ -349,8 +349,10 @@ export function HalamanLangganan() {
           </h2>
           <Kartu className="divide-y divide-garis">
             {tagihan.data?.data.map((t) => (
-              <div key={t.id} className="flex items-center justify-between gap-3 p-4">
-                <div className="min-w-0">
+              // Membungkus di HP: di 320px angka + lencana dulu menghimpit
+              // keterangan tagihan sampai tinggal ±44px (8 baris).
+              <div key={t.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 p-4">
+                <div className="min-w-0 flex-1 basis-44">
                   <p className="font-medium tabular-nums text-teks-utama">{t.number}</p>
                   <p className="text-keterangan text-teks-redup">
                     {t.plan_name && `${t.plan_name}${t.kind === 'plan_change' ? ' (pindah paket)' : ''} · `}
@@ -516,8 +518,10 @@ function KartuPaket({
       )}
     >
       <div>
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-judul-kartu font-bold text-teks-utama">{paket.name}</p>
+        {/* Membungkus: di kartu sempit (4 kolom di 1280px) lencana turun ke
+            baris berikutnya — dulu ia memaksa "Multi-Outlet" patah dua. */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="whitespace-nowrap text-judul-kartu font-bold text-teks-utama">{paket.name}</p>
           {sedangDipakai && <LencanaStatus nada="berhasil" anak="Dipakai" />}
         </div>
         {/* Tinggi dua baris tetap SAAT BERSEBELAHAN (≥640px): kalimat yang

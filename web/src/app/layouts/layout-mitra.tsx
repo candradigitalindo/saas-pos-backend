@@ -22,7 +22,11 @@ export function LayoutMitra() {
 
   return (
     <div className="min-h-dvh bg-latar">
-      <header className="sticky top-0 z-30 border-b-2 border-info bg-permukaan">
+      {/* Kepala + menu layar lebar dalam SATU wadah menempel. Dulu menunya
+          `fixed` di bawah kepala dengan pengganjal di dasar halaman — isinya
+          tertutup: sapaan "Halo, …" tidak pernah terlihat di tablet/desktop. */}
+      <div className="sticky top-0 z-30">
+      <header className="border-b-2 border-info bg-permukaan">
         <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-4 py-3">
           <div className="min-w-0">
             <p className="text-keterangan font-semibold uppercase tracking-wide text-info-teks">
@@ -36,7 +40,7 @@ export function LayoutMitra() {
           <button
             type="button"
             onClick={keluar}
-            className="flex h-10 shrink-0 items-center gap-2 rounded-kontrol px-3 text-label font-medium text-teks-sekunder hover:bg-permukaan-2"
+            className="flex h-11 shrink-0 items-center gap-2 rounded-kontrol px-3 text-label font-medium text-teks-sekunder hover:bg-permukaan-2"
           >
             <LogOut className="h-5 w-5" aria-hidden />
             Keluar
@@ -44,9 +48,6 @@ export function LayoutMitra() {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-3xl px-4 pb-24 pt-4 sm:pb-8">
-        <Outlet />
-      </main>
 
       <nav
         aria-label="Navigasi portal mitra"
@@ -76,7 +77,7 @@ export function LayoutMitra() {
       {/* Layar lebar: menu mendatar di bawah kepala halaman. */}
       <nav
         aria-label="Navigasi portal mitra"
-        className="fixed inset-x-0 top-[68px] z-20 hidden border-b border-garis bg-permukaan sm:block"
+        className="hidden border-b border-garis bg-permukaan sm:block"
       >
         <ul className="mx-auto flex w-full max-w-3xl gap-1 px-4">
           {MENU.map((m) => (
@@ -100,7 +101,11 @@ export function LayoutMitra() {
           ))}
         </ul>
       </nav>
-      <div className="hidden h-12 sm:block" aria-hidden />
+      </div>
+
+      <main className="mx-auto w-full max-w-3xl px-4 pb-24 pt-4 sm:pb-8">
+        <Outlet />
+      </main>
     </div>
   )
 }

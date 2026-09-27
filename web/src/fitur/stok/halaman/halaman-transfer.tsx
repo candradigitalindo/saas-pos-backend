@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { IZIN } from '@/lib/izin'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowRight, Plus, Store, Trash2, Truck } from 'lucide-react'
 import { Kartu } from '@/bersama/ui/kartu'
@@ -31,7 +33,8 @@ interface BarisKirim {
  * di jalan tidak boleh terlihat seolah sudah sampai.
  */
 export function HalamanTransfer() {
-  const { tokoAktif } = useSesi()
+  const { tokoAktif, boleh } = useSesi()
+  const navigate = useNavigate()
   const toast = useToast()
   const qc = useQueryClient()
 
@@ -97,13 +100,19 @@ export function HalamanTransfer() {
         ikon={Store}
         judul="Baru ada satu toko"
         penjelasan="Kirim barang antar toko baru berguna kalau Anda punya lebih dari satu cabang. Tambahkan cabang dulu di Pengaturan."
+        aksi={
+          boleh(IZIN.outletManage)
+            ? { label: 'Tambah Cabang', onKlik: () => navigate('/pengaturan/toko') }
+            : undefined
+        }
       />
     )
   }
 
   return (
-    <div className="flex w-full max-w-lg flex-col gap-4">
-      <h1 className="text-judul font-bold text-teks-utama">Kirim Barang Antar Toko</h1>
+    // Layar lebar: formulir pengiriman di kiri, pengiriman terakhir di kanan.
+    <div className="flex w-full max-w-lg flex-col gap-4 lg:grid lg:max-w-5xl lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:items-start lg:gap-x-6">
+      <h1 className="text-judul font-bold text-teks-utama lg:col-span-2">Kirim Barang Antar Toko</h1>
 
       <Kartu className="flex flex-col gap-4 p-4">
         <Pilihan

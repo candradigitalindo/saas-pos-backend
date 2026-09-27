@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { Check, Lock, PartyPopper } from 'lucide-react'
 import { Kartu } from '@/bersama/ui/kartu'
+import { MerekKasir } from '@/bersama/komponen/logo'
 import { Tombol } from '@/bersama/ui/tombol'
 import { useSesi } from '@/bersama/hooks/use-sesi'
 import { cn } from '@/bersama/util/cn'
@@ -20,6 +21,9 @@ export function HalamanSelamatDatang() {
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-col gap-6 px-4 py-8">
+      {/* Layar ini berdiri sendiri (tanpa navigasi): merek di atas supaya tetap
+          jelas aplikasi apa yang sedang dipakai. */}
+      <MerekKasir className="justify-center" />
       <div className="text-center">
         <PartyPopper className="mx-auto h-12 w-12 text-jingga-600" aria-hidden />
         <h1 className="mt-3 text-judul font-bold text-teks-utama">

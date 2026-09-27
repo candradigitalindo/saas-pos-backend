@@ -8,10 +8,12 @@ import {
   type ReactNode,
 } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Coins, LogOut, ReceiptText, RefreshCw, ShieldCheck, Undo2, Users } from 'lucide-react'
+import { AlertTriangle, Coins, LogOut, Mail, ReceiptText, RefreshCw, ShieldCheck, Undo2, Users } from 'lucide-react'
 import { AksiDialog, Dialog, IsiDialog } from '@/bersama/ui/dialog'
 import { Kartu } from '@/bersama/ui/kartu'
 import { Kolom } from '@/bersama/ui/kolom'
+import { KolomSandi } from '@/bersama/ui/kolom-sandi'
+import { KerangkaMasuk } from '@/bersama/komponen/kerangka-masuk'
 import { Tombol } from '@/bersama/ui/tombol'
 import { LencanaStatus } from '@/bersama/komponen/lencana-status'
 import { KerangkaBaris } from '@/bersama/komponen/kerangka'
@@ -193,22 +195,22 @@ function IsiPanel() {
   return (
     <div className="min-h-dvh bg-latar">
       <header className="border-b border-garis bg-permukaan">
-        <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-4 px-6 py-3">
-          <div>
+        <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+          <div className="min-w-0">
             <p className="text-keterangan font-semibold uppercase tracking-wide text-teks-redup">
               Panel Internal
             </p>
             {/* Peran ditampilkan permanen: pemisahan wewenang bukan sekadar
                 teknis. Staf yang tidak menemukan tombol harus bisa melihat
                 sendiri kenapa — bukan mengira aplikasinya rusak. */}
-            <p className="text-label text-teks-sekunder">
+            <p className="truncate text-label text-teks-sekunder">
               {admin?.name} · peran <strong className="text-teks-utama">{admin?.role}</strong>
             </p>
           </div>
           <button
             type="button"
             onClick={keluar}
-            className="flex h-10 items-center gap-2 rounded-kontrol px-3 text-label font-medium text-teks-sekunder hover:bg-permukaan-2"
+            className="flex h-11 shrink-0 items-center gap-2 rounded-kontrol px-3 text-label font-medium text-teks-sekunder hover:bg-permukaan-2"
           >
             <LogOut className="h-5 w-5" aria-hidden />
             Keluar
@@ -216,20 +218,24 @@ function IsiPanel() {
         </div>
       </header>
 
-      <div className="mx-auto flex w-full max-w-5xl gap-6 px-6 py-6">
-        <nav aria-label="Menu panel" className="w-56 shrink-0">
-          <ul className="flex flex-col gap-1">
+      {/* HP: menu jadi baris tab yang bisa digeser di atas isi — menu samping
+          selebar 224px menyisakan ±60px untuk isinya di layar 360px.
+          Tablet ke atas: menu samping seperti biasa. */}
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-4 md:flex-row md:gap-6 md:px-6 md:py-6">
+        <nav aria-label="Menu panel" className="-mx-4 md:mx-0 md:w-56 md:shrink-0">
+          <ul className="flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] md:flex-col md:gap-1 md:overflow-visible md:px-0 md:pb-0">
             {menu.map((m) => (
-              <li key={m.kunci}>
+              <li key={m.kunci} className="shrink-0 md:shrink">
                 <button
                   type="button"
                   onClick={() => setTab(m.kunci)}
                   aria-current={tab === m.kunci ? 'page' : undefined}
                   className={cn(
-                    'flex h-11 w-full items-center gap-2 rounded-kontrol px-3 text-label font-medium',
+                    'flex h-11 w-full items-center gap-2 whitespace-nowrap rounded-kontrol px-3 text-label font-medium',
+                    'border md:border-0',
                     tab === m.kunci
-                      ? 'bg-sorot text-utama'
-                      : 'text-teks-sekunder hover:bg-permukaan-2',
+                      ? 'border-utama bg-sorot text-utama'
+                      : 'border-garis bg-permukaan text-teks-sekunder hover:bg-permukaan-2 md:bg-transparent',
                   )}
                 >
                   <m.ikon className="h-5 w-5 shrink-0" aria-hidden />
@@ -245,7 +251,7 @@ function IsiPanel() {
             ))}
           </ul>
 
-          <p className="mt-4 px-3 text-keterangan text-teks-redup">
+          <p className="mt-4 hidden px-3 text-keterangan text-teks-redup md:block">
             Menu disusun dari kemampuan peran Anda, bukan daftar tetap.
           </p>
         </nav>
@@ -267,67 +273,89 @@ function LayarMasukPanel() {
   const [email, setEmail] = useState('')
   const [sandi, setSandi] = useState('')
   const [galat, setGalat] = useState<string | null>(null)
+  const [kolomGalat, setKolomGalat] = useState<Record<string, string>>({})
   const [mengirim, setMengirim] = useState(false)
 
+  async function kirim(e: React.FormEvent) {
+    e.preventDefault()
+    setGalat(null)
+    const kosong: Record<string, string> = {}
+    if (!email.trim()) kosong.email = 'Email belum diisi.'
+    if (!sandi) kosong.password = 'Kata sandi belum diisi.'
+    setKolomGalat(kosong)
+    if (Object.keys(kosong).length > 0) return
+
+    setMengirim(true)
+    try {
+      await masuk(email.trim(), sandi)
+    } catch (e) {
+      setGalat(
+        e instanceof GalatAPI && e.status === 401
+          ? 'Email atau kata sandi salah.'
+          : e instanceof GalatAPI
+            ? e.pesan
+            : 'Terjadi kesalahan. Coba lagi.',
+      )
+    } finally {
+      setMengirim(false)
+    }
+  }
+
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-latar px-4">
-      <div className="w-full max-w-sm">
-        <div className="mb-6 text-center">
-          <ShieldCheck className="mx-auto h-10 w-10 text-teks-sekunder" aria-hidden />
-          <h1 className="mt-3 text-judul font-bold text-teks-utama">Panel Internal</h1>
-          <p className="mt-1 text-label text-teks-sekunder">
-            Khusus staf. Bukan pintu masuk pemilik toko atau mitra.
+    <KerangkaMasuk
+      nada="panel"
+      lencana="Panel Internal"
+      judul="Ruang kerja tim Kasir UMKM"
+      subjudul="Khusus staf internal. Setiap tindakan tercatat di jejak audit."
+      keunggulan={[
+        { ikon: ReceiptText, judul: 'Verifikasi uang masuk & keluar', isi: 'Konfirmasi pembayaran dan pengembalian dana langganan.' },
+        { ikon: Users, judul: 'Kelola mitra & komisi', isi: 'Verifikasi mitra, tingkat komisi, dan pencairan.' },
+        { ikon: ShieldCheck, judul: 'Wewenang sesuai peran', isi: 'Menu disusun dari peran Anda — superadmin, operator, keuangan, dukungan.' },
+      ]}
+    >
+      <div className="flex flex-col gap-6">
+        <div>
+          <h1 className="text-judul font-bold text-teks-utama">Masuk ke panel</h1>
+          <p className="mt-1 text-isi text-teks-sekunder">
+            Bukan pintu masuk pemilik toko atau mitra.
           </p>
         </div>
-
-        <form
-          onSubmit={async (e) => {
-            e.preventDefault()
-            setGalat(null)
-            setMengirim(true)
-            try {
-              await masuk(email.trim(), sandi)
-            } catch (e) {
-              setGalat(
-                e instanceof GalatAPI && e.status === 401
-                  ? 'Email atau kata sandi salah.'
-                  : e instanceof GalatAPI
-                    ? e.pesan
-                    : 'Terjadi kesalahan.',
-              )
-            } finally {
-              setMengirim(false)
-            }
-          }}
-          className="flex flex-col gap-4"
-          noValidate
-        >
+        <form onSubmit={kirim} className="flex flex-col gap-4" noValidate>
           <Kolom
-            label="Email"
+            label="Email kerja"
             type="email"
+            ikon={Mail}
+            autoComplete="email"
             autoCapitalize="none"
+            spellCheck={false}
+            autoFocus
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            galat={kolomGalat.email}
             required
           />
-          <Kolom
+          <KolomSandi
             label="Kata sandi"
-            type="password"
+            autoComplete="current-password"
             value={sandi}
             onChange={(e) => setSandi(e.target.value)}
+            galat={kolomGalat.password}
             required
           />
           {galat && (
-            <p className="rounded-kontrol border border-bahaya bg-bahaya-teks/10 px-3 py-2 text-label text-bahaya-teks">
+            <p
+              role="alert"
+              className="rounded-kontrol border border-bahaya bg-bahaya-teks/10 px-3 py-2 text-label text-bahaya-teks"
+            >
               {galat}
             </p>
           )}
-          <Tombol type="submit" lebarPenuh memuat={mengirim} disabled={!email || !sandi}>
+          <Tombol type="submit" lebarPenuh memuat={mengirim} labelMemuat="Sedang masuk…">
             Masuk
           </Tombol>
         </form>
       </div>
-    </div>
+    </KerangkaMasuk>
   )
 }
 
@@ -761,6 +789,12 @@ function PanelKomisi() {
   return (
     <section className="flex flex-col gap-3">
       <h2 className="text-judul font-bold text-teks-utama">Komisi & Pencairan</h2>
+      {/* Tombol yang menjalankan hitungan uang harus menjelaskan apa yang ia
+          sentuh — dulu hanya dua tanggal dan satu tombol. */}
+      <p className="text-label text-teks-sekunder">
+        Menghitung komisi mitra dari tagihan langganan merchant binaan yang LUNAS pada rentang
+        ini. Aman dijalankan ulang: hanya komisi yang belum disetujui yang dihitung ulang.
+      </p>
 
       <Kartu className="flex flex-col gap-4 p-4">
         <div className="grid gap-3 sm:grid-cols-2">

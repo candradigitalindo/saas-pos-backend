@@ -103,8 +103,12 @@ export function HalamanKasbon() {
         <ul className="flex flex-col gap-2">
           {daftar.map((k) => (
             <li key={k.id}>
-              <Kartu className="flex items-center justify-between gap-3 p-4">
-                <div className="min-w-0">
+              {/* Membungkus di HP: nama & tanggal + sisa di baris pertama,
+                  tombol selebar kartu di baris kedua. Dulu ketiganya dipaksa
+                  sebaris — di 360px nama tinggal "B…" dan tanggal tersusun
+                  tegak "18 / Sep / 2026". */}
+              <Kartu className="flex flex-wrap items-center gap-x-4 gap-y-3 p-4">
+                <div className="min-w-0 flex-1 basis-40">
                   <p className="truncate font-semibold text-teks-utama">
                     {namaPelanggan.get(k.customer_id) ?? 'Pelanggan'}
                   </p>
@@ -115,28 +119,31 @@ export function HalamanKasbon() {
                   </p>
                 </div>
 
-                <div className="flex shrink-0 items-center gap-3">
-                  <div className="text-right">
-                    <p
-                      className={cn(
-                        'font-bold tabular-nums',
-                        k.outstanding > 0 ? 'text-jingga-700' : 'text-hijau-700',
-                      )}
-                    >
-                      {formatRupiah(k.outstanding)}
-                    </p>
-                    {k.outstanding === 0 ? (
-                      <LencanaStatus nada="berhasil" anak="Lunas" />
-                    ) : (
-                      <LencanaStatus nada="menunggu" anak="Belum lunas" />
+                <div className="shrink-0 text-right">
+                  <p
+                    className={cn(
+                      'font-bold tabular-nums',
+                      k.outstanding > 0 ? 'text-jingga-700' : 'text-hijau-700',
                     )}
-                  </div>
-                  {k.outstanding > 0 && (
-                    <Tombol jenis="kedua" ukuran="padat" onClick={() => setBayarUntuk(k)}>
-                      Terima Setoran
-                    </Tombol>
+                  >
+                    {formatRupiah(k.outstanding)}
+                  </p>
+                  {k.outstanding === 0 ? (
+                    <LencanaStatus nada="berhasil" anak="Lunas" />
+                  ) : (
+                    <LencanaStatus nada="menunggu" anak="Belum lunas" />
                   )}
                 </div>
+                {k.outstanding > 0 && (
+                  <Tombol
+                    jenis="kedua"
+                    ukuran="padat"
+                    className="w-full sm:w-auto"
+                    onClick={() => setBayarUntuk(k)}
+                  >
+                    Terima Setoran
+                  </Tombol>
+                )}
               </Kartu>
             </li>
           ))}

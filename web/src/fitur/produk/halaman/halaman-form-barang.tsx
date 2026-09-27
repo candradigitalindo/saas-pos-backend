@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronDown, ChevronUp, ScanLine } from 'lucide-react'
+import { ChevronDown, ChevronUp, ScanLine, TrendingUp, TriangleAlert } from 'lucide-react'
 import { Kartu } from '@/bersama/ui/kartu'
 import { Kolom, Pilihan } from '@/bersama/ui/kolom'
 import { PemilihFoto } from '@/bersama/komponen/pemilih-foto'
@@ -15,6 +15,7 @@ import { galatKolom } from '@/lib/galat-kolom'
 import { PemindaiBarcode } from '@/bersama/komponen/pemindai-barcode'
 import { bisaMemindai } from '@/bersama/hooks/use-pemindai'
 import { produkApi } from '../api'
+import { formatRupiah } from '@/bersama/util/uang'
 
 /**
  * Tambah / ubah barang.
@@ -147,7 +148,7 @@ export function HalamanFormBarang() {
   const belumAdaSatuan = !satuan.isLoading && (satuan.data?.data.length ?? 0) === 0
 
   return (
-    <div className="flex w-full max-w-lg flex-col gap-4">
+    <div className="flex w-full max-w-2xl flex-col gap-4">
       <h1 className="text-judul font-bold text-teks-utama">
         {sedangUbah ? 'Ubah Barang' : 'Tambah Barang'}
       </h1>
@@ -210,27 +211,31 @@ export function HalamanFormBarang() {
             required
           />
 
-          <KolomUang
-            label="Harga jual"
-            nilai={form.sell_price}
-            onNilai={(n) => setForm((f) => ({ ...f, sell_price: n }))}
-            bantuan="Harga yang dibayar pembeli."
-            galat={galatKolom(kolomGalat, 'sell_price')}
-          />
+          <div className="grid gap-4 sm:grid-cols-2 sm:items-start">
+            <KolomUang
+              label="Harga jual"
+              nilai={form.sell_price}
+              onNilai={(n) => setForm((f) => ({ ...f, sell_price: n }))}
+              bantuan="Harga yang dibayar pembeli."
+              galat={galatKolom(kolomGalat, 'sell_price')}
+            />
 
-          <KolomUang
-            label="Harga beli"
-            nilai={form.cost_price}
-            onNilai={(n) => setForm((f) => ({ ...f, cost_price: n }))}
-            bantuan="Modal per satuan. Dipakai menghitung untung."
-            galat={galatKolom(kolomGalat, 'cost_price')}
-          />
+            <KolomUang
+              label="Harga beli"
+              nilai={form.cost_price}
+              onNilai={(n) => setForm((f) => ({ ...f, cost_price: n }))}
+              bantuan="Modal per satuan. Dipakai menghitung untung."
+              galat={galatKolom(kolomGalat, 'cost_price')}
+            />
+          </div>
+
+          <InfoUntung jual={form.sell_price} modal={form.cost_price} />
 
           <button
             type="button"
             onClick={() => setBukaDetail((v) => !v)}
             aria-expanded={bukaDetail}
-            className="flex items-center gap-1 self-start text-label font-medium text-utama"
+            className="-mx-2 flex min-h-11 items-center gap-1 self-start rounded-kontrol px-2 text-label font-medium text-utama hover:bg-sorot"
           >
             {bukaDetail ? (
               <ChevronUp className="h-4 w-4" aria-hidden />
@@ -241,7 +246,7 @@ export function HalamanFormBarang() {
           </button>
 
           {bukaDetail && (
-            <div className="flex flex-col gap-4 border-l-2 border-garis pl-3">
+            <div className="grid gap-4 border-l-2 border-garis pl-3 sm:grid-cols-2 sm:items-start">
               <Pilihan
                 label="Satuan"
                 value={form.unit_id}
@@ -277,7 +282,7 @@ export function HalamanFormBarang() {
                 galat={galatKolom(kolomGalat, 'sku')}
               />
 
-              <div className="flex items-end gap-2">
+              <div className="flex items-end gap-2 sm:col-span-2">
                 <div className="min-w-0 flex-1">
                   <Kolom
                     label="Barcode"
@@ -314,7 +319,7 @@ export function HalamanFormBarang() {
                 galat={galatKolom(kolomGalat, 'min_stock')}
               />
 
-              <label className="flex items-center gap-3">
+              <label className="flex items-center gap-3 sm:col-span-2">
                 <input
                   type="checkbox"
                   checked={form.track_stock}
@@ -362,5 +367,30 @@ export function HalamanFormBarang() {
         }}
       />
     </div>
+  )
+}
+
+/**
+ * Untung per barang, langsung saat harga diketik — pemilik warung menetapkan
+ * harga jual dari modalnya, dan angka ini yang sebenarnya ia hitung di kepala.
+ * Harga jual di bawah modal diberi peringatan, bukan ditolak (obral itu sah).
+ */
+function InfoUntung({ jual, modal }: { jual: number; modal: number }) {
+  if (jual <= 0 || modal <= 0) return null
+  const untung = jual - modal
+  if (untung < 0) {
+    return (
+      <p className="-mt-1 flex items-start gap-2 rounded-kontrol bg-bahaya-teks/10 px-3 py-2 text-label text-bahaya-teks">
+        <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+        Harga jual di bawah modal — rugi {formatRupiah(-untung)} per barang.
+      </p>
+    )
+  }
+  const persen = Math.round((untung / jual) * 100)
+  return (
+    <p className="-mt-1 flex items-center gap-2 rounded-kontrol bg-sorot px-3 py-2 text-label text-hijau-800">
+      <TrendingUp className="h-4 w-4 shrink-0" aria-hidden />
+      Untung {formatRupiah(untung)} per barang · margin {persen}%
+    </p>
   )
 }

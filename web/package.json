@@ -12,6 +12,7 @@
     "lint": "tsc -b --noEmit",
     "tangkap-layar": "SHOT_DIR=${SHOT_DIR:-./tangkapan} node skrip/tangkap-layar.mjs",
     "periksa:tataletak": "node skrip/audit-tataletak.mjs",
+    "periksa:responsif": "node skrip/audit-responsif.mjs",
     "periksa:kontras": "node skrip/audit-kontras.mjs",
     "periksa:warna": "node skrip/sensus-warna.mjs",
     "foto:pratinjau": "node skrip/foto-pratinjau.mjs"

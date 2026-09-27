@@ -85,8 +85,10 @@ export function HalamanGantiShift() {
   }
 
   return (
-    <div className="flex w-full max-w-2xl flex-col gap-4">
-      <header>
+    // Layar lebar: rumus uang di kiri, hitungan laci di kanan (sama seperti
+    // Tutup Shift).
+    <div className="flex w-full max-w-2xl flex-col gap-4 lg:grid lg:max-w-4xl lg:grid-cols-2 lg:items-start lg:gap-x-6">
+      <header className="lg:col-span-2">
         <h1 className="text-judul font-bold text-teks-utama">Ganti Shift</h1>
         <p className="text-label text-teks-sekunder">
           Hitung uang laci bersama-sama, lalu kasir berikutnya melanjutkan.

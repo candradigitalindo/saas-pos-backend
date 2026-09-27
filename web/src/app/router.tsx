@@ -507,13 +507,9 @@ function IsiMitra() {
 
   if (!sudahMasuk) {
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-latar px-4 py-8">
-        <div className="w-full max-w-md">
-          <Tunggu>
-            <HalamanMasukMitra />
-          </Tunggu>
-        </div>
-      </div>
+      <Tunggu>
+        <HalamanMasukMitra />
+      </Tunggu>
     )
   }
 

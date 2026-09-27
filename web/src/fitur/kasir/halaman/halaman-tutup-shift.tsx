@@ -74,8 +74,11 @@ export function HalamanTutupShift() {
   }
 
   return (
-    <div className="flex w-full max-w-lg flex-col gap-4 p-4">
-      <header>
+    // Tanpa p-4 sendiri: LayoutToko sudah memberi jarak tepi — dulu judulnya
+    // menjorok dua kali lebih dalam dari halaman lain. Layar lebar: rumus uang
+    // di kiri, hitungan laci di kanan.
+    <div className="flex w-full max-w-lg flex-col gap-4 lg:grid lg:max-w-4xl lg:grid-cols-2 lg:items-start lg:gap-x-6">
+      <header className="lg:col-span-2">
         <h1 className="text-judul font-bold text-teks-utama">Tutup Shift</h1>
         <p className="text-label text-teks-sekunder">
           Dibuka {formatJam(shift.opened_at)} · {formatTanggal(shift.business_date)}

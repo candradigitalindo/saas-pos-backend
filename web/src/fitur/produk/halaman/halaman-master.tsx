@@ -92,7 +92,7 @@ export function HalamanMaster() {
   })
 
   return (
-    <div className="flex w-full max-w-lg flex-col gap-4">
+    <div className="flex w-full max-w-2xl flex-col gap-4">
       <h1 className="text-judul font-bold text-teks-utama">Kategori, Satuan & Pemasok</h1>
 
       {/* `aria-pressed` pada satu grup, bukan role="tab". Markup sebelumnya

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { Fragment, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, Download, FileUp, TriangleAlert } from 'lucide-react'
@@ -9,6 +9,17 @@ import { useSatuan } from '@/bersama/hooks/use-katalog'
 import { GalatAPI } from '@/lib/api-client'
 import { cn } from '@/bersama/util/cn'
 import { produkApi, type HasilImpor } from '../api'
+
+/** Kolom opsional berkas impor beserta artinya — nama kolomnya tetap bahasa
+ * Inggris karena itu yang dibaca server, tapi pemilik warung perlu tahu isinya. */
+const KOLOM_OPSIONAL: [string, string][] = [
+  ['category', 'kategori'],
+  ['sku', 'kode barang'],
+  ['barcode', 'barcode'],
+  ['sell_price', 'harga jual'],
+  ['cost_price', 'harga beli'],
+  ['min_stock', 'batas stok menipis'],
+]
 
 const CONTOH_CSV = `name,unit,category,sku,barcode,sell_price,cost_price,min_stock
 Kopi Susu,pcs,Minuman,KS-01,,18000,12000,5
@@ -85,9 +96,18 @@ export function HalamanImpor() {
         <p className="text-label text-teks-sekunder">
           Baris pertama adalah nama kolom. Yang <strong>wajib</strong> ada:{' '}
           <code className="rounded bg-permukaan-2 px-1">name</code> dan{' '}
-          <code className="rounded bg-permukaan-2 px-1">unit</code>. Selebihnya
-          boleh dikosongkan: category, sku, barcode, sell_price, cost_price,
-          min_stock.
+          <code className="rounded bg-permukaan-2 px-1">unit</code> (satuan). Selebihnya
+          boleh dikosongkan:{' '}
+          {/* Tiap pasangan tak dipatah, tapi SPASI di antaranya berada di luar
+              span — tanpa celah itu seluruh daftar menjadi satu baris panjang. */}
+          {KOLOM_OPSIONAL.map(([k, arti], i) => (
+            <Fragment key={k}>
+              <span className="whitespace-nowrap">
+                <code className="rounded bg-permukaan-2 px-1">{k}</code> ({arti})
+                {i < KOLOM_OPSIONAL.length - 1 ? ',' : '.'}
+              </span>{' '}
+            </Fragment>
+          ))}
         </p>
         <p className="text-label text-teks-sekunder">
           Satuan dan kategori dikenali dari <strong>namanya</strong>, jadi harus

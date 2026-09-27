@@ -3,6 +3,7 @@ import { Banknote, Lock, NotebookPen, QrCode } from 'lucide-react'
 import { Dialog, IsiDialog } from '@/bersama/ui/dialog'
 import { Tombol } from '@/bersama/ui/tombol'
 import { KolomUang } from '@/bersama/ui/kolom-uang'
+import { Pilihan } from '@/bersama/ui/pilihan'
 import { formatRupiah } from '@/bersama/util/uang'
 import { cn } from '@/bersama/util/cn'
 import type { MetodeBayar } from '@/bersama/tipe/pos'
@@ -13,6 +14,14 @@ import type { MetodeBayar } from '@/bersama/tipe/pos'
  * KEMBALIAN adalah angka terbesar di layar — itu yang dibutuhkan kasir dalam
  * tekanan antrean, bukan nomor struk.
  */
+
+/** Pelanggan yang boleh dicatati kasbon — dari basis data offline kasir. */
+export interface PelangganBayar {
+  id: string
+  name: string
+  phone: string | null
+  credit_limit: number
+}
 
 const CARA_BAYAR: { nilai: MetodeBayar; label: string; ikon: typeof Banknote }[] = [
   { nilai: 'cash', label: 'Tunai', ikon: Banknote },
@@ -28,6 +37,7 @@ export function LayarBayar({
   galat,
   onSelesai,
   kunciQris,
+  pelanggan = [],
 }: {
   terbuka: boolean
   onTutup: () => void
@@ -35,7 +45,8 @@ export function LayarBayar({
   total: number
   mengirim: boolean
   galat?: string | null
-  onSelesai: (metode: MetodeBayar, dibayar: number) => void
+  /** `pelangganId` diisi untuk kasbon — utangnya dicatat atas nama pelanggan itu. */
+  onSelesai: (metode: MetodeBayar, dibayar: number, pelangganId?: string) => void
   /**
    * Diisi bila QRIS tidak termasuk paket langganan: teks paket yang
    * membukanya, mis. "Paket Basic". Petaknya tetap ada tapi tidak bisa
@@ -43,9 +54,18 @@ export function LayarBayar({
    * aplikasinya rusak; kalau bisa ditekan, server menolaknya di tengah antrean.
    */
   kunciQris?: string
+  /**
+   * Daftar pelanggan untuk kasbon. Dulu kasbon tidak menanyakan siapa
+   * pembelinya sama sekali — server lalu menolaknya ("pembayaran kasbon
+   * membutuhkan pelanggan"), dan karena kasir bekerja offline, penolakan itu
+   * baru ketahuan saat sinkron, jauh setelah pembelinya pergi.
+   */
+  pelanggan?: PelangganBayar[]
 }) {
   const [metode, setMetode] = useState<MetodeBayar>('cash')
   const [diterima, setDiterima] = useState(0)
+  const [pelangganId, setPelangganId] = useState('')
+  const pembeli = pelanggan.find((p) => p.id === pelangganId)
 
   // Kasbon dan QRIS selalu pas: tidak ada uang fisik yang dikembalikan.
   const pasOtomatis = metode !== 'cash'
@@ -142,10 +162,37 @@ export function LayarBayar({
         )}
 
         {metode === 'credit' && (
-          <p className="rounded-kontrol border border-jingga-600 bg-permukaan-2 px-3 py-2 text-label text-jingga-700">
-            Belanja ini dicatat sebagai utang pelanggan. Pastikan Anda tahu siapa
-            pembelinya.
-          </p>
+          <div className="flex flex-col gap-3">
+            {pelanggan.length === 0 ? (
+              <p className="rounded-kontrol border border-jingga-600 bg-permukaan-2 px-3 py-2 text-label text-jingga-700">
+                Belum ada pelanggan. Kasbon harus dicatat atas nama seseorang — tambahkan
+                pelanggannya dulu di menu Pelanggan.
+              </p>
+            ) : (
+              <Pilihan
+                label="Pelanggan"
+                value={pelangganId}
+                onChange={(e) => setPelangganId(e.target.value)}
+                placeholder="Pilih siapa yang berutang…"
+                bantuan={
+                  pembeli && pembeli.credit_limit > 0
+                    ? `Batas kasbon ${pembeli.name}: ${formatRupiah(pembeli.credit_limit)}.`
+                    : undefined
+                }
+                required
+              >
+                {pelanggan.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.phone ? `${p.name} · ${p.phone}` : p.name}
+                  </option>
+                ))}
+              </Pilihan>
+            )}
+            <p className="rounded-kontrol border border-jingga-600 bg-permukaan-2 px-3 py-2 text-label text-jingga-700">
+              Belanja ini dicatat sebagai utang
+              {pembeli ? ` ${pembeli.name}` : ' pelanggan'} sebesar {formatRupiah(total)}.
+            </p>
+          </div>
         )}
 
         {/* Kembalian: angka paling besar di layar.
@@ -189,8 +236,8 @@ export function LayarBayar({
           lebarPenuh
           memuat={mengirim}
           labelMemuat="Menyimpan transaksi…"
-          disabled={metode === 'cash' && kurang > 0}
-          onClick={() => onSelesai(metode, dibayar)}
+          disabled={(metode === 'cash' && kurang > 0) || (metode === 'credit' && !pembeli)}
+          onClick={() => onSelesai(metode, dibayar, metode === 'credit' ? pelangganId : undefined)}
         >
           SELESAI
         </Tombol>

@@ -7,19 +7,26 @@ import {
   pratinjauBaris,
 } from './uang'
 
+// Spasi setelah "Rp" adalah U+00A0 (tak-putus) — lihat formatRupiah.
+const nb = '\u00a0'
+
 describe('formatRupiah', () => {
   it('memberi pemisah ribuan dan tanpa desimal', () => {
-    expect(formatRupiah(1250000)).toBe('Rp 1.250.000')
-    expect(formatRupiah(0)).toBe('Rp 0')
-    expect(formatRupiah(999)).toBe('Rp 999')
+    expect(formatRupiah(1250000)).toBe(`Rp${nb}1.250.000`)
+    expect(formatRupiah(0)).toBe(`Rp${nb}0`)
+    expect(formatRupiah(999)).toBe(`Rp${nb}999`)
   })
 
   it('memakai tanda minus panjang untuk nilai negatif', () => {
-    expect(formatRupiah(-75000)).toBe('−Rp 75.000')
+    expect(formatRupiah(-75000)).toBe(`−Rp${nb}75.000`)
   })
 
   it('memotong pecahan, tidak membulatkan ke atas', () => {
-    expect(formatRupiah(1000.9)).toBe('Rp 1.000')
+    expect(formatRupiah(1000.9)).toBe(`Rp${nb}1.000`)
+  })
+
+  it('"Rp" tidak pernah terpisah dari angkanya di ujung baris', () => {
+    expect(formatRupiah(2800000)).not.toMatch(/Rp /)
   })
 })
 

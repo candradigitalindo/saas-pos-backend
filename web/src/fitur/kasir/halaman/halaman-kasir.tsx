@@ -1,4 +1,6 @@
 import { useRef, useState } from 'react'
+import { useLiveQuery } from 'dexie-react-hooks'
+import { db } from '@/lib/offline/db'
 import { Link } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { PackageX, ScanLine, Search, ShoppingCart, X } from 'lucide-react'
@@ -62,6 +64,9 @@ export function HalamanKasir() {
    * membuat menekan "Selesai" dua kali tidak menghasilkan dua transaksi.
    */
   const kunci = useRef<string | null>(null)
+  // Pelanggan untuk kasbon, dari basis data offline — kasir tetap bisa
+  // mencatat kasbon tanpa sinyal. (Hook: harus di atas return bersyarat.)
+  const daftarPelanggan = useLiveQuery(() => db.pelanggan.orderBy('name').toArray(), []) ?? []
 
   if (memuatShift) return <KerangkaKasir />
 
@@ -81,7 +86,7 @@ export function HalamanKasir() {
     setBukaBayar(true)
   }
 
-  async function selesaikan(metode: MetodeBayar, dibayar: number) {
+  async function selesaikan(metode: MetodeBayar, dibayar: number, pelangganId?: string) {
     if (!tokoAktif || !shift) return
     setGalatBayar(null)
     try {
@@ -95,6 +100,7 @@ export function HalamanKasir() {
           // Kasbon dicatat penuh sebagai utang; tunai memakai uang yang
           // benar-benar diterima supaya server yang menghitung kembaliannya.
           payments: [{ method: metode, amount: dibayar }],
+          customer_id: pelangganId,
         },
       })
       setBukaBayar(false)
@@ -278,13 +284,13 @@ export function HalamanKasir() {
               type="button"
               onClick={() => setBukaKeranjangHP(false)}
               aria-label="Tutup keranjang"
-              className="-m-2 rounded-kontrol p-2 text-teks-redup hover:bg-permukaan-2"
+              className="-m-3 flex h-12 w-12 items-center justify-center rounded-kontrol text-teks-redup hover:bg-permukaan-2"
             >
               <X className="h-6 w-6" aria-hidden />
             </button>
           </div>
           <div className="min-h-0 flex-1">
-            <PanelKeranjang keranjang={keranjang} onBayar={bukaLayarBayar} />
+            <PanelKeranjang keranjang={keranjang} onBayar={bukaLayarBayar} tanpaJudul />
           </div>
         </div>
       )}
@@ -314,6 +320,7 @@ export function HalamanKasir() {
         mengirim={checkout.isPending}
         galat={galatBayar}
         onSelesai={selesaikan}
+        pelanggan={daftarPelanggan}
         kunciQris={
           punyaFitur(FITUR.qris) ? undefined : `Paket ${paketUntuk(FITUR.qris) ?? 'berbayar'}`
         }

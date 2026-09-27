@@ -44,7 +44,10 @@ const gaya = cva(
         // sebagai tinggi tombol yang sah, sedangkan ui/01 §3 mewajibkan target
         // sentuh minimal 48×48 px. Prinsip di ui/01 yang mengikat, jadi 40px
         // dipertahankan HANYA di tempat yang pasti dipakai dengan tetikus.
-        padat: 'h-12 px-4 text-label pointer-fine:h-10',
+        // Tombol padat hidup di BARIS daftar di sebelah teks yang panjang:
+        // ia tidak boleh menyusut atau melipat labelnya ("Atur / Izin") —
+        // teks di sebelahnya yang mengalah.
+        padat: 'h-12 shrink-0 whitespace-nowrap px-4 text-label pointer-fine:h-10',
         normal: 'h-12 px-5 text-isi',
         kasir: 'h-16 px-6 text-judul-kartu',
         ikon: 'h-12 w-12',

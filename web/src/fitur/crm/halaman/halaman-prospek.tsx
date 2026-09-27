@@ -92,12 +92,15 @@ export function HalamanProspek() {
           aksi={bolehBaru ? { label: 'Tambah Prospek', onKlik: () => setBuatBaru(true) } : undefined}
         />
       ) : (
-        <div className="flex gap-3 overflow-x-auto pb-2">
+        <div className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:snap-none sm:px-0">
+          {/* HP: satu tahap selebar ±85% layar, berhenti tepat di kolom (snap) —
+              dulu kolom berhenti di tengah dan tombolnya terpotong ("→ Pe").
+              Layar lebar: kolom 16rem berjejer seperti papan kanban biasa. */}
           {bawaan.stages.map((t) => {
             const isi = perTahap.get(t.id) ?? []
             const nilai = isi.reduce((j, d) => j + d.value, 0)
             return (
-              <section key={t.id} className="flex w-64 shrink-0 flex-col gap-2">
+              <section key={t.id} className="flex w-[85%] shrink-0 snap-start flex-col gap-2 sm:w-64">
                 <div className="flex items-baseline justify-between gap-2">
                   <h2 className="text-label font-semibold text-teks-utama">{t.name}</h2>
                   <span className="text-keterangan tabular-nums text-teks-redup">

@@ -47,9 +47,11 @@ export function IsiDialog({
               </D.Description>
             )}
           </div>
+          {/* 44px untuk jari (dulu 36px), 36px hanya pada penunjuk halus;
+              margin negatif menjaga ikonnya tetap sejajar tepi isi. */}
           <D.Close
             aria-label="Tutup"
-            className="-m-2 shrink-0 rounded-kontrol p-2 text-teks-redup hover:bg-permukaan-2"
+            className="-m-3 flex h-11 w-11 shrink-0 items-center justify-center rounded-kontrol text-teks-redup hover:bg-permukaan-2 pointer-fine:-m-2 pointer-fine:h-9 pointer-fine:w-9"
           >
             <X className="h-5 w-5" aria-hidden />
           </D.Close>

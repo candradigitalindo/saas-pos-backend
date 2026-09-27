@@ -74,9 +74,9 @@ describe('PemilihToko', () => {
     render(<PemilihToko />)
 
     fireEvent.click(screen.getByRole('button', { name: /Toko yang dipakai: Pusat/ }))
-    expect(screen.getByRole('button', { name: 'Pusat' })).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByRole('option', { name: 'Pusat' })).toHaveAttribute('aria-current', 'true')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cabang Pasar' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Cabang Pasar' }))
     expect(gantiToko).toHaveBeenCalledWith('B')
     expect(toast.berhasil).toHaveBeenCalledWith('Sekarang memakai Cabang Pasar')
   })
@@ -85,8 +85,27 @@ describe('PemilihToko', () => {
     const gantiToko = aturSesi([toko('A', 'Pusat'), toko('B', 'Cabang Pasar')], 'A')
     render(<PemilihToko />)
     fireEvent.click(screen.getByRole('button', { name: /Toko yang dipakai/ }))
-    fireEvent.click(screen.getByRole('button', { name: 'Pusat' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Pusat' }))
     expect(gantiToko).not.toHaveBeenCalled()
     expect(toast.berhasil).not.toHaveBeenCalled()
+  })
+
+  it('daftar toko bisa dicari, tanpa peduli huruf besar & aksen', () => {
+    const gantiToko = aturSesi(
+      [toko('A', 'Pusat'), toko('B', 'Cabang Pasar'), toko('C', 'Café Kota')],
+      'A',
+    )
+    render(<PemilihToko />)
+    fireEvent.click(screen.getByRole('button', { name: /Toko yang dipakai/ }))
+    fireEvent.change(screen.getByRole('combobox', { name: 'Cari toko' }), { target: { value: 'cafe' } })
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['Café Kota'])
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Cari toko' }), { target: { value: 'gudang' } })
+    expect(screen.queryByRole('option')).not.toBeInTheDocument()
+    expect(screen.getByText(/Tidak ada toko bernama/)).toBeInTheDocument()
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Cari toko' }), { target: { value: 'pasar' } })
+    fireEvent.keyDown(screen.getByRole('combobox', { name: 'Cari toko' }), { key: 'Enter' })
+    expect(gantiToko).toHaveBeenCalledWith('B')
   })
 })

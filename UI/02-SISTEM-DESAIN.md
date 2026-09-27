@@ -215,7 +215,10 @@ Harga Jual                          ← keadaan salah
 ⚠ Harga jual belum diisi.           ← pesan di bawah kolom, BUKAN di atas layar
 ```
 
-- Kolom uang: papan tik angka (`inputmode="numeric"`), format ribuan otomatis saat mengetik.
+- Kolom uang: papan tik angka (`inputmode="numeric"`), format ribuan otomatis saat mengetik —
+  SETIAP nominal memakai `KolomUang` (awalan "Rp", nilai bulat). Tampilan uang lewat
+  `formatRupiah`, yang memakai spasi tak-putus (U+00A0) setelah "Rp" sehingga "Rp" tidak
+  pernah tertinggal sendirian di ujung baris HP.
 - Kolom jumlah: tombol `−` dan `+` besar di kiri-kanan, karena mengetik angka di HP sambil berdiri itu susah.
 - **Kolom pilihan SELALU bisa dicari** (`Pilihan`, `bersama/ui/pilihan.tsx`), bukan
   `<select>` bawaan: tombol setinggi kolom isian, daftar melayang dengan kotak
@@ -224,7 +227,9 @@ Harga Jual                          ← keadaan salah
   `<select>` (`value`, `onChange(e.target.value)`, anak `<option>`), jadi
   pemakai lama tidak berubah. Dibangun dari Radix Popover + cmdk (pola Combobox
   shadcn/ui): daftarnya dirender di portal sehingga tidak terpotong dialog
-  bergulir, dan membuka ke atas bila ruang di bawah sempit.
+  bergulir, dan membuka ke atas bila ruang di bawah sempit. Pemilih lain yang
+  berbentuk daftar melayang (mis. ganti toko di kepala navigasi) juga punya kotak
+  cari yang sama.
 
 ### Kartu ringkasan (dipakai di beranda)
 
@@ -445,3 +450,15 @@ Secukupnya, dan selalu punya alasan.
 | ≥ 1440px | Desktop | Navigasi samping tetap + isi maksimum 1280px agar tidak terlalu lebar |
 
 Dirancang **mobile-first**: tulis gaya untuk HP dulu, baru tambahkan untuk layar besar.
+
+Pola yang dijaga `npm run periksa:responsif` (320–1920px, termasuk modal):
+
+- **Halaman formulir + daftar** (uang masuk/keluar, barang masuk, kirim antar toko,
+  tutup/ganti shift): satu kolom di HP; ≥1024px dua kolom — formulir/rumus di kiri,
+  daftar/hitungan di kanan. Dulu semuanya kolom 512px dengan dua pertiga layar kosong.
+- **Baris daftar dengan aksi** (kasbon, riwayat tagihan): `flex-wrap` — teks
+  `flex-1 basis-40`, angka `shrink-0`, tombol turun selebar kartu bila tidak muat.
+  Tombol `ukuran="padat"` tidak pernah menyusut atau melipat labelnya.
+- **Tombol utama di bawah daftar panjang** (hitung fisik) menempel di atas navigasi bawah.
+- **Papan kanban** di HP: kolom ±85% layar dengan `snap-x`.
+- **Panel internal**: menu samping di tablet/desktop, baris tab yang bisa digeser di HP.

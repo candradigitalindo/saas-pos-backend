@@ -10,12 +10,16 @@
  *   2. Perhitungan di sini hanya untuk PRATINJAU; angka final selalu dari server.
  */
 
-/** "Rp 1.250.000" — pemisah ribuan titik, tanpa desimal, spasi setelah "Rp". */
+/**
+ * "Rp 1.250.000" — pemisah ribuan titik, tanpa desimal. Spasi setelah "Rp"
+ * adalah spasi TAK-PUTUS (U+00A0): di baris sempit HP, "Rp" dulu tertinggal
+ * sendirian di ujung baris dan angkanya turun ke baris berikutnya.
+ */
 export function formatRupiah(nilai: number): string {
   const bulat = Math.trunc(nilai)
   const negatif = bulat < 0
   const angka = Math.abs(bulat).toLocaleString('id-ID')
-  return negatif ? `−Rp ${angka}` : `Rp ${angka}`
+  return negatif ? `−Rp\u00a0${angka}` : `Rp\u00a0${angka}`
 }
 
 /** Angka saja tanpa awalan "Rp" — untuk kolom isian uang. */

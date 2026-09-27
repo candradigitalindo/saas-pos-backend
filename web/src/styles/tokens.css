@@ -280,6 +280,13 @@
       var(--warna-utama) 100%
     );
   }
+  /**
+   * Permukaan portal mitra: biru, sama di kedua tema (seperti bingkai
+   * perangkat). Teks putih: #1e3a8a 10,36:1 · #2563eb 5,17:1.
+   */
+  .permukaan-mitra {
+    background-image: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+  }
 }
 
 @layer components {

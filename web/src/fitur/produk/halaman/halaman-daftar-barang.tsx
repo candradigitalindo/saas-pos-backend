@@ -191,11 +191,15 @@ export function HalamanDaftarBarang() {
                     {/* Harga + stok. Kategori tidak diulang di sini: warna
                         petaknya dan penyaring di atas sudah menyebutnya, dan
                         baris HP tidak muat tiga keterangan. */}
-                    <p className="truncate text-keterangan tabular-nums text-teks-redup">
-                      {formatRupiah(p.sell_price)}
-                      {bolehStok && p.track_stock
-                        ? ` · ${teksStok(petaStok.get(p.id), p)}`
-                        : p.category_name && ` · ${p.category_name}`}
+                    {/* Membungkus, tidak dipotong: di HP 320px elipsis dulu
+                        memakan harga & sisa stok — informasi terpenting baris ini. */}
+                    <p className="text-keterangan tabular-nums text-teks-redup">
+                      <span className="whitespace-nowrap">{formatRupiah(p.sell_price)}</span>
+                      {bolehStok && p.track_stock ? (
+                        <span className="whitespace-nowrap"> · {teksStok(petaStok.get(p.id), p)}</span>
+                      ) : (
+                        p.category_name && ` · ${p.category_name}`
+                      )}
                     </p>
                   </div>
                   {bolehUbah && (

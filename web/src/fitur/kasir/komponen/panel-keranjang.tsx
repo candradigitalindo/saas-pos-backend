@@ -14,9 +14,12 @@ import type { Keranjang } from '../keranjang'
 export function PanelKeranjang({
   keranjang,
   onBayar,
+  tanpaJudul = false,
 }: {
   keranjang: Keranjang
   onBayar: () => void
+  /** Di lembar keranjang HP kepalanya sudah bertuliskan "Keranjang". */
+  tanpaJudul?: boolean
 }) {
   const { baris, pratinjauTotal, rincian, ubahQty, hapus } = keranjang
   // Pajak eksklusif MENAMBAH total (total = subtotal − diskon + pajak +
@@ -32,9 +35,11 @@ export function PanelKeranjang({
       aria-label="Keranjang"
       className="flex h-full flex-col border-garis bg-permukaan lg:border-l"
     >
-      <h2 className="border-b border-garis px-4 py-3 text-judul-kartu font-semibold text-teks-utama">
-        Keranjang
-      </h2>
+      {!tanpaJudul && (
+        <h2 className="border-b border-garis px-4 py-3 text-judul-kartu font-semibold text-teks-utama">
+          Keranjang
+        </h2>
+      )}
 
       <div className="flex-1 overflow-y-auto">
         {kosong ? (
