@@ -233,6 +233,14 @@ func QueueStockSyncOnce(ctx context.Context, tenantID, channelID, productID stri
 		ulid.New(), tenantID, channelID, productID, qty, tenantID, channelID, productID).Error
 }
 
+// RecordStockSyncSent mencatat kiriman stok yang sudah terjadi di luar
+// antrean (stok ikut terkirim bersama menu) — patokan "antrean terakhir".
+func RecordStockSyncSent(ctx context.Context, tenantID, channelID, productID string) error {
+	return database.DB.WithContext(ctx).Exec(`
+		INSERT INTO channel_stock_syncs (id, tenant_id, channel_id, product_id, requested_qty, status, attempts, queued_at, sent_at)
+		VALUES (?, ?, ?, ?, 0, 'sent', 1, now(), now())`, ulid.New(), tenantID, channelID, productID).Error
+}
+
 // ProductsNeedingStockSync: barang TERPETAKAN (ber-ref penyedia) di kanal
 // yang belum pernah diantre, atau stoknya bergerak (stock_movements) setelah
 // antrean terakhirnya — dan tidak sedang menunggu. Lintas tenant (pekerja).

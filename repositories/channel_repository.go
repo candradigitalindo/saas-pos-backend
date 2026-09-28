@@ -401,6 +401,21 @@ func ChannelByIDAnyTenant(ctx context.Context, id string) (models.Channel, error
 	return c, err
 }
 
+// ChannelProductsAll: seluruh pemetaan barang satu kanal (menu aplikasi antar).
+func ChannelProductsAll(ctx context.Context, tx *gorm.DB, channelID string) ([]models.ChannelProduct, error) {
+	var out []models.ChannelProduct
+	err := scopeTenant(ctx, tenantDB(ctx, tx)).Where("channel_id = ?", channelID).Order("external_sku").Find(&out).Error
+	return out, err
+}
+
+// ActiveProductsForMenu: barang aktif tenant untuk dipilih ke menu kanal.
+func ActiveProductsForMenu(ctx context.Context) ([]models.Product, error) {
+	var out []models.Product
+	err := scopeTenantOn(ctx, tenantDB(ctx, nil), "products").
+		Where("products.is_active").Order("products.name").Find(&out).Error
+	return out, err
+}
+
 // ChannelProductsForProduct: semua pemetaan satu barang di kanal (satu barang
 // bisa dijual lewat lebih dari satu SKU/listing).
 func ChannelProductsForProduct(ctx context.Context, tx *gorm.DB, channelID, productID string) ([]models.ChannelProduct, error) {

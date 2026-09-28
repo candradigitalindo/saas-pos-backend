@@ -46,13 +46,26 @@ type ListingPenyedia struct {
 type StokKirim struct {
 	Ref string
 	Qty int64
+	// Lacak=false: barang tanpa pelacakan stok (mis. masakan dibuat saat
+	// dipesan) — tidak punya angka stok; yang berarti hanya Tersedia.
+	Lacak    bool
+	Tersedia bool
 }
 
-// stockSyncer: penyedia yang bisa menerima stok dari toko.
-type stockSyncer interface {
-	ListListings(ctx context.Context, cred ChannelCredentials) ([]ListingPenyedia, error)
+// tanpaAngka: barang tak dilacak yang tersedia — marketplace (yang butuh
+// angka stok) melewatinya; mengirim 0 justru menutup barang yang masih dijual.
+func tanpaAngka(s StokKirim) bool { return !s.Lacak && s.Tersedia }
+
+// stockPusher: penyedia yang bisa menerima stok/ketersediaan dari toko.
+type stockPusher interface {
 	// PushStock mengirim stok; galat per ref (tidak ada entri = berhasil).
 	PushStock(ctx context.Context, cred ChannelCredentials, stok []StokKirim) map[string]error
+}
+
+// listingLister: penyedia yang daftar produknya bisa ditarik untuk
+// dicocokkan (marketplace). Aplikasi antar memakai menu dari POS.
+type listingLister interface {
+	ListListings(ctx context.Context, cred ChannelCredentials) ([]ListingPenyedia, error)
 }
 
 // pemisahRef: satu SKU bisa ada di lebih dari satu listing penyedia.
@@ -77,9 +90,9 @@ func CocokkanBarangKanal(ctx context.Context, channelID string) (structs.Channel
 	var listings []ListingPenyedia
 	var ch models.Channel
 	err := denganKredensialTerkunci(ctx, channelID, func(c *models.Channel, ad ProviderAdapter, cred ChannelCredentials) error {
-		ss, bisa := ad.(stockSyncer)
+		ss, bisa := ad.(listingLister)
 		if !bisa {
-			return fmt.Errorf("%w: %s belum mendukung kirim stok", helpers.ErrValidation, ad.Info().Name)
+			return fmt.Errorf("%w: %s tidak mendukung pencocokan barang — atur menunya dari POS", helpers.ErrValidation, ad.Info().Name)
 		}
 		if c.ConnectionStatus != "connected" {
 			return fmt.Errorf("%w: sambungan API belum tersambung — selesaikan otorisasi & tes koneksi dulu", helpers.ErrValidation)
@@ -176,7 +189,7 @@ func antreStokBarang(ctx context.Context, ch models.Channel, productID string) e
 func AntrekanSinkronStok(ctx context.Context) (int, error) {
 	var kode []string
 	for k, ad := range providerAdapters {
-		if _, bisa := ad.(stockSyncer); bisa {
+		if _, bisa := ad.(stockPusher); bisa {
 			kode = append(kode, k)
 		}
 	}
@@ -236,7 +249,7 @@ func kirimStokKanal(ctx context.Context, channelID string, rows []models.Channel
 		return semua("failed", "kanal tidak ditemukan")
 	}
 	ad := providerAdapters[ch.Provider]
-	ss, bisa := ad.(stockSyncer)
+	ss, bisa := ad.(stockPusher)
 	if !bisa || ch.IntegrationMode != "api" || len(ch.CredentialsEncrypted) == 0 {
 		return semua("failed", "kanal ini tidak tersambung ke API yang menerima stok")
 	}
@@ -252,12 +265,21 @@ func kirimStokKanal(ctx context.Context, channelID string, rows []models.Channel
 	rinci := map[string]*bagian{}
 	var kiriman []StokKirim
 	dibaca := time.Now().UTC()
+	ids := make([]string, 0, len(rows))
+	for _, r := range rows {
+		ids = append(ids, r.ProductID)
+	}
+	prods, err := repositories.ProductsByIDs(tctx, nil, ids)
+	if err != nil {
+		return semua("pending", err.Error())
+	}
 	for _, r := range rows {
 		cps, err := repositories.ChannelProductsForProduct(tctx, nil, ch.ID, r.ProductID)
 		if err != nil {
 			out[r.ID] = hasilStok{status: "pending", galat: err.Error()}
 			continue
 		}
+		lacak := prods[r.ProductID].TrackStock
 		b := &bagian{}
 		for _, cp := range cps {
 			if cp.ExternalProductID == "" {
@@ -274,12 +296,17 @@ func kirimStokKanal(ctx context.Context, channelID string, rows []models.Channel
 				break
 			}
 			q := qtyKirim(stok, cp)
-			b.qty = q
+			k := StokKirim{Qty: q, Lacak: lacak, Tersedia: q > 0}
+			if !lacak {
+				k.Qty, k.Tersedia = 0, cp.IsAvailable
+			}
+			b.qty = k.Qty
 			b.cpIDs = append(b.cpIDs, cp.ID)
 			for _, ref := range strings.Split(cp.ExternalProductID, pemisahRef) {
 				if ref = strings.TrimSpace(ref); ref != "" {
 					b.refs = append(b.refs, ref)
-					kiriman = append(kiriman, StokKirim{Ref: ref, Qty: q})
+					k.Ref = ref
+					kiriman = append(kiriman, k)
 				}
 			}
 		}
@@ -398,7 +425,7 @@ func StatusStokKanal(ctx context.Context, channelID string) (structs.ChannelStoc
 	}
 	// Didukung = penyedianya menerima stok DAN kanal ini tersambung ke API-nya
 	// (kanal bernama "Tokopedia" yang dicatat manual tidak ikut).
-	_, bisa := providerAdapters[ch.Provider].(stockSyncer)
+	_, bisa := providerAdapters[ch.Provider].(stockPusher)
 	out.Supported = bisa && ch.IntegrationMode == "api" && len(ch.CredentialsEncrypted) > 0
 	r, err := repositories.ChannelStockSummary(ctx, channelID)
 	if err != nil {

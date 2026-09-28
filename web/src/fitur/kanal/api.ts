@@ -84,6 +84,31 @@ export interface PenyediaKanal {
   stock_sync?: boolean
   /** Pesanan bisa ditandai "siap diambil" ke penyedia (GoFood, GrabFood). */
   mark_ready?: boolean
+  /** Menu dikelola di POS lalu dikirim ke penyedia (aplikasi antar). */
+  menu_sync?: boolean
+}
+
+/** Satu barang aktif di layar "Menu {aplikasi antar}". */
+export interface ItemMenuKanal {
+  product_id: string
+  name: string
+  category: string
+  sku?: string
+  /** Harga kanal bila diisi, selain itu harga jual. */
+  price: number
+  image_url?: string
+  in_menu: boolean
+  available: boolean
+  /** false = tidak dilacak stoknya → selalu tersedia di aplikasi antar. */
+  track_stock: boolean
+}
+
+/** GET/PUT /channels/:id/menu. */
+export interface MenuKanal {
+  supported: boolean
+  published_at?: string
+  published_count: number
+  items: ItemMenuKanal[]
 }
 
 /** GET /channels/:id/stock-status — ringkasan kiriman stok ke marketplace. */
@@ -188,6 +213,14 @@ export const kanalApi = {
   /** Alamat halaman izin toko di penyedia; setiap panggilan membuat state baru. */
   otorisasi: (id: string) => api.post<{ url: string }>(`/channels/${id}/connection/authorize`),
   statusStok: (id: string) => api.get<StatusStokKanal>(`/channels/${id}/stock-status`),
+  menu: (id: string) => api.get<MenuKanal>(`/channels/${id}/menu`),
+  /** Isi menu kanal (belum dikirim). */
+  simpanMenu: (id: string, product_ids: string[]) => api.put<MenuKanal>(`/channels/${id}/menu`, { product_ids }),
+  /** Kirim menu ke aplikasi antar — MENGGANTI menu di sana; confirm wajib true. */
+  kirimMenu: (id: string) =>
+    api.post<{ items: number; categories: number; published_at: string }>(`/channels/${id}/menu/publish`, {
+      confirm: true,
+    }),
   /** Cocokkan listing penyedia dengan barang toko (SKU/barcode), lalu kirim stok pertama. */
   cocokkanBarang: (id: string) => api.post<HasilCocokBarang>(`/channels/${id}/products/match`),
 

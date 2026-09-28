@@ -57,7 +57,7 @@ func (grabfoodAdapter) Info() structs.ChannelProviderInfo {
 			"Isi Client ID, Client Secret, dan Merchant ID di sini, pilih Sandbox atau Produksi, lalu Simpan & Tes.",
 			"Di konsol Grab, isi Partner OAuth URL beserta Partner Client ID & Secret dari layar ini, lalu arahkan endpoint Submit Order dan Push Order State ke Order URL.",
 			"Aktifkan terima pesanan otomatis (auto-accept) — pesanan dicatat saat masuk, dan dibatalkan bila Grab membatalkannya.",
-			"Isi External ID tiap menu di Grab dengan SKU barang toko — atau petakan ID item Grab di pemetaan SKU kanal — supaya stok ikut terpotong.",
+			"Paling mudah: kelola menu di POS (Atur Menu → Kirim Menu) dan isi Get Menu URL dari layar ini di konsol Grab — ID item otomatis sama dengan barang toko. Bila menu tetap dikelola di Grab, isi External ID tiap menu dengan SKU barang.",
 		},
 		Fields: []structs.ChannelProviderField{
 			{Key: "client_id", Label: "Client ID (dari Grab)"},
@@ -72,6 +72,8 @@ func (grabfoodAdapter) Info() structs.ChannelProviderInfo {
 			"Pembatalan atau pesanan gagal dari Grab membatalkan penjualan dan mengembalikan stok",
 			"Status pengemudi (ditugaskan, tiba, diambil, terkirim) ikut tercatat",
 			"Grab memanggil server ini dengan token OAuth khusus kanal, bukan alamat terbuka",
+			"Menu bisa dikirim dari POS; item yang stoknya habis otomatis ditutup dan jumlah stoknya ikut dikirim",
+			"Tandai pesanan siap diambil dari rincian pesanan",
 		},
 	}
 }
@@ -105,6 +107,8 @@ func (grabfoodAdapter) WebhookValues(cred ChannelCredentials, alamat string) []s
 		{Label: "Partner OAuth URL", Value: alamat + "/oauth/token"},
 		{Label: "Partner Client ID", Value: cred["partner_client_id"]},
 		{Label: "Partner Client Secret", Value: cred["partner_client_secret"]},
+		// Grab mengambil menu dari sini setelah "Kirim Menu" di POS.
+		{Label: "Get Menu URL", Value: alamat + "/merchant/menu"},
 	}
 }
 
@@ -384,4 +388,155 @@ func (grabfoodAdapter) MarkReady(ctx context.Context, cred ChannelCredentials, c
 	}
 	_ = json.Unmarshal(raw, &g)
 	return fmt.Errorf("Grab menolak: %s", firstNonEmpty(g.Message, g.Reason, fmt.Sprintf("HTTP %d", res.StatusCode)))
+}
+
+// ── Menu & stok ────────────────────────────────────────────────────────────
+
+// PublishMenu: Update menu notification — Grab lalu mengambil menu dari
+// {webhook}/merchant/menu (ServeMenu) secara asinkron.
+func (grabfoodAdapter) PublishMenu(ctx context.Context, cred ChannelCredentials, _ MenuKanal) error {
+	kode, raw, err := grabPanggil(ctx, cred, http.MethodPost, "/partner/v1/merchant/menu/notification",
+		map[string]string{"merchantID": strings.TrimSpace(cred["merchant_id"])})
+	if err != nil {
+		return err
+	}
+	switch {
+	case kode/100 == 2:
+		return nil
+	case kode == http.StatusConflict:
+		return fmt.Errorf("Grab menolak: menu baru saja dikirim — coba lagi 2 menit lagi")
+	case kode == http.StatusForbidden:
+		return fmt.Errorf("Grab menolak: integrasi toko belum aktif (%s)", pesanGrab(raw, kode))
+	}
+	return fmt.Errorf("Grab menolak: %s", pesanGrab(raw, kode))
+}
+
+func (grabfoodAdapter) MenuAksi(aksi string) bool { return aksi == "merchant/menu" }
+
+func (a grabfoodAdapter) CekAksesMenu(h http.Header, cred ChannelCredentials) bool {
+	return a.VerifySignature(h, nil, cred, "") == nil
+}
+
+// ServeMenu: Get food menu webhook — satu waktu jual sepanjang hari (jam buka
+// toko diatur di GrabMerchant), harga dalam satuan minor (eksponen 2).
+func (grabfoodAdapter) ServeMenu(q url.Values, cred ChannelCredentials, menu MenuKanal) any {
+	hari := map[string]any{}
+	for _, h := range []string{"mon", "tue", "wed", "thu", "fri", "sat", "sun"} {
+		hari[h] = map[string]string{"openPeriodType": "OpenAllDay"}
+	}
+	const waktuJual = "sepanjang-hari"
+	kategori := make([]map[string]any, 0, len(menu.Kategori))
+	for i, k := range menu.Kategori {
+		items := make([]map[string]any, 0, len(k.Item))
+		for j, it := range k.Item {
+			m := map[string]any{"id": it.ID, "name": it.Nama, "price": it.Harga * 100, "sequence": j + 1}
+			grabStatus(m, it.Tersedia, it.Stok)
+			if it.Foto != "" {
+				m["photos"] = []string{it.Foto}
+			}
+			items = append(items, m)
+		}
+		kategori = append(kategori, map[string]any{
+			"id": k.ID, "name": k.Nama, "availableStatus": "AVAILABLE", "sellingTimeID": waktuJual,
+			"sequence": i + 1, "items": items,
+		})
+	}
+	return map[string]any{
+		"merchantID":        firstNonEmpty(q.Get("merchantID"), cred["merchant_id"]),
+		"partnerMerchantID": q.Get("partnerMerchantID"),
+		"currency":          map[string]any{"code": "IDR", "symbol": "Rp", "exponent": 2},
+		"sellingTimes":      []any{map[string]any{"id": waktuJual, "name": "Sepanjang hari", "serviceHours": hari}},
+		"categories":        kategori,
+	}
+}
+
+// grabStatus: UNAVAILABLE wajib disertai maxStock 0; stok yang dilacak
+// dikirim sebagai maxStock (berkurang sendiri tiap ada pesanan di Grab).
+func grabStatus(m map[string]any, tersedia bool, stok *int64) {
+	if !tersedia {
+		m["availableStatus"], m["maxStock"] = "UNAVAILABLE", 0
+		return
+	}
+	m["availableStatus"] = "AVAILABLE"
+	if stok != nil {
+		m["maxStock"] = min(*stok, 9_999_999)
+	}
+}
+
+// PushStock: Batch Update Menu (field ITEM) — ketersediaan + maxStock.
+func (grabfoodAdapter) PushStock(ctx context.Context, cred ChannelCredentials, stok []StokKirim) map[string]error {
+	galat := map[string]error{}
+	entitas := make([]map[string]any, 0, len(stok))
+	for _, s := range stok {
+		m := map[string]any{"id": s.Ref}
+		var jumlah *int64
+		if s.Lacak {
+			q := s.Qty
+			jumlah = &q
+		}
+		grabStatus(m, s.Tersedia, jumlah)
+		entitas = append(entitas, m)
+	}
+	kode, raw, err := grabPanggil(ctx, cred, http.MethodPut, "/partner/v1/batch/menu", map[string]any{
+		"merchantID": strings.TrimSpace(cred["merchant_id"]), "field": "ITEM", "menuEntities": entitas,
+	})
+	if err == nil && kode/100 != 2 {
+		err = fmt.Errorf("Grab menolak stok: %s", pesanGrab(raw, kode))
+	}
+	if err != nil {
+		for _, s := range stok {
+			galat[s.Ref] = err
+		}
+		return galat
+	}
+	var r struct {
+		Errors []struct {
+			ID     string `json:"id"`
+			Errors []struct {
+				Message string `json:"message"`
+			} `json:"errors"`
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	_ = json.Unmarshal(raw, &r)
+	for _, e := range r.Errors {
+		pesan := e.Message
+		if len(e.Errors) > 0 && e.Errors[0].Message != "" {
+			pesan = e.Errors[0].Message
+		}
+		galat[e.ID] = fmt.Errorf("Grab menolak stok: %s", firstNonEmpty(pesan, "alasan tidak disebut"))
+	}
+	return galat
+}
+
+// grabPanggil: API Grab dengan token client credentials.
+func grabPanggil(ctx context.Context, cred ChannelCredentials, method, jalur string, badan any) (int, []byte, error) {
+	token, err := grabToken(ctx, cred)
+	if err != nil {
+		return 0, nil, err
+	}
+	api, _ := grabURL(cred)
+	b, _ := json.Marshal(badan)
+	req, err := http.NewRequestWithContext(ctx, method, api+jalur, bytes.NewReader(b))
+	if err != nil {
+		return 0, nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	res, err := httpKanal.Do(req)
+	if err != nil {
+		return 0, nil, fmt.Errorf("tidak bisa menghubungi Grab: %w", err)
+	}
+	defer res.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(res.Body, 256<<10))
+	return res.StatusCode, raw, nil
+}
+
+func pesanGrab(raw []byte, kode int) string {
+	var g struct {
+		Message string `json:"message"`
+		Reason  string `json:"reason"`
+	}
+	_ = json.Unmarshal(raw, &g)
+	return firstNonEmpty(g.Message, g.Reason, fmt.Sprintf("HTTP %d", kode))
 }

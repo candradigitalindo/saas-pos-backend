@@ -651,6 +651,9 @@ func (a lazadaAdapter) PushStock(ctx context.Context, cred ChannelCredentials, s
 	}
 	var sah []StokKirim
 	for _, s := range stok {
+		if tanpaAngka(s) {
+			continue
+		}
 		if b := strings.SplitN(s.Ref, ":", 3); len(b) != 3 || b[0] == "" || b[1] == "" {
 			galat[s.Ref] = fmt.Errorf("pengenal listing tidak dikenal — cocokkan barang lagi")
 			continue

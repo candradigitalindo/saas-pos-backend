@@ -66,7 +66,11 @@ func TestStokShopeeListingDanKiriman(t *testing.T) {
 	if strings.Join(got, ",") != "SH-A=10:0,SH-B-M=11:21,SH-B-L=11:22" {
 		t.Fatalf("listing = %v", got)
 	}
-	galat := (shopeeAdapter{}).PushStock(context.Background(), cred, []StokKirim{{"10:0", 5}, {"11:21", 7}, {"11:22", 0}, {"rusak", 1}})
+	galat := (shopeeAdapter{}).PushStock(context.Background(), cred, []StokKirim{
+		{Ref: "10:0", Qty: 5, Lacak: true, Tersedia: true}, {Ref: "11:21", Qty: 7, Lacak: true, Tersedia: true},
+		{Ref: "11:22", Qty: 0, Lacak: true}, {Ref: "rusak", Qty: 1, Lacak: true, Tersedia: true},
+		{Ref: "10:99", Lacak: false, Tersedia: true}, // tak dilacak & tersedia → tidak dikirim angka
+	})
 	if len(galat) != 2 || galat["11:22"] == nil || !strings.Contains(galat["11:22"].Error(), "reserved") || galat["rusak"] == nil {
 		t.Fatalf("galat = %v", galat)
 	}
@@ -110,9 +114,9 @@ func TestStokLazadaListingDanKiriman(t *testing.T) {
 	if len(l) != 2 || l[0].SKU != "39817:01:01" || l[0].Ref != "180226526:314525867:39817:01:01" {
 		t.Fatalf("listing = %+v", l)
 	}
-	stok := []StokKirim{{l[1].Ref, 3}}
+	stok := []StokKirim{{Ref: l[1].Ref, Qty: 3, Lacak: true, Tersedia: true}}
 	for i := 0; i < 24; i++ {
-		stok = append(stok, StokKirim{"1:" + strconv.Itoa(i) + ":S" + strconv.Itoa(i), int64(i)})
+		stok = append(stok, StokKirim{Ref: "1:" + strconv.Itoa(i) + ":S" + strconv.Itoa(i), Qty: int64(i), Lacak: true, Tersedia: i > 0})
 	}
 	if galat := (lazadaAdapter{}).PushStock(context.Background(), cred, stok); len(galat) != 0 {
 		t.Fatalf("galat = %v", galat)

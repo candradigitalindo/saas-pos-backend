@@ -250,6 +250,19 @@ func ProductVariantsByIDs(ctx context.Context, tx *gorm.DB, ids []string) (map[s
 }
 
 // CategoryLookup mengembalikan peta nama-kategori → id untuk seluruh kategori tenant.
+// CategoryNames: ID kategori → nama (kebalikan CategoryLookup).
+func CategoryNames(ctx context.Context) (map[string]string, error) {
+	var cats []models.Category
+	if err := scopeTenant(ctx, tenantDB(ctx, nil)).Select("id", "name").Find(&cats).Error; err != nil {
+		return nil, err
+	}
+	m := make(map[string]string, len(cats))
+	for _, c := range cats {
+		m[c.ID] = c.Name
+	}
+	return m, nil
+}
+
 func CategoryLookup(ctx context.Context) (map[string]string, error) {
 	var cats []models.Category
 	if err := scopeTenant(ctx, tenantDB(ctx, nil)).

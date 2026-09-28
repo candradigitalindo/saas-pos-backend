@@ -537,6 +537,9 @@ func (shopeeAdapter) PushStock(ctx context.Context, cred ChannelCredentials, sto
 	perItem := map[int64][]modelKirim{}
 	var urut []int64
 	for _, s := range stok {
+		if tanpaAngka(s) {
+			continue
+		}
 		b := strings.SplitN(s.Ref, ":", 2)
 		item, e1 := strconv.ParseInt(b[0], 10, 64)
 		var model int64

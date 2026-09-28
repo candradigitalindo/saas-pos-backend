@@ -686,6 +686,9 @@ func (a tokopediaAdapter) PushStock(ctx context.Context, cred ChannelCredentials
 	perProduk := map[string][]skuKirim{}
 	var urut []string
 	for _, s := range stok {
+		if tanpaAngka(s) {
+			continue
+		}
 		b := strings.SplitN(s.Ref, ":", 3)
 		if len(b) != 3 || b[0] == "" || b[1] == "" {
 			galat[s.Ref] = fmt.Errorf("pengenal listing tidak dikenal — cocokkan barang lagi")

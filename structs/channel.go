@@ -175,6 +175,9 @@ type ChannelProviderInfo struct {
 	RequiresAuthorization bool `json:"requires_authorization,omitempty"`
 	// StockSync: stok toko bisa dikirim ke penyedia ini (setelah barang dicocokkan).
 	StockSync bool `json:"stock_sync,omitempty"`
+	// MenuSync: menu dikelola di POS dan dikirim ke penyedia (aplikasi antar);
+	// habis/tersedia ikut otomatis setelahnya.
+	MenuSync bool `json:"menu_sync,omitempty"`
 	// MarkReady: pesanan bisa ditandai "siap diambil" ke penyedia (aplikasi antar).
 	MarkReady bool `json:"mark_ready,omitempty"`
 }

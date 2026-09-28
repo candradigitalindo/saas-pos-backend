@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Boxes, Check, Copy, ExternalLink, Loader2, PlugZap, Store, TriangleAlert, Unplug } from 'lucide-react'
+import { Boxes, Check, Copy, ExternalLink, Loader2, PlugZap, Store, TriangleAlert, Unplug, UtensilsCrossed } from 'lucide-react'
 import { Kolom } from '@/bersama/ui/kolom'
 import { Tombol } from '@/bersama/ui/tombol'
 import { AksiDialog, Dialog, IsiDialog } from '@/bersama/ui/dialog'
@@ -10,6 +10,7 @@ import { GalatAPI } from '@/lib/api-client'
 import { formatTanggalJam } from '@/bersama/util/tanggal'
 import { cn } from '@/bersama/util/cn'
 import { kanalApi, type HasilCocokBarang, type Kanal, type PenyediaKanal, type SambunganKanal } from '../api'
+import { DialogMenuKanal } from './dialog-menu-kanal'
 
 /** Nama bebas saat membuat kanal → kode penyedia (sama dengan services.ProviderCode). */
 const ALIAS: Record<string, string> = {
@@ -306,6 +307,9 @@ export function DialogSambungan({ kanal, onTutup }: { kanal: Kanal; onTutup: () 
                 {tersimpan && s?.status === 'connected' && dipilih.stock_sync && (!perluIzin || s.authorized) && (
                   <StokKeMarketplace kanalId={kanal.id} penyedia={dipilih.name} />
                 )}
+                {tersimpan && s?.status === 'connected' && dipilih.menu_sync && (
+                  <MenuAntar kanalId={kanal.id} penyedia={dipilih.name} ambilSendiri={dipilih.code === 'grabfood'} />
+                )}
 
                 {galat && (
                   <p role="alert" className="text-label text-bahaya-teks">
@@ -517,6 +521,130 @@ function IzinToko({
         <ExternalLink className="h-5 w-5" aria-hidden />
         {menunggu ? 'Buka Lagi Halaman Izin' : `Otorisasi Toko ${penyedia}`}
       </Tombol>
+    </div>
+  )
+}
+
+/**
+ * Menu aplikasi antar dari POS. Ketersediaan item di GoFood/Grab hanya bisa
+ * diubah untuk item yang diunggah lewat API, jadi menunya dikelola di sini lalu
+ * dikirim — dan pengiriman itu MENGGANTI menu di aplikasi antar, jadi harus
+ * dikonfirmasi secara sadar (centang "Saya mengerti"), bukan satu ketukan.
+ */
+function MenuAntar({ kanalId, penyedia, ambilSendiri }: { kanalId: string; penyedia: string; ambilSendiri: boolean }) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const [atur, setAtur] = useState(false)
+  const [yakin, setYakin] = useState(false)
+  const [paham, setPaham] = useState(false)
+  const [galat, setGalat] = useState<string | null>(null)
+  const menu = useQuery({ queryKey: ['menu-kanal', kanalId], queryFn: () => kanalApi.menu(kanalId) })
+  const stok = useQuery({ queryKey: ['stok-kanal', kanalId], queryFn: () => kanalApi.statusStok(kanalId) })
+  const jumlah = (menu.data?.items ?? []).filter((i) => i.in_menu).length
+  const kirim = useMutation({
+    mutationFn: () => kanalApi.kirimMenu(kanalId),
+    onSuccess: (r) => {
+      setYakin(false)
+      setPaham(false)
+      qc.invalidateQueries({ queryKey: ['menu-kanal', kanalId] })
+      qc.invalidateQueries({ queryKey: ['stok-kanal', kanalId] })
+      toast.berhasil(
+        ambilSendiri
+          ? `${penyedia} diberi tahu — menu (${r.items} item) diambil beberapa saat lagi.`
+          : `Menu (${r.items} item) terkirim ke ${penyedia}.`,
+      )
+    },
+    onError: (e) => setGalat(e instanceof GalatAPI ? e.pesan : 'Gagal mengirim menu.'),
+  })
+  const m = menu.data
+  const st = stok.data
+  return (
+    <div className="flex flex-col gap-3 rounded-kontrol border border-garis p-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex min-w-0 flex-1 basis-56 items-start gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sorot text-utama">
+            <UtensilsCrossed className="h-5 w-5" aria-hidden />
+          </span>
+          <div className="min-w-0 text-label">
+            <p className="font-semibold text-teks-utama">Menu di {penyedia}</p>
+            <p className="text-teks-sekunder">
+              {menu.isLoading
+                ? 'Memuat…'
+                : jumlah === 0
+                  ? 'Belum ada barang yang dipilih untuk menu.'
+                  : `${jumlah} barang di menu · ${
+                      m?.published_at
+                        ? `dikirim ${formatTanggalJam(m.published_at)} (${m.published_count} item)`
+                        : 'belum pernah dikirim'
+                    }`}
+            </p>
+          </div>
+        </div>
+        <div className="flex w-full gap-2 sm:w-auto">
+          <Tombol jenis="kedua" ukuran="padat" className="flex-1 sm:flex-none" onClick={() => setAtur(true)}>
+            Atur Menu
+          </Tombol>
+          {!yakin && (
+            <Tombol
+              ukuran="padat"
+              className="flex-1 sm:flex-none"
+              disabled={jumlah === 0}
+              onClick={() => {
+                setGalat(null)
+                setYakin(true)
+              }}
+            >
+              Kirim Menu
+            </Tombol>
+          )}
+        </div>
+      </div>
+      {st && st.failed > 0 && (
+        <p className="flex items-start gap-1.5 text-keterangan text-jingga-700">
+          <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+          <span>
+            {st.failed} item gagal diperbarui{st.last_error_sku ? ` — ${st.last_error_sku}` : ''}: {st.last_error}
+          </span>
+        </p>
+      )}
+      {yakin && (
+        <div className="flex flex-col gap-3 rounded-kontrol border border-bahaya/50 bg-permukaan-2 p-3 text-label">
+          <p className="flex items-start gap-2 text-teks-utama">
+            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-bahaya-teks" aria-hidden />
+            <span>
+              Menu di {penyedia} akan <strong>diganti</strong> dengan {jumlah} barang dari POS. Menu, foto, deskripsi,
+              dan topping yang dibuat langsung di aplikasi {penyedia} akan hilang.
+            </span>
+          </p>
+          <label className="flex min-h-11 cursor-pointer items-center gap-3">
+            <input
+              type="checkbox"
+              checked={paham}
+              onChange={(e) => setPaham(e.target.checked)}
+              className="h-5 w-5 shrink-0 accent-[var(--warna-utama)]"
+            />
+            <span className="text-teks-utama">Saya mengerti, ganti menu {penyedia}</span>
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <Tombol jenis="bahaya" ukuran="padat" disabled={!paham} memuat={kirim.isPending} onClick={() => kirim.mutate()}>
+              Ganti Menu di {penyedia}
+            </Tombol>
+            <Tombol jenis="kedua" ukuran="padat" onClick={() => setYakin(false)} disabled={kirim.isPending}>
+              Batal
+            </Tombol>
+          </div>
+        </div>
+      )}
+      {galat && (
+        <p role="alert" className="text-keterangan text-bahaya-teks">
+          {galat}
+        </p>
+      )}
+      <p className="text-keterangan text-teks-redup">
+        Setelah menu terkirim, barang yang stoknya habis di toko otomatis ditutup di {penyedia}
+        {ambilSendiri ? ' dan jumlah stoknya ikut dikirim' : ''}. Barang yang stoknya tidak dilacak selalu tersedia.
+      </p>
+      {atur && <DialogMenuKanal kanalId={kanalId} penyedia={penyedia} onTutup={() => setAtur(false)} />}
     </div>
   )
 }

@@ -149,7 +149,10 @@ func ListChannelProviders() []structs.ChannelProviderInfo {
 	for _, k := range urutanPenyedia {
 		ad := providerAdapters[k]
 		info := ad.Info()
-		_, info.StockSync = ad.(stockSyncer)
+		_, lister := ad.(listingLister)
+		_, pusher := ad.(stockPusher)
+		info.StockSync = lister && pusher
+		_, info.MenuSync = ad.(menuPublisher)
 		_, info.MarkReady = ad.(orderReadier)
 		out = append(out, info)
 	}

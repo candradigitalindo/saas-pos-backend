@@ -427,6 +427,10 @@ func ProviderWebhookGet(ctx context.Context, provider, token, aksi string, q url
 	}
 	p := WebhookPermintaan{Metode: http.MethodGet, Aksi: strings.Trim(aksi, "/"), Query: q, Header: h,
 		Alamat: webhookURL(ch.Provider, token)}
+	// Grab mengambil menu dari alamat kanal (…/merchant/menu).
+	if balasan, ok := layaniMenu(reqctx.WithTenantID(ctx, ch.TenantID), ch, ad, cred, p); ok {
+		return balasan, "", true
+	}
 	if balasan, err := jalankanAksi(ctx, ch, ad, cred, p); err != nil {
 		return &WebhookBalasan{Status: http.StatusInternalServerError, HTML: halamanPesan("Gagal menyimpan", err.Error())}, "", true
 	} else if balasan != nil {

@@ -42,6 +42,42 @@ type ChannelStockStatusResponse struct {
 	LastErrorSKU string `json:"last_error_sku,omitempty"`
 }
 
+// ChannelMenuItem: satu barang aktif di layar "Menu {aplikasi antar}".
+type ChannelMenuItem struct {
+	ProductID  string `json:"product_id"`
+	Name       string `json:"name"`
+	Category   string `json:"category"`
+	SKU        string `json:"sku,omitempty"`
+	Price      int64  `json:"price"` // harga kanal bila diisi, selain itu harga jual
+	ImageURL   string `json:"image_url,omitempty"`
+	InMenu     bool   `json:"in_menu"`
+	Available  bool   `json:"available"`
+	TrackStock bool   `json:"track_stock"`
+}
+
+// ChannelMenuResponse: GET/PUT /channels/:id/menu.
+type ChannelMenuResponse struct {
+	Supported      bool              `json:"supported"`
+	PublishedAt    string            `json:"published_at,omitempty"`
+	PublishedCount int               `json:"published_count"`
+	Items          []ChannelMenuItem `json:"items"`
+}
+
+type ChannelMenuRequest struct {
+	ProductIDs []string `json:"product_ids"`
+}
+
+type ChannelMenuPublishRequest struct {
+	// Confirm: pemilik sudah membaca bahwa menu di aplikasi antar DIGANTI.
+	Confirm bool `json:"confirm"`
+}
+
+type ChannelMenuPublishResult struct {
+	Items       int    `json:"items"`
+	Categories  int    `json:"categories"`
+	PublishedAt string `json:"published_at"`
+}
+
 // ChannelWorkerResult merangkum satu putaran pekerja pemroses.
 type ChannelWorkerResult struct {
 	EventsDone     int `json:"events_done"`

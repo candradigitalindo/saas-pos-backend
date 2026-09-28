@@ -143,6 +143,50 @@ func MatchChannelProducts(c *gin.Context) {
 	})
 }
 
+// GetChannelMenu: GET /api/v1/channels/:id/menu — barang aktif + tanda di menu.
+func GetChannelMenu(c *gin.Context) {
+	res, err := services.MenuKanalUntukAtur(c.Request.Context(), c.Param("id"))
+	balasMenu(c, "Menu kanal", res, err)
+}
+
+// SaveChannelMenu: PUT /api/v1/channels/:id/menu {product_ids} — isi menu
+// (belum dikirim ke aplikasi antar).
+func SaveChannelMenu(c *gin.Context) {
+	var req structs.ChannelMenuRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		validationFailed(c, err)
+		return
+	}
+	res, err := services.SimpanMenuKanal(c.Request.Context(), c.Param("id"), req.ProductIDs)
+	balasMenu(c, "Menu disimpan", res, err)
+}
+
+func balasMenu(c *gin.Context, pesan string, res structs.ChannelMenuResponse, err error) {
+	if err != nil {
+		notFoundOr(c, err, repositories.ErrChannelNotFound, "Kanal tidak ditemukan")
+		return
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[structs.ChannelMenuResponse]{Success: true, Message: pesan, Data: res})
+}
+
+// PublishChannelMenu: POST /api/v1/channels/:id/menu/publish {confirm:true} —
+// kirim menu ke aplikasi antar (MENGGANTI menu di sana).
+func PublishChannelMenu(c *gin.Context) {
+	var req structs.ChannelMenuPublishRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		validationFailed(c, err)
+		return
+	}
+	res, err := services.TerbitkanMenuKanal(c.Request.Context(), c.Param("id"), req.Confirm)
+	if err != nil {
+		notFoundOr(c, err, repositories.ErrChannelNotFound, "Kanal tidak ditemukan")
+		return
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[structs.ChannelMenuPublishResult]{
+		Success: true, Message: "Menu dikirim", Data: res,
+	})
+}
+
 // ChannelStockStatus: GET /api/v1/channels/:id/stock-status.
 func ChannelStockStatus(c *gin.Context) {
 	res, err := services.StatusStokKanal(c.Request.Context(), c.Param("id"))

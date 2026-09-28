@@ -234,7 +234,7 @@ func UpsertChannelProduct(ctx context.Context, channelID string, in structs.Chan
 	})
 	// Penyangga/ketersediaan berubah → stok di marketplace dikirim ulang.
 	if err == nil && berRef {
-		if _, bisa := providerAdapters[ch.Provider].(stockSyncer); bisa {
+		if _, bisa := providerAdapters[ch.Provider].(stockPusher); bisa {
 			err = antreStokBarang(ctx, ch, in.ProductID)
 		}
 	}

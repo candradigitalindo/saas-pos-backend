@@ -59,7 +59,7 @@ func (gofoodAdapter) Info() structs.ChannelProviderInfo {
 			"Masuk ke GoBiz Developer Portal dengan akun GoBiz toko, buat aplikasi Direct Integration, lalu tautkan outlet GoFood Anda.",
 			"Salin Client ID, Client Secret, Outlet ID (mis. G123456789), dan Notification Secret Key aplikasi itu.",
 			"Isi di sini, pilih Sandbox untuk uji coba atau Produksi, lalu Simpan & Tes. Webhook pesanan didaftarkan otomatis bila alamat publik server sudah diatur; bila belum, daftarkan Callback URL di bawah secara manual.",
-			"Samakan External ID menu GoFood dengan SKU barang toko — atau petakan nama menunya di pemetaan SKU kanal — supaya stok ikut terpotong.",
+			"Paling mudah: kelola menu di POS (Atur Menu → Kirim Menu) — ID menu otomatis sama dengan barang toko, dan habis/tersedia ikut otomatis. Aktifkan cakupan katalog (gofood:catalog) di aplikasi GoBiz untuk itu. Bila menu tetap dikelola di GoBiz, petakan nama menunya di pemetaan SKU kanal.",
 		},
 		Fields: []structs.ChannelProviderField{
 			{Key: "client_id", Label: "Client ID"},
@@ -76,6 +76,8 @@ func (gofoodAdapter) Info() structs.ChannelProviderInfo {
 			"Pembatalan dari GoFood membatalkan penjualannya dan mengembalikan stok",
 			"Status pengemudi (menuju, tiba, selesai) ikut tercatat",
 			"Webhook pesanan didaftarkan otomatis ke GoBiz",
+			"Menu bisa dikirim dari POS (butuh cakupan katalog di aplikasi GoBiz); item yang stoknya habis otomatis ditutup",
+			"Tandai pesanan siap diambil dari rincian pesanan",
 		},
 	}
 }
@@ -248,10 +250,17 @@ func gobizURL(cred ChannelCredentials) (api, oauth string) {
 }
 
 func gobizToken(ctx context.Context, cred ChannelCredentials) (string, error) {
+	return gobizTokenScope(ctx, cred, "partner:outlet:read gofood:order:read gofood:order:write")
+}
+
+// gobizTokenScope: token dengan cakupan tertentu. Katalog memakai token
+// tersendiri — aplikasi yang belum diberi cakupan katalog tetap bisa menerima
+// pesanan; hanya menu yang gagal, dengan pesan GoBiz apa adanya.
+func gobizTokenScope(ctx context.Context, cred ChannelCredentials, scope string) (string, error) {
 	_, oauth := gobizURL(cred)
 	form := url.Values{
 		"grant_type": {"client_credentials"},
-		"scope":      {"partner:outlet:read gofood:order:read gofood:order:write"},
+		"scope":      {scope},
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, oauth+"/oauth2/token", strings.NewReader(form.Encode()))
 	if err != nil {
@@ -418,4 +427,78 @@ func (gofoodAdapter) MarkReady(ctx context.Context, cred ChannelCredentials, co 
 		return fmt.Errorf("GoFood menolak: %s", pesanGoBiz(raw, kode))
 	}
 	return nil
+}
+
+// ── Menu & ketersediaan ────────────────────────────────────────────────────
+
+const gobizScopeKatalog = "gofood:catalog:read gofood:catalog:write"
+
+func potong(s string, n int) string {
+	r := []rune(strings.TrimSpace(s))
+	if len(r) > n {
+		return string(r[:n])
+	}
+	return string(r)
+}
+
+// PublishMenu: Update GoFood Outlet Catalog — seluruh menu dikirim sekaligus
+// (GoBiz tidak menerima pembaruan sebagian) dan MENGGANTI menu outlet.
+func (gofoodAdapter) PublishMenu(ctx context.Context, cred ChannelCredentials, menu MenuKanal) error {
+	token, err := gobizTokenScope(ctx, cred, gobizScopeKatalog)
+	if err != nil {
+		return err
+	}
+	menus := make([]map[string]any, 0, len(menu.Kategori))
+	for _, k := range menu.Kategori {
+		items := make([]map[string]any, 0, len(k.Item))
+		for _, it := range k.Item {
+			if it.Harga > 2_000_000 {
+				return fmt.Errorf("harga %s melebihi batas GoFood Rp 2.000.000", it.Nama)
+			}
+			m := map[string]any{"external_id": potong(it.ID, 200), "name": potong(it.Nama, 150), "price": it.Harga, "in_stock": it.Tersedia}
+			if it.Foto != "" {
+				m["image"] = it.Foto
+			}
+			items = append(items, m)
+		}
+		menus = append(menus, map[string]any{"name": potong(k.Nama, 150), "menu_items": items})
+	}
+	jalur := "/integrations/gofood/outlets/" + url.PathEscape(strings.TrimSpace(cred["outlet_id"])) + "/v1/catalog"
+	kode, raw, err := gobizPanggil(ctx, cred, token, http.MethodPut, jalur,
+		map[string]any{"request_id": acakHex(16), "menus": menus, "variant_categories": []any{}})
+	if err != nil {
+		return err
+	}
+	if kode != http.StatusOK {
+		return fmt.Errorf("GoFood menolak menu: %s", pesanGoBiz(raw, kode))
+	}
+	return nil
+}
+
+// PushStock: Update Menu Items OOS — GoFood hanya mengenal tersedia/habis.
+func (gofoodAdapter) PushStock(ctx context.Context, cred ChannelCredentials, stok []StokKirim) map[string]error {
+	galat := map[string]error{}
+	semua := func(err error) map[string]error {
+		for _, s := range stok {
+			galat[s.Ref] = err
+		}
+		return galat
+	}
+	token, err := gobizTokenScope(ctx, cred, gobizScopeKatalog)
+	if err != nil {
+		return semua(err)
+	}
+	daftar := make([]map[string]any, 0, len(stok))
+	for _, s := range stok {
+		daftar = append(daftar, map[string]any{"external_id": s.Ref, "in_stock": s.Tersedia})
+	}
+	jalur := "/integrations/gofood/outlets/" + url.PathEscape(strings.TrimSpace(cred["outlet_id"])) + "/v2/menu_item_stocks"
+	kode, raw, err := gobizPanggil(ctx, cred, token, http.MethodPatch, jalur, daftar)
+	if err != nil {
+		return semua(err)
+	}
+	if kode != http.StatusOK {
+		return semua(fmt.Errorf("GoFood menolak ketersediaan: %s", pesanGoBiz(raw, kode)))
+	}
+	return galat
 }
