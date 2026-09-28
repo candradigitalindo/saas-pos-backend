@@ -148,3 +148,30 @@ func ListStockMovements(c *gin.Context) {
 		Data: helpers.BuildPaginationResponse(c, page, limit, total, items),
 	})
 }
+
+// ListStockAdjustments mengembalikan koreksi stok terbaru (kind adjustment &
+// initial) satu outlet, dengan nama barang & pencatat — daftar "Koreksi
+// terakhir" di layar Koreksi Stok.
+func ListStockAdjustments(c *gin.Context) {
+	page, limit, offset := helpers.ParsePaginationParams(c)
+	rows, total, err := repositories.ListAdjustments(c.Request.Context(), c.Query("outlet_id"), limit, offset)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	items := make([]structs.AdjustmentResponse, len(rows))
+	for i, r := range rows {
+		items[i] = structs.AdjustmentResponse{
+			ID: r.ID, OutletID: r.OutletID, ProductID: r.ProductID,
+			ProductName: r.ProductName, UnitName: r.UnitName, Kind: r.Kind,
+			QtyDelta: r.QtyDelta.String(), BalanceAfter: r.BalanceAfter.String(),
+			UnitCost: r.UnitCost, Reason: r.Reason,
+			OccurredAt:    r.OccurredAt.UTC().Format(timeLayout),
+			CreatedByName: r.CreatedByName,
+		}
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[structs.PaginatedResponse[structs.AdjustmentResponse]]{
+		Success: true, Message: "Berhasil mengambil koreksi stok",
+		Data: helpers.BuildPaginationResponse(c, page, limit, total, items),
+	})
+}

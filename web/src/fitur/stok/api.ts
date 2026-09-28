@@ -105,6 +105,22 @@ export interface Transfer {
   created_at: string
 }
 
+/** Satu koreksi stok (GET /stock-adjustments) — termasuk stok awal. */
+export interface KoreksiStok {
+  id: string
+  outlet_id: string
+  product_id: string
+  product_name: string
+  unit_name: string
+  kind: 'adjustment' | 'initial'
+  qty_delta: string
+  balance_after: string
+  unit_cost: number
+  reason?: string
+  occurred_at: string
+  created_by_name?: string
+}
+
 /** GET /stocks/summary — hitungan atas SELURUH barang, bukan satu halaman. */
 export interface RingkasanStok {
   total: number
@@ -176,6 +192,10 @@ export const stokApi = {
     },
     kunci: string,
   ) => api.post<GerakanStok>('/stock-adjustments', input, { idempotencyKey: kunci }),
+
+  /** Koreksi terbaru dulu (termasuk stok awal), dengan nama barang & pencatat. */
+  daftarKoreksi: (outlet_id: string, page = 1, limit = 10) =>
+    api.get<Halaman<KoreksiStok>>('/stock-adjustments', { query: { outlet_id, page, limit } }),
 
   /** Barang masuk. Wajib Idempotency-Key: ini menciptakan stok DAN utang. */
   /** Satu barang lengkap dengan kemasannya — daftar barang tidak memuat kemasan. */

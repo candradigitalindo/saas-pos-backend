@@ -221,3 +221,19 @@ type StockMovementResponse struct {
 	OccurredAt   string `json:"occurred_at"`
 	BusinessDate string `json:"business_date"`
 }
+
+// AdjustmentResponse: satu koreksi stok untuk GET /stock-adjustments.
+type AdjustmentResponse struct {
+	ID            string `json:"id"`
+	OutletID      string `json:"outlet_id"`
+	ProductID     string `json:"product_id"`
+	ProductName   string `json:"product_name"`
+	UnitName      string `json:"unit_name"`
+	Kind          string `json:"kind"` // adjustment | initial
+	QtyDelta      string `json:"qty_delta"`
+	BalanceAfter  string `json:"balance_after"`
+	UnitCost      int64  `json:"unit_cost"`
+	Reason        string `json:"reason,omitempty"`
+	OccurredAt    string `json:"occurred_at"`
+	CreatedByName string `json:"created_by_name,omitempty"`
+}

@@ -365,6 +365,7 @@ menyebut paket termurah yang membukanya.
 | `GET  /api/v1/stocks/summary?outlet_id=` | `stock.view` | Ringkasan SELURUH barang: `total`, `safe`, `low`, `out`, `negative`, `stock_value` (harga modal), `idle` & `idle_value` (masih ada tapi tak terjual 30 hari — modal tertahan) |
 | `GET  /api/v1/stock-movements?product_id=` | `stock.view` | Kartu stok |
 | `POST /api/v1/stock-adjustments` | `stock.adjust` | Saldo awal / koreksi stok. Wajib `Idempotency-Key` |
+| `GET  /api/v1/stock-adjustments?outlet_id=` | `stock.view` | Koreksi stok terbaru dulu (kind `adjustment` & `initial`), dengan `product_name`, `unit_name`, `reason`, `qty_delta`, `balance_after`, `created_by_name` |
 | `POST /api/v1/stock-reconcile?outlet_id=` | `stock.opname` | Hitung ulang cache stok dari buku besar |
 | `POST /api/v1/purchases` (header `Idempotency-Key`) | `stock.adjust` | Terima barang (stok masuk) |
 | `GET  /api/v1/purchases?outlet_id=` · `/:id` | `stock.view` | Riwayat barang masuk, terbaru dulu; tiap nota membawa `supplier_name`, `created_by_name`, `item_count`, `item_names` (≤3 nama pertama). Rincian: baris membawa `product_name`, `variant_name`, `base_unit_name` |

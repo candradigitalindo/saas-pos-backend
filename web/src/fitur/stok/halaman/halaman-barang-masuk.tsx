@@ -18,11 +18,12 @@ import { formatRupiah, pratinjauBaris } from '@/bersama/util/uang'
 import { formatQty, formatQtySatuan } from '@/bersama/util/desimal'
 import { kelasPetak, petaWarnaKategori } from '@/bersama/util/warna-kategori'
 import { cn } from '@/bersama/util/cn'
-import type { Kemasan, Produk, SaldoStok } from '@/bersama/tipe/katalog'
+import type { Kemasan, Produk } from '@/bersama/tipe/katalog'
 import { PemilihBarang } from '../komponen/pemilih-barang'
 import { SaranBelanja } from '../komponen/saran-belanja'
 import { DialogRiwayatMasuk } from '../komponen/dialog-riwayat-masuk'
 import { stokApi } from '../api'
+import { produkDariSaldo } from '../keadaan-stok'
 
 interface BarisMasuk {
   produk: Produk
@@ -37,26 +38,6 @@ interface BarisMasuk {
 const isiBaris = (b: BarisMasuk) => Number(b.kemasan?.conversion ?? 1)
 /** Harga modal per satuan dasar SETELAH barang ini masuk (last-cost). */
 const modalBaru = (b: BarisMasuk) => Math.round(b.hargaBeli / isiBaris(b))
-
-/** Barang dari saran belanja: cukup untuk mengisi baris, dilengkapi sesudahnya. */
-function produkDariSaldo(s: SaldoStok): Produk {
-  return {
-    id: s.product_id,
-    name: s.product_name,
-    unit_id: '',
-    unit_name: s.unit_name,
-    category_id: s.category_id ?? undefined,
-    sku: s.sku,
-    image_url: s.image_url,
-    sell_price: 0,
-    cost_price: s.cost_price ?? 0,
-    track_stock: true,
-    min_stock: s.min_stock,
-    is_active: true,
-    created_at: '',
-    updated_at: '',
-  }
-}
 
 /**
  * Barang masuk (ui/05-ALUR-UTAMA.md §4).

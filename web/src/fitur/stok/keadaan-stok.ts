@@ -1,4 +1,4 @@
-import type { SaldoStok } from '@/bersama/tipe/katalog'
+import type { Produk, SaldoStok } from '@/bersama/tipe/katalog'
 
 /**
  * Tafsiran satu baris saldo stok — dipisah dari halaman supaya bisa diuji
@@ -81,4 +81,28 @@ export function saranBeli(s: Pick<SaldoStok, 'qty' | 'min_stock' | 'sold_30d'>):
   const min = Number.parseFloat(s.min_stock) || 0
   const target = Math.max(min * 2, lakuPerHari(s) * HARI_TARGET_BELANJA)
   return Math.max(1, Math.ceil(target - qty))
+}
+
+/**
+ * Barang dari satu baris saldo (saran belanja, daftar minus): cukup untuk
+ * mengisi formulir; pemanggil melengkapinya dengan GET /products/:id bila
+ * butuh kemasan dsb.
+ */
+export function produkDariSaldo(s: SaldoStok): Produk {
+  return {
+    id: s.product_id,
+    name: s.product_name,
+    unit_id: '',
+    unit_name: s.unit_name,
+    category_id: s.category_id ?? undefined,
+    sku: s.sku,
+    image_url: s.image_url,
+    sell_price: 0,
+    cost_price: s.cost_price ?? 0,
+    track_stock: true,
+    min_stock: s.min_stock,
+    is_active: true,
+    created_at: '',
+    updated_at: '',
+  }
 }

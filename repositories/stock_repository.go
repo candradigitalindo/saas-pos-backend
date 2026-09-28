@@ -445,3 +445,50 @@ func StockSummary(ctx context.Context, outletID string) (StockSummaryRow, error)
 		Scan(&r).Error
 	return r, err
 }
+
+// AdjustmentRow: satu koreksi stok (gerakan kind adjustment/initial) lengkap
+// dengan nama barang, satuan, dan pencatatnya — untuk daftar "Koreksi
+// terakhir" di layar Koreksi Stok.
+type AdjustmentRow struct {
+	ID            string
+	OutletID      string
+	ProductID     string
+	ProductName   string
+	UnitName      string
+	Kind          string
+	QtyDelta      decimal.Decimal
+	BalanceAfter  decimal.Decimal
+	UnitCost      int64
+	Reason        string
+	OccurredAt    time.Time
+	CreatedByName string
+}
+
+// ListAdjustments mengembalikan koreksi stok terbaru dulu (opsional per
+// outlet, dalam lingkup toko pengguna), berpaginasi.
+func ListAdjustments(ctx context.Context, outletID string, limit, offset int) ([]AdjustmentRow, int64, error) {
+	build := func() *gorm.DB {
+		q := tenantDB(ctx, nil).Table("stock_movements m").
+			Where("m.tenant_id = ? AND m.kind IN ('adjustment', 'initial')", reqctx.TenantID(ctx))
+		if outletID != "" {
+			q = q.Where("m.outlet_id = ?", outletID)
+		}
+		return scopeOutlet(ctx, q, "m.outlet_id")
+	}
+	var total int64
+	if err := build().Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var rows []AdjustmentRow
+	err := build().
+		Joins("JOIN products p ON p.tenant_id = m.tenant_id AND p.id = m.product_id").
+		Joins("LEFT JOIN units un ON un.tenant_id = p.tenant_id AND un.id = p.unit_id").
+		Joins("LEFT JOIN users u ON u.tenant_id = m.tenant_id AND u.id = m.created_by").
+		Select(`m.id, m.outlet_id, m.product_id, p.name AS product_name, COALESCE(un.name, '') AS unit_name,
+			m.kind, m.qty_delta, m.balance_after, m.unit_cost, COALESCE(m.reason, '') AS reason, m.occurred_at,
+			COALESCE(u.name, '') AS created_by_name`).
+		Order("m.occurred_at DESC, m.id DESC").
+		Limit(limit).Offset(offset).
+		Scan(&rows).Error
+	return rows, total, err
+}

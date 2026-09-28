@@ -625,6 +625,7 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	t.GET("/stocks/summary", middlewares.Require("stock.view"), controllers.StockSummary)
 	t.GET("/stock-movements", middlewares.Require("stock.view"), controllers.ListStockMovements)
 	t.POST("/stock-adjustments", middlewares.Require("stock.adjust"), controllers.AdjustStock)
+	t.GET("/stock-adjustments", middlewares.Require("stock.view"), controllers.ListStockAdjustments)
 	t.POST("/stock-reconcile", middlewares.Require("stock.opname"), controllers.ReconcileStocks)
 
 	// Pembelian (stok masuk). Wajib Idempotency-Key.
