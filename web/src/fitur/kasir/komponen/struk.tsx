@@ -59,6 +59,9 @@ export function Struk({
                     {formatQty(i.qty)} {i.unit_name} × {formatRupiah(i.unit_price)}
                     {i.discount_amount > 0 && ` − ${formatRupiah(i.discount_amount)}`}
                   </span>
+                  {i.note && (
+                    <span className="block break-words text-keterangan italic text-teks-sekunder">“{i.note}”</span>
+                  )}
                 </span>
                 <span className="shrink-0 tabular-nums text-teks-utama">
                   {formatRupiah(i.line_total)}

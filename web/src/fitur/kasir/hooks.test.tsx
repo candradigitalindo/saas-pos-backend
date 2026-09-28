@@ -63,7 +63,7 @@ describe('useCheckout saat offline', () => {
         input: {
           outlet_id: 'O1',
           shift_id: 'S1',
-          items: [{ product_id: 'P1', variant_id: 'V1', qty: '2' }],
+          items: [{ product_id: 'P1', variant_id: 'V1', qty: '2', note: 'tanpa es' }],
           payments: [{ method: 'cash', amount: 40000 }],
         },
         kunci: 'K1',
@@ -75,6 +75,7 @@ describe('useCheckout saat offline', () => {
     const [baris] = result.current.data!.transaksi.items ?? []
     expect(baris?.product_name).toBe('Kopi (Besar)')
     expect(baris?.unit_price).toBe(20000)
+    expect(baris?.note).toBe('tanpa es')
     expect(result.current.data?.transaksi.total).toBe(40000)
     expect(await db.antrean.count()).toBe(1)
   })

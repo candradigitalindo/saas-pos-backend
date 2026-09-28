@@ -681,6 +681,7 @@ function DialogDetail({
                   {formatQty(i.qty)} {i.unit_name} × {formatRupiah(i.unit_price)}
                   {i.discount_amount > 0 && ` − diskon ${formatRupiah(i.discount_amount)}`}
                 </p>
+                {i.note && <p className="break-words text-keterangan italic text-teks-sekunder">“{i.note}”</p>}
               </div>
               <p className="shrink-0 font-semibold tabular-nums text-teks-utama">{formatRupiah(i.line_total)}</p>
             </li>

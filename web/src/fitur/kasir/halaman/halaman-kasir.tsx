@@ -100,6 +100,7 @@ export function HalamanKasir() {
           outlet_id: tokoAktif,
           shift_id: shift.id,
           items: itemUntukCheckout(keranjang.baris),
+          ...(keranjang.diskonTransaksiNominal > 0 ? { order_discount: keranjang.diskonTransaksiNominal } : {}),
           // Kasbon dicatat penuh sebagai utang; tunai memakai uang yang
           // benar-benar diterima supaya server yang menghitung kembaliannya.
           payments: [{ method: metode, amount: dibayar }],

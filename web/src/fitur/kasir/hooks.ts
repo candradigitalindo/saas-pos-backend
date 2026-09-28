@@ -150,6 +150,7 @@ async function simpanKeAntrean(
       unit_price: hargaSatuan,
       unit_cost: p?.cost_price ?? 0,
       discount_amount: it.discount_amount ?? 0,
+      ...(it.note ? { note: it.note } : {}),
       tax_amount: 0,
       line_total: lineTotal,
     })

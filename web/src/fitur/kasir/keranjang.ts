@@ -10,8 +10,16 @@
  *   - Satu baris = satu barang + satu varian. "Kopi (Besar)" dan "Kopi
  *     (Kecil)" dua baris; qtyDari menjumlah semuanya per barang karena stok
  *     dihitung di tingkat barang.
+ *   - Diskon bisa nominal atau persen. Yang persen disimpan SEBAGAI persen dan
+ *     nominalnya dihitung ulang setiap kali jumlah berubah — "10%" tetap 10%
+ *     walau kasir menambah qty sesudahnya. Server hanya menerima nominal,
+ *     jadi konversinya terjadi di itemUntukCheckout / diskonTransaksiNominal.
+ *     Nominal selalu dijepit ke batas yang diterima server (diskon baris ≤
+ *     nilai baris, diskon transaksi ≤ total baris) supaya pengurangan qty
+ *     tidak membuat checkout ditolak.
  */
 import { useCallback, useMemo, useState } from 'react'
+import Decimal from 'decimal.js'
 import type { Produk, VarianProduk } from '@/bersama/tipe/katalog'
 import { bandingQty, kurangQty, qtyKosong, tambahQty } from '@/bersama/util/desimal'
 import { hitungTotal, type AturanHarga, type RincianTotal } from '@/bersama/util/total'
@@ -24,7 +32,16 @@ export interface BarisKeranjang {
   qty: string
   /** Diskon per baris dalam rupiah bulat. Butuh izin sale.discount. */
   diskon: number
+  /** Bila diisi (0–100), diskon baris = persen ini dari nilai baris; `diskon` diabaikan. */
+  diskonPersen?: number
+  /** Catatan untuk barang ini ("tanpa es"), ikut tercetak di struk. */
   catatan?: string
+}
+
+/** Diskon transaksi: nominal rupiah, atau persen dari belanja setelah diskon baris. */
+export interface DiskonTransaksi {
+  jenis: 'nominal' | 'persen'
+  nilai: number
 }
 
 export interface Keranjang {
@@ -42,10 +59,37 @@ export interface Keranjang {
   tambah: (p: Produk, qty?: string, varian?: VarianProduk) => void
   ubahQty: (kunci: string, qty: string) => void
   ubahDiskon: (kunci: string, diskon: number) => void
+  /** Mengganti catatan & diskon satu baris sekaligus (dialog atur baris). */
+  aturBaris: (kunci: string, isi: Pick<BarisKeranjang, 'catatan' | 'diskon' | 'diskonPersen'>) => void
+  diskonTransaksi: DiskonTransaksi | null
+  aturDiskonTransaksi: (d: DiskonTransaksi | null) => void
+  /** Nominal diskon transaksi yang dikirim ke server (sudah dijepit). */
+  diskonTransaksiNominal: number
   hapus: (kunci: string) => void
   kosongkan: () => void
   /** Total qty satu barang di keranjang, semua variannya dijumlah. */
   qtyDari: (produkId: string) => string
+}
+
+function bulat(d: Decimal): number {
+  return d.toDecimalPlaces(0, Decimal.ROUND_HALF_UP).toNumber()
+}
+
+/** Nilai kotor baris = bulat(qty × harga), sama dengan server. */
+export function kotorBaris(b: Pick<BarisKeranjang, 'produk' | 'varian' | 'qty'>): number {
+  try {
+    return bulat(new Decimal(b.qty || '0').mul(hargaBaris(b)))
+  } catch {
+    return 0
+  }
+}
+
+/** Diskon baris yang berlaku (rupiah), sudah dijepit 0..nilai baris. */
+export function diskonBaris(b: Pick<BarisKeranjang, 'produk' | 'varian' | 'qty' | 'diskon' | 'diskonPersen'>): number {
+  const kotor = kotorBaris(b)
+  const mentah =
+    b.diskonPersen !== undefined ? bulat(new Decimal(kotor).mul(b.diskonPersen).div(100)) : b.diskon
+  return Math.min(Math.max(0, mentah), kotor)
 }
 
 export function kunciBaris(produkId: string, varianId?: string): string {
@@ -68,6 +112,7 @@ export function namaBaris(b: Pick<BarisKeranjang, 'produk' | 'varian'>): string 
  */
 export function useKeranjang(aturan?: AturanHarga): Keranjang {
   const [baris, setBaris] = useState<BarisKeranjang[]>([])
+  const [diskonTransaksi, setDiskonTransaksi] = useState<DiskonTransaksi | null>(null)
 
   const tambah = useCallback((p: Produk, qty = '1', varian?: VarianProduk) => {
     const kunci = kunciBaris(p.id, varian?.id)
@@ -92,15 +137,31 @@ export function useKeranjang(aturan?: AturanHarga): Keranjang {
 
   const ubahDiskon = useCallback((kunci: string, diskon: number) => {
     setBaris((lama) =>
-      lama.map((b) => (b.kunci === kunci ? { ...b, diskon } : b)),
+      lama.map((b) => (b.kunci === kunci ? { ...b, diskon, diskonPersen: undefined } : b)),
     )
   }, [])
+
+  const aturBaris = useCallback(
+    (kunci: string, isi: Pick<BarisKeranjang, 'catatan' | 'diskon' | 'diskonPersen'>) => {
+      setBaris((lama) =>
+        lama.map((b) =>
+          b.kunci === kunci
+            ? { ...b, catatan: isi.catatan?.trim() || undefined, diskon: isi.diskon, diskonPersen: isi.diskonPersen }
+            : b,
+        ),
+      )
+    },
+    [],
+  )
 
   const hapus = useCallback((kunci: string) => {
     setBaris((lama) => lama.filter((b) => b.kunci !== kunci))
   }, [])
 
-  const kosongkan = useCallback(() => setBaris([]), [])
+  const kosongkan = useCallback(() => {
+    setBaris([])
+    setDiskonTransaksi(null)
+  }, [])
 
   const qtyDari = useCallback(
     (produkId: string) =>
@@ -108,7 +169,11 @@ export function useKeranjang(aturan?: AturanHarga): Keranjang {
     [baris],
   )
 
-  const rincian = useMemo(() => hitungTotal(barisHitung(baris), aturan), [baris, aturan])
+  const { rincian, diskonTransaksiNominal } = useMemo(() => {
+    const hitung = barisHitung(baris)
+    const nominal = nominalDiskonTransaksi(hitungTotal(hitung, aturan), diskonTransaksi)
+    return { rincian: hitungTotal(hitung, aturan, nominal), diskonTransaksiNominal: nominal }
+  }, [baris, aturan, diskonTransaksi])
 
   return {
     baris,
@@ -118,6 +183,10 @@ export function useKeranjang(aturan?: AturanHarga): Keranjang {
     tambah,
     ubahQty,
     ubahDiskon,
+    aturBaris,
+    diskonTransaksi,
+    aturDiskonTransaksi: setDiskonTransaksi,
+    diskonTransaksiNominal,
     hapus,
     kosongkan,
     qtyDari,
@@ -126,7 +195,20 @@ export function useKeranjang(aturan?: AturanHarga): Keranjang {
 
 /** Baris keranjang dalam bentuk yang dipakai hitungTotal. */
 export function barisHitung(baris: BarisKeranjang[]) {
-  return baris.map((b) => ({ harga: hargaBaris(b), qty: b.qty, diskon: b.diskon }))
+  return baris.map((b) => ({ harga: hargaBaris(b), qty: b.qty, diskon: diskonBaris(b) }))
+}
+
+/**
+ * Nominal diskon transaksi dari rincian TANPA diskon transaksi. Persen dihitung
+ * dari belanja setelah diskon baris (sebelum pajak & layanan); hasilnya dijepit
+ * ke Σ total baris — batas yang ditegakkan server.
+ */
+export function nominalDiskonTransaksi(tanpaDiskon: RincianTotal, d: DiskonTransaksi | null): number {
+  if (!d || d.nilai <= 0) return 0
+  const dasar = tanpaDiskon.subtotal - tanpaDiskon.discount_amount
+  const mentah = d.jenis === 'persen' ? bulat(new Decimal(dasar).mul(d.nilai).div(100)) : d.nilai
+  const batas = tanpaDiskon.total - tanpaDiskon.service_amount
+  return Math.min(Math.max(0, mentah), Math.max(0, batas))
 }
 
 /** Menyusun item checkout dari keranjang. Perhatikan: TANPA harga. */
@@ -135,8 +217,8 @@ export function itemUntukCheckout(baris: BarisKeranjang[]) {
     product_id: b.produk.id,
     ...(b.varian ? { variant_id: b.varian.id } : {}),
     qty: b.qty,
-    ...(b.diskon > 0 ? { discount_amount: b.diskon } : {}),
-    ...(b.catatan ? { note: b.catatan } : {}),
+    ...(diskonBaris(b) > 0 ? { discount_amount: diskonBaris(b) } : {}),
+    ...(b.catatan?.trim() ? { note: b.catatan.trim() } : {}),
   }))
 }
 

@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { itemUntukCheckout, namaBaris, stokCukup, useKeranjang } from './keranjang'
+import type { AturanHarga } from '@/bersama/util/total'
 import type { Produk, VarianProduk } from '@/bersama/tipe/katalog'
 
 function produk(id: string, harga: number, nama = id): Produk {
@@ -103,6 +104,57 @@ describe('keranjang', () => {
     act(() => result.current.ubahQty(result.current.baris[1]!.kunci, '0'))
     expect(result.current.baris).toHaveLength(1)
     expect(result.current.qtyDari('P1')).toBe('2')
+  })
+
+  it('diskon persen dihitung ulang saat jumlah berubah; catatan ikut terkirim', () => {
+    const { result } = renderHook(() => useKeranjang())
+    act(() => result.current.tambah(produk('P1', 18000), '2'))
+    act(() => result.current.aturBaris('P1', { catatan: '  tanpa es ', diskon: 0, diskonPersen: 10 }))
+    // 10% × 36.000
+    expect(itemUntukCheckout(result.current.baris)).toEqual([
+      { product_id: 'P1', qty: '2', discount_amount: 3600, note: 'tanpa es' },
+    ])
+    act(() => result.current.ubahQty('P1', '3'))
+    // Tetap 10%: 10% × 54.000, bukan 3.600 yang basi.
+    expect(itemUntukCheckout(result.current.baris)[0]?.discount_amount).toBe(5400)
+    expect(result.current.pratinjauTotal).toBe(48600)
+  })
+
+  it('diskon nominal dijepit ke nilai baris saat jumlah dikurangi (server menolak yang melebihi)', () => {
+    const { result } = renderHook(() => useKeranjang())
+    act(() => result.current.tambah(produk('P1', 10000), '3'))
+    act(() => result.current.ubahDiskon('P1', 25000))
+    act(() => result.current.ubahQty('P1', '2'))
+    expect(itemUntukCheckout(result.current.baris)[0]?.discount_amount).toBe(20000)
+    expect(result.current.pratinjauTotal).toBe(0)
+  })
+
+  it('diskon transaksi persen dari belanja setelah diskon barang; dijepit & hilang saat dikosongkan', () => {
+    const { result } = renderHook(() => useKeranjang())
+    act(() => result.current.tambah(produk('P1', 20000), '2'))
+    act(() => result.current.tambah(produk('P2', 10000), '1'))
+    act(() => result.current.ubahDiskon('P2', 2000))
+    act(() => result.current.aturDiskonTransaksi({ jenis: 'persen', nilai: 10 }))
+    // (40.000 + 10.000 − 2.000) × 10% = 4.800
+    expect(result.current.diskonTransaksiNominal).toBe(4800)
+    expect(result.current.pratinjauTotal).toBe(43200)
+
+    act(() => result.current.aturDiskonTransaksi({ jenis: 'nominal', nilai: 999999 }))
+    expect(result.current.diskonTransaksiNominal).toBe(48000)
+    expect(result.current.pratinjauTotal).toBe(0)
+
+    act(() => result.current.kosongkan())
+    expect(result.current.diskonTransaksi).toBeNull()
+    expect(result.current.diskonTransaksiNominal).toBe(0)
+  })
+
+  it('diskon transaksi dijepit ke Σ total baris termasuk pajak eksklusif, tanpa biaya layanan', () => {
+    const aturan: AturanHarga = { tax_enabled: true, tax_rate: '0.10', tax_inclusive: false, service_charge_rate: '0.05' }
+    const { result } = renderHook(() => useKeranjang(aturan))
+    act(() => result.current.tambah(produk('P1', 10000), '1'))
+    act(() => result.current.aturDiskonTransaksi({ jenis: 'nominal', nilai: 50000 }))
+    // Σ total baris = 10.000 + pajak 1.000 — batas yang ditegakkan server.
+    expect(result.current.diskonTransaksiNominal).toBe(11000)
   })
 
   it('mengosongkan keranjang setelah transaksi selesai', () => {
