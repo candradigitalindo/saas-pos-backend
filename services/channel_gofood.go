@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"candra/backend-api/config"
+	"candra/backend-api/models"
 	"candra/backend-api/structs"
 
 	"github.com/shopspring/decimal"
@@ -385,4 +386,36 @@ func firstNonEmpty(xs ...string) string {
 		}
 	}
 	return ""
+}
+
+// MarkReady: Mark Food Ready — pengemudi (diantar) atau pembeli (ambil sendiri)
+// diberi tahu makanan siap. Jenis pesanan dari service_type webhook yang
+// tersimpan di raw_payload pesanan: gofood → delivery, gofood_pickup → pickup.
+func (gofoodAdapter) MarkReady(ctx context.Context, cred ChannelCredentials, co models.ChannelOrder) error {
+	var p struct {
+		Raw struct {
+			Body struct {
+				ServiceType string `json:"service_type"`
+			} `json:"body"`
+		} `json:"_raw"`
+	}
+	_ = json.Unmarshal(co.RawPayload, &p)
+	jenis := "delivery"
+	if strings.EqualFold(p.Raw.Body.ServiceType, "gofood_pickup") {
+		jenis = "pickup"
+	}
+	token, err := gobizToken(ctx, cred)
+	if err != nil {
+		return err
+	}
+	jalur := "/integrations/gofood/outlets/" + url.PathEscape(strings.TrimSpace(cred["outlet_id"])) +
+		"/v1/orders/" + jenis + "/" + url.PathEscape(co.ExternalOrderID) + "/food-prepared"
+	kode, raw, err := gobizPanggil(ctx, cred, token, http.MethodPut, jalur, map[string]string{"country_code": "ID"})
+	if err != nil {
+		return err
+	}
+	if kode != http.StatusOK {
+		return fmt.Errorf("GoFood menolak: %s", pesanGoBiz(raw, kode))
+	}
+	return nil
 }

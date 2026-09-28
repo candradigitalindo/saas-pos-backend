@@ -29,6 +29,7 @@ func TestSambunganGoFoodDariKredensialTenant(t *testing.T) {
 
 	var mu sync.Mutex
 	var langganan []map[string]any
+	var siap []string // "jalur badan" panggilan Mark Food Ready
 	gobiz := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
@@ -54,6 +55,12 @@ func TestSambunganGoFoodDariKredensialTenant(t *testing.T) {
 			mu.Unlock()
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte(`{"success":true,"data":{"subscription":{"id":"x","active":true}}}`))
+		case r.Method == "PUT" && strings.HasSuffix(r.URL.Path, "/food-prepared"):
+			raw, _ := io.ReadAll(r.Body)
+			mu.Lock()
+			siap = append(siap, r.URL.Path+" "+strings.TrimSpace(string(raw)))
+			mu.Unlock()
+			_, _ = w.Write([]byte(`{"success":true,"data":{}}`))
 		default:
 			w.WriteHeader(http.StatusNotFound)
 			_, _ = w.Write([]byte(`{"errors":[{"message":"outlet tidak ditemukan"}]}`))
@@ -99,8 +106,12 @@ func TestSambunganGoFoodDariKredensialTenant(t *testing.T) {
 	}
 
 	kirim := func(event, nomor, rahasia string) apiResp {
+		layanan := "gofood"
+		if strings.HasPrefix(nomor, "P-") {
+			layanan = "gofood_pickup" // ambil sendiri
+		}
 		body := `{"header":{"event_name":"` + event + `","event_id":"e-` + event + nomor + `","version":1,"timestamp":"2026-09-28T10:15:22.557+07:00"},
-			"body":{"customer":{"id":"C1","name":"Pelanggan GoFood"},"driver":{"name":"Pak Ojol"},"service_type":"gofood",
+			"body":{"customer":{"id":"C1","name":"Pelanggan GoFood"},"driver":{"name":"Pak Ojol"},"service_type":"` + layanan + `",
 			"outlet":{"id":"G123456789","external_outlet_id":"x"},
 			"order":{"status":"X","pin":"1234","order_number":"` + nomor + `","order_total":3.0e4,"currency":"IDR",
 			"created_at":"2026-09-28T10:14:00.000+07:00","cancellation_detail":{"reason":"Dibatalkan resto - ada menu yang habis"},
@@ -145,6 +156,21 @@ func TestSambunganGoFoodDariKredensialTenant(t *testing.T) {
 		t.Fatalf("status pengemudi tidak tercatat: %v", p["external_status"])
 	}
 
+	// Tandai siap → GoFood diberi tahu (diantar = delivery, ambil sendiri =
+	// pickup); tanda kedua tidak dikirim ulang.
+	sp := call(t, "POST", "/api/v1/channel-orders/"+p["id"].(string)+"/ready", f.token, nil).mustOK(t, "siap").data(t)
+	if sp["external_status"] != "ready" || sp["ready_at"] == nil {
+		t.Fatalf("tandai siap: %v", sp)
+	}
+	call(t, "POST", "/api/v1/channel-orders/"+p["id"].(string)+"/ready", f.token, nil).mustOK(t, "siap lagi")
+	kirim("gofood.order.merchant_accepted", "P-200", "rahasia-notif").mustOK(t, "ambil sendiri")
+	processChannelEvents(t, f.token)
+	call(t, "POST", "/api/v1/channel-orders/"+pesanan("P-200")["id"].(string)+"/ready", f.token, nil).mustOK(t, "siap ambil sendiri")
+	if len(siap) != 2 || siap[0] != `/integrations/gofood/outlets/G123456789/v1/orders/delivery/F-100/food-prepared {"country_code":"ID"}` ||
+		!strings.HasPrefix(siap[1], "/integrations/gofood/outlets/G123456789/v1/orders/pickup/P-200/food-prepared") {
+		t.Fatalf("Mark Food Ready: %v", siap)
+	}
+
 	// Batal dari GoFood → penjualan dibatalkan; batal untuk pesanan yang tak
 	// pernah diterima (F-999) diabaikan tanpa mati di antrean.
 	kirim("gofood.order.cancelled", "F-100", "rahasia-notif").mustOK(t, "batal")
@@ -153,6 +179,7 @@ func TestSambunganGoFoodDariKredensialTenant(t *testing.T) {
 	if p = pesanan("F-100"); p["sale_status"] != "canceled" {
 		t.Fatalf("pembatalan GoFood tidak membatalkan penjualan: %v", p)
 	}
+	call(t, "POST", "/api/v1/channel-orders/"+p["id"].(string)+"/ready", f.token, nil).mustCode(t, "siap setelah batal", 409)
 	mati := call(t, "GET", "/api/v1/channels/"+ch+"/events?status=dead", f.token, nil).
 		mustOK(t, "antrean mati").data(t)["data"].([]any)
 	if len(mati) != 0 {

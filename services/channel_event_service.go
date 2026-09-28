@@ -364,7 +364,7 @@ func dispatchChannelEvent(ctx context.Context, ev models.ChannelEvent) (status, 
 
 	switch normalizeEventType(norm.EventType) {
 	case "order.created":
-		err = applyOrderCreated(ectx, ch, norm)
+		err = applyOrderCreated(ectx, ch, norm, ev.Payload)
 	case "order.status":
 		err = applyOrderStatus(ectx, ch, norm)
 	case "order.canceled":
@@ -391,8 +391,9 @@ func classifyEventError(err error, nextAttempts int) (string, string) {
 
 // applyOrderCreated mencatat pesanan kanal sebagai penjualan, menyimpan rincian
 // biaya, lalu mengantre sinkron stok tiap produk.
-func applyOrderCreated(ctx context.Context, ch models.Channel, norm NormalizedEvent) error {
+func applyOrderCreated(ctx context.Context, ch models.Channel, norm NormalizedEvent, raw []byte) error {
 	in := ChannelOrderInput{
+		RawPayload:      raw,
 		ChannelID:       ch.ID,
 		ExternalOrderID: norm.ExternalOrderID,
 		BuyerName:       norm.BuyerName,

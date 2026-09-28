@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"candra/backend-api/config"
+	"candra/backend-api/models"
 	"candra/backend-api/structs"
 
 	"github.com/shopspring/decimal"
@@ -351,4 +352,36 @@ func (grabfoodAdapter) Test(ctx context.Context, cred ChannelCredentials) (strin
 		status = strings.TrimSpace("toko tutup " + s.CloseReason)
 	}
 	return "GrabFood " + merchant + " · " + status, nil
+}
+
+// MarkReady: POST /partner/v1/orders/mark {orderID, markStatus: 1} — Grab
+// memberi tahu pengemudi pesanan siap diambil. Balasan sukses tanpa isi.
+func (grabfoodAdapter) MarkReady(ctx context.Context, cred ChannelCredentials, co models.ChannelOrder) error {
+	token, err := grabToken(ctx, cred)
+	if err != nil {
+		return err
+	}
+	api, _ := grabURL(cred)
+	b, _ := json.Marshal(map[string]any{"orderID": co.ExternalOrderID, "markStatus": 1})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, api+"/partner/v1/orders/mark", bytes.NewReader(b))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	res, err := httpKanal.Do(req)
+	if err != nil {
+		return fmt.Errorf("tidak bisa menghubungi Grab: %w", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode/100 == 2 {
+		return nil
+	}
+	raw, _ := io.ReadAll(io.LimitReader(res.Body, 64<<10))
+	var g struct {
+		Message string `json:"message"`
+		Reason  string `json:"reason"`
+	}
+	_ = json.Unmarshal(raw, &g)
+	return fmt.Errorf("Grab menolak: %s", firstNonEmpty(g.Message, g.Reason, fmt.Sprintf("HTTP %d", res.StatusCode)))
 }

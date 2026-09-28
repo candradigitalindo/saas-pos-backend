@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Bike,
+  ChefHat,
   Download,
   FileUp,
   Info,
@@ -42,7 +43,7 @@ import { inisialNama } from '@/bersama/util/inisial'
 import { cn } from '@/bersama/util/cn'
 import type { Produk } from '@/bersama/tipe/katalog'
 import { kanalApi, type HasilImporKanal, type Kanal, type PesananKanal } from '../api'
-import { DialogSambungan } from '../komponen/dialog-sambungan'
+import { DialogSambungan, kodePenyedia } from '../komponen/dialog-sambungan'
 
 type JenisKanal = 'delivery_app' | 'marketplace' | 'conversation'
 
@@ -609,6 +610,7 @@ function KartuPesanan({ p, kanal, onBuka }: { p: PesananKanal; kanal?: Kanal; on
         <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-keterangan text-teks-redup">
           <span>{metaPesanan(p, kanal)}</span>
           {batal && <LencanaStatus nada="bahaya" anak="Dibatalkan" />}
+          {!batal && p.ready_at && <LencanaStatus nada="berhasil" anak={`Siap ${formatJam(p.ready_at)}`} />}
           {!batal && p.fee_amount > 0 && <span>komisi {formatRupiah(p.fee_amount)}</span>}
         </p>
       </div>
@@ -668,6 +670,11 @@ function TabelPesanan({
                       <LencanaStatus nada="bahaya" anak="Dibatalkan" />
                     </span>
                   )}
+                  {!batal && p.ready_at && (
+                    <span className="mt-1 inline-block">
+                      <LencanaStatus nada="berhasil" anak={`Siap ${formatJam(p.ready_at)}`} />
+                    </span>
+                  )}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-teks-sekunder">
                   {formatRupiah(p.gross_amount)}
@@ -707,6 +714,26 @@ function DialogDetailPesanan({
   const [alasan, setAlasan] = useState('')
   const [galat, setGalat] = useState<string | null>(null)
   const batal = statusPesanan(p) === 'canceled'
+  // "Tandai siap" hanya untuk aplikasi antar yang tersambung API dan
+  // penyedianya menerimanya (katalog: mark_ready).
+  const penyedia = useQuery({ queryKey: ['penyedia-kanal'], queryFn: kanalApi.penyedia, staleTime: 5 * 60_000 })
+  const kode = kanal ? kodePenyedia(kanal) : undefined
+  const bisaSiap =
+    !batal &&
+    !!kanal &&
+    kanal.integration_mode === 'api' &&
+    kanal.connection_status === 'connected' &&
+    !!penyedia.data?.some((x) => x.code === kode && x.mark_ready)
+  const [siapPada, setSiapPada] = useState(p.ready_at)
+  const siap = useMutation({
+    mutationFn: () => kanalApi.tandaiSiap(p.id),
+    onSuccess: (r) => {
+      setSiapPada(r.ready_at)
+      qc.invalidateQueries({ queryKey: ['pesanan-kanal'] })
+      toast.berhasil(`${kanal?.name ?? 'Aplikasi antar'} diberi tahu: pesanan siap diambil.`)
+    },
+    onError: (e) => setGalat(e instanceof GalatAPI ? e.pesan : 'Gagal menandai siap.'),
+  })
 
   const batalkan = useMutation({
     mutationFn: () => kanalApi.batalkan(p.id, alasan.trim()),
@@ -730,12 +757,15 @@ function DialogDetailPesanan({
   ]
 
   return (
-    <Dialog open onOpenChange={(o) => !o && !batalkan.isPending && onTutup()}>
+    <Dialog open onOpenChange={(o) => !o && !batalkan.isPending && !siap.isPending && onTutup()}>
       <IsiDialog
         judul={`Pesanan ${nomorPendek(p.external_order_id)}`}
         keterangan={`${kanal?.name ?? 'Kanal'} · ${formatTanggalJam(p.occurred_at ?? p.created_at)}`}
       >
         {batal && <LencanaStatus nada="bahaya" anak="Dibatalkan — stok sudah dikembalikan" />}
+        {!batal && siapPada && (
+          <LencanaStatus nada="berhasil" anak={`Siap diambil sejak ${formatJam(siapPada)} — pengemudi sudah diberi tahu`} />
+        )}
 
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 rounded-kontrol bg-permukaan-2 p-3 text-label">
           {info
@@ -795,6 +825,23 @@ function DialogDetailPesanan({
           <p role="alert" className="text-label text-bahaya-teks">
             {galat}
           </p>
+        )}
+
+        {/* Aksi utama dapur: lebar penuh, terpisah dari Batalkan/Tutup supaya
+            tidak berdesakan (dan tidak salah tekan) di baris yang sama. */}
+        {bisaSiap && !siapPada && !membatalkan && (
+          <Tombol
+            lebarPenuh
+            onClick={() => {
+              setGalat(null)
+              siap.mutate()
+            }}
+            memuat={siap.isPending}
+            labelMemuat="Memberi tahu…"
+          >
+            <ChefHat className="h-5 w-5" aria-hidden />
+            Tandai Siap Diambil
+          </Tombol>
         )}
 
         <AksiDialog>

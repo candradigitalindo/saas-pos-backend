@@ -47,6 +47,8 @@ export interface PesananKanal {
   fee_amount: number
   net_amount: number
   created_at: string
+  /** Kapan toko menandai makanan siap diambil (GoFood/GrabFood). */
+  ready_at?: string
   /** Hanya pada daftar pesanan (dari penjualannya). */
   receipt_no?: string
   sale_status?: string
@@ -80,6 +82,8 @@ export interface PenyediaKanal {
   requires_authorization?: boolean
   /** Stok toko bisa dikirim ke penyedia ini (setelah barang dicocokkan). */
   stock_sync?: boolean
+  /** Pesanan bisa ditandai "siap diambil" ke penyedia (GoFood, GrabFood). */
+  mark_ready?: boolean
 }
 
 /** GET /channels/:id/stock-status — ringkasan kiriman stok ke marketplace. */
@@ -167,6 +171,9 @@ export const kanalApi = {
     buyer_phone?: string
     items: { product_id: string; qty: string; unit_price?: number }[]
   }) => api.post<PesananKanal>('/channel-orders', input),
+
+  /** Beri tahu aplikasi antar bahwa makanan siap diambil (idempoten). */
+  tandaiSiap: (id: string) => api.post<PesananKanal>(`/channel-orders/${id}/ready`),
 
   batalkan: (id: string, reason: string) =>
     api.post<PesananKanal>(`/channel-orders/${id}/cancel`, { reason }),

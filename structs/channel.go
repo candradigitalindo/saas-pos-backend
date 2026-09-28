@@ -126,6 +126,8 @@ type ChannelOrderResponse struct {
 	FeeAmount       int64  `json:"fee_amount"`
 	NetAmount       int64  `json:"net_amount"`
 	CreatedAt       string `json:"created_at"`
+	// ReadyAt: kapan toko menandai pesanan siap diambil (GoFood/GrabFood).
+	ReadyAt string `json:"ready_at,omitempty"`
 	// Hanya pada daftar (GET /channel-orders): dari penjualannya — nomor nota,
 	// statusnya (dibatalkan?), waktu pesanan, dan isi belanja.
 	ReceiptNo  string                     `json:"receipt_no,omitempty"`
@@ -173,6 +175,8 @@ type ChannelProviderInfo struct {
 	RequiresAuthorization bool `json:"requires_authorization,omitempty"`
 	// StockSync: stok toko bisa dikirim ke penyedia ini (setelah barang dicocokkan).
 	StockSync bool `json:"stock_sync,omitempty"`
+	// MarkReady: pesanan bisa ditandai "siap diambil" ke penyedia (aplikasi antar).
+	MarkReady bool `json:"mark_ready,omitempty"`
 }
 
 // ChannelConnectionRequest: PUT /channels/:id/connection. Isian rahasia yang

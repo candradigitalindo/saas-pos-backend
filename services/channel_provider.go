@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"candra/backend-api/models"
 	"candra/backend-api/structs"
 )
 
@@ -106,6 +107,12 @@ type authorizer interface {
 // dihapus bila identitas aplikasinya berganti.
 type statefulAuth interface{ StateKeys() []string }
 
+// orderReadier: aplikasi antar yang bisa diberi tahu bahwa makanan siap
+// diambil (pengemudi/pembeli mendapat kabar) — GoFood, GrabFood.
+type orderReadier interface {
+	MarkReady(ctx context.Context, cred ChannelCredentials, co models.ChannelOrder) error
+}
+
 // izinDicabut: penyedia yang memberi tahu lewat webhook bahwa toko mencabut
 // izin aplikasi (Tokopedia & Shop: SELLER_DEAUTHORIZATION) — token dihapus dan
 // sambungan ditandai galat supaya tenant tahu harus mengotorisasi ulang.
@@ -143,6 +150,7 @@ func ListChannelProviders() []structs.ChannelProviderInfo {
 		ad := providerAdapters[k]
 		info := ad.Info()
 		_, info.StockSync = ad.(stockSyncer)
+		_, info.MarkReady = ad.(orderReadier)
 		out = append(out, info)
 	}
 	return out

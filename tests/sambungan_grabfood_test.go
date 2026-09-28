@@ -2,6 +2,7 @@ package tests
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -22,6 +23,7 @@ func TestSambunganGrabFoodDariKredensialTenant(t *testing.T) {
 	call(t, "PUT", "/api/v1/products/"+f.prodA, f.token, map[string]any{"sku": "GF-A"}).mustOK(t, "sku A")
 	ch := makeChannel(t, f, "GrabFood", "0.25")
 
+	var tandaSiap []string
 	grab := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
@@ -36,6 +38,10 @@ func TestSambunganGrabFoodDariKredensialTenant(t *testing.T) {
 			_, _ = w.Write([]byte(`{"access_token":"tok-grab","token_type":"Bearer","expires_in":604799}`))
 		case r.Header.Get("Authorization") == "Bearer tok-grab" && r.URL.Path == "/partner/v1/merchants/1-CYNGRUNGSBAAAA/store/status":
 			_, _ = w.Write([]byte(`{"closeReason":"","isInSpecialOpeningHourRange":false,"isOpen":true}`))
+		case r.Header.Get("Authorization") == "Bearer tok-grab" && r.Method == "POST" && r.URL.Path == "/partner/v1/orders/mark":
+			raw, _ := io.ReadAll(r.Body)
+			tandaSiap = append(tandaSiap, strings.TrimSpace(string(raw)))
+			w.WriteHeader(http.StatusNoContent)
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -113,6 +119,15 @@ func TestSambunganGrabFoodDariKredensialTenant(t *testing.T) {
 	}
 	assertI64(t, p, "gross_amount", 30000) // 2 × 1.500.000 minor (eksponen 2) = 2 × Rp 15.000
 	assertI64(t, p, "fee_amount", 7500)    // komisi kanal 25%
+
+	// Tandai siap → Grab diberi tahu (markStatus 1), sekali saja.
+	if sp := call(t, "POST", "/api/v1/channel-orders/"+p["id"].(string)+"/ready", f.token, nil).mustOK(t, "siap").data(t); sp["ready_at"] == nil {
+		t.Fatalf("tandai siap: %v", sp)
+	}
+	call(t, "POST", "/api/v1/channel-orders/"+p["id"].(string)+"/ready", f.token, nil).mustOK(t, "siap lagi")
+	if len(tandaSiap) != 1 || tandaSiap[0] != `{"markStatus":1,"orderID":"123-CYNKLPCVRN5ZMY"}` {
+		t.Fatalf("mark order: %v", tandaSiap)
+	}
 
 	kirim("/order", "Bearer "+akses, status("CANCELLED")).mustOK(t, "batal")
 	processChannelEvents(t, f.token)

@@ -529,6 +529,7 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	co.GET("/:id", controllers.GetChannelOrder)
 	co.POST("/:id/status", controllers.UpdateChannelOrderStatus)
 	co.POST("/:id/cancel", controllers.CancelChannelOrder)
+	co.POST("/:id/ready", controllers.MarkChannelOrderReady)
 
 	// Pipeline peristiwa kanal (Fase 11b, §5.10, blueprint F.6/F.8). Inbox
 	// peristiwa & antrean sinkron stok dijaga channel.manage; rekonsiliasi

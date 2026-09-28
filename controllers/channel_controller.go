@@ -209,6 +209,19 @@ func UpdateChannelOrderStatus(c *gin.Context) {
 	})
 }
 
+// MarkChannelOrderReady: POST /api/v1/channel-orders/:id/ready — beri tahu
+// aplikasi antar bahwa makanan siap diambil.
+func MarkChannelOrderReady(c *gin.Context) {
+	res, err := services.TandaiPesananSiap(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		notFoundOr(c, err, repositories.ErrChannelOrderNotFound, "Pesanan kanal tidak ditemukan")
+		return
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[structs.ChannelOrderResponse]{
+		Success: true, Message: "Pesanan ditandai siap", Data: res,
+	})
+}
+
 func CancelChannelOrder(c *gin.Context) {
 	var req structs.ChannelOrderCancelRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

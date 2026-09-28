@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/csv"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -424,6 +425,10 @@ type ChannelOrderInput struct {
 	FeeAmount       *int64
 	OccurredAt      *time.Time
 	Items           []ChannelOrderItemInput
+	// RawPayload: payload peristiwa (berisi payload asli penyedia di "_raw") —
+	// disimpan untuk penelusuran & aksi lanjutan (mis. jenis pesanan GoFood
+	// untuk "Tandai siap").
+	RawPayload json.RawMessage
 }
 
 // ChannelOrderItemInput satu baris pesanan kanal.
@@ -625,6 +630,9 @@ func RecordChannelOrder(ctx context.Context, in ChannelOrderInput) (structs.Chan
 			ExternalStatus: "completed",
 			BuyerName:      in.BuyerName, BuyerPhone: in.BuyerPhone,
 			ShippingAddress: in.ShippingAddress, Courier: in.Courier,
+		}
+		if len(in.RawPayload) > 0 && json.Valid(in.RawPayload) {
+			co.RawPayload = in.RawPayload
 		}
 		if err := repositories.CreateChannelOrder(ctx, tx, &co); err != nil {
 			return err
@@ -848,7 +856,15 @@ func channelOrderToResponse(o models.ChannelOrder, amt channelSaleAmounts) struc
 		Courier: o.Courier, TrackingNo: o.TrackingNo,
 		GrossAmount: amt.gross, FeeAmount: amt.fee, NetAmount: amt.net,
 		CreatedAt: o.CreatedAt.UTC().Format(saleTimeLayout),
+		ReadyAt:   waktuOpsional(o.ReadyAt),
 	}
+}
+
+func waktuOpsional(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return t.UTC().Format(saleTimeLayout)
 }
 
 // ChannelOrderToResponse — untuk controller list (tanpa ringkasan uang detail).
@@ -860,4 +876,65 @@ func ChannelOrderToResponse(o models.ChannelOrder) structs.ChannelOrderResponse 
 func ChannelToResponse(c models.Channel) structs.ChannelResponse { return channelToResponse(c) }
 func ChannelProductToResponse(p models.ChannelProduct) structs.ChannelProductResponse {
 	return channelProductToResponse(p)
+}
+
+// TandaiPesananSiap memberi tahu aplikasi antar (GoFood/GrabFood) bahwa
+// makanan siap diambil, lalu mencatat ready_at. Idempoten: pesanan yang sudah
+// ditandai tidak dikirim ulang ke penyedia.
+func TandaiPesananSiap(ctx context.Context, id string) (structs.ChannelOrderResponse, error) {
+	var out structs.ChannelOrderResponse
+	var co models.ChannelOrder
+	var ch models.Channel
+	sudah := false
+	err := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
+		var err error
+		if co, err = repositories.FindChannelOrder(ctx, tx, id); err != nil {
+			return err
+		}
+		if ch, err = repositories.FindChannel(ctx, tx, co.ChannelID); err != nil {
+			return err
+		}
+		var s models.Sale
+		if err := repositories.FindSaleInTenant(ctx, tx, co.SaleID, &s); co.ExternalStatus == "canceled" || (err == nil && s.Status == "canceled") {
+			return fmt.Errorf("%w: pesanan ini sudah dibatalkan", helpers.ErrConflict)
+		}
+		if co.ReadyAt != nil {
+			sudah = true
+			out = channelOrderToResponse(co, existingSaleAmounts(ctx, tx, co.SaleID))
+		}
+		return nil
+	})
+	if err != nil || sudah {
+		return out, err
+	}
+	ad, ada := providerAdapters[ch.Provider]
+	r, bisa := ad.(orderReadier)
+	if !ada || !bisa || ch.IntegrationMode != "api" {
+		return out, fmt.Errorf("%w: kanal ini tidak tersambung ke aplikasi antar yang menerima tanda siap", helpers.ErrValidation)
+	}
+	err = denganKredensialTerkunci(ctx, ch.ID, func(_ *models.Channel, _ ProviderAdapter, cred ChannelCredentials) error {
+		tctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		defer cancel()
+		if err := r.MarkReady(tctx, cred, co); err != nil {
+			return fmt.Errorf("%w: %v", helpers.ErrValidation, err)
+		}
+		return nil
+	})
+	if err != nil {
+		return out, err
+	}
+	err = repositories.WithTenant(ctx, func(tx *gorm.DB) error {
+		co, err := repositories.FindChannelOrder(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		now := time.Now().UTC()
+		co.ReadyAt, co.ExternalStatus = &now, "ready"
+		if err := repositories.SaveChannelOrderStatus(ctx, tx, &co); err != nil {
+			return err
+		}
+		out = channelOrderToResponse(co, existingSaleAmounts(ctx, tx, co.SaleID))
+		return nil
+	})
+	return out, err
 }
