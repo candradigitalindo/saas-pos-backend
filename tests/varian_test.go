@@ -80,6 +80,18 @@ func TestVarianBarang(t *testing.T) {
 			t.Fatalf("nama barang pesanan kanal: %q", n)
 		}
 	}
+
+	// Pesanan kanal yang dicatat MANUAL dengan variant_id (layar Kanal).
+	kecilID := kecil["id"].(string)
+	manual := call(t, "POST", "/api/v1/channel-orders", f.token, map[string]any{
+		"channel_id": ch, "external_order_id": "MAN-VAR-1",
+		"items": []map[string]any{{"product_id": f.prodA, "variant_id": kecilID, "qty": "2"}},
+	}).mustCode(t, "pesanan manual bervarian", 201).data(t)
+	assertI64(t, manual, "gross_amount", 26000) // 2 × (15.000 − 2.000)
+	jualManual := call(t, "GET", "/api/v1/sales/"+manual["sale_id"].(string), f.token, nil).mustOK(t, "penjualan manual").data(t)
+	if n := jualManual["items"].([]any)[0].(map[string]any)["product_name"].(string); !strings.HasSuffix(n, "(Kecil)") {
+		t.Fatalf("nama barang pesanan manual: %q", n)
+	}
 }
 
 func kurang(a, b string) string {

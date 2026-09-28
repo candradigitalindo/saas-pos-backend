@@ -1,4 +1,5 @@
 import { api, type Halaman } from '@/lib/api-client'
+import type { VarianProduk } from '@/bersama/tipe/katalog'
 
 /** Kinerja kanal dalam `days` hari terakhir (hanya pesanan selesai; batal terpisah). */
 export interface StatistikKanal {
@@ -194,8 +195,11 @@ export const kanalApi = {
     external_order_id: string
     buyer_name?: string
     buyer_phone?: string
-    items: { product_id: string; qty: string; unit_price?: number }[]
+    items: { product_id: string; variant_id?: string; qty: string; unit_price?: number }[]
   }) => api.post<PesananKanal>('/channel-orders', input),
+
+  /** Varian satu barang — daftar barang tidak memuatnya. */
+  varianBarang: (productId: string) => api.get<VarianProduk[]>(`/products/${productId}/variants`),
 
   /** Beri tahu aplikasi antar bahwa makanan siap diambil (idempoten). */
   tandaiSiap: (id: string) => api.post<PesananKanal>(`/channel-orders/${id}/ready`),

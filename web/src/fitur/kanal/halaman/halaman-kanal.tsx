@@ -41,7 +41,7 @@ import { formatQty } from '@/bersama/util/desimal'
 import { formatJam, formatTanggalAkrab, formatTanggalJam } from '@/bersama/util/tanggal'
 import { inisialNama } from '@/bersama/util/inisial'
 import { cn } from '@/bersama/util/cn'
-import type { Produk } from '@/bersama/tipe/katalog'
+import type { Produk, VarianProduk } from '@/bersama/tipe/katalog'
 import { kanalApi, type HasilImporKanal, type Kanal, type PesananKanal } from '../api'
 import { DialogSambungan, kodePenyedia } from '../komponen/dialog-sambungan'
 
@@ -1013,6 +1013,20 @@ function DialogKanal({ onTutup }: { onTutup: () => void }) {
 
 // ── Dialog catat pesanan ────────────────────────────────────────────────────
 
+/** Satu baris pesanan manual. `pilihan` terisi bila barangnya bervarian. */
+interface BarisPesanan {
+  kunci: string
+  produk: Produk
+  pilihan?: VarianProduk[]
+  varian?: VarianProduk
+  qty: string
+}
+
+/** Perkiraan harga satuan: harga jual + selisih varian (server memakai harga kanal bila dipetakan). */
+function hargaPesanan(b: BarisPesanan): number {
+  return b.produk.sell_price + (b.varian?.price_delta ?? 0)
+}
+
 function DialogPesanan({
   kanalAwal,
   pilihan,
@@ -1028,12 +1042,50 @@ function DialogPesanan({
   const [nomor, setNomor] = useState('')
   const [pembeli, setPembeli] = useState('')
   const [cari, setCari] = useState('')
-  const [baris, setBaris] = useState<{ produk: Produk; qty: string }[]>([])
+  const [baris, setBaris] = useState<BarisPesanan[]>([])
   const [galat, setGalat] = useState<string | null>(null)
 
   const produk = useDaftarProduk(cari)
   // Perkiraan — server memakai harga khusus kanal bila barangnya dipetakan.
-  const kotor = baris.reduce((t, b) => t + Math.round(b.produk.sell_price * Number(b.qty)), 0)
+  const kotor = baris.reduce((t, b) => t + Math.round(hargaPesanan(b) * Number(b.qty)), 0)
+  // Barang bervarian wajib dipilih variannya (sama dengan kasir): harganya
+  // bergantung pada pilihan itu.
+  const belumPilih = baris.find((b) => (b.pilihan?.length ?? 0) > 0 && !b.varian)
+
+  /** Tambah barang; bila bervarian, variannya dimuat lalu wajib dipilih. */
+  function tambahBarang(p: Produk) {
+    setCari('')
+    const kunci = `${p.id}#${Date.now()}`
+    setBaris((l) => {
+      // Barang tanpa varian cukup satu baris; yang bervarian boleh berulang
+      // (satu baris per varian).
+      if (l.some((b) => b.produk.id === p.id && !(b.pilihan?.length ?? 0))) return l
+      return [...l, { kunci, produk: p, qty: '1' }]
+    })
+    void kanalApi
+      .varianBarang(p.id)
+      .then((vs) => {
+        const aktif = vs.filter((v) => v.is_active)
+        if (aktif.length === 0) return
+        setBaris((l) => l.map((b) => (b.kunci === kunci ? { ...b, pilihan: aktif } : b)))
+      })
+      .catch(() => {})
+  }
+
+  function pilihVarian(kunci: string, v: VarianProduk) {
+    setBaris((l) => {
+      const b = l.find((x) => x.kunci === kunci)
+      if (!b) return l
+      // Varian yang sama sudah ada di baris lain → digabung, bukan kembar.
+      const kembar = l.find((x) => x.kunci !== kunci && x.produk.id === b.produk.id && x.varian?.id === v.id)
+      if (kembar) {
+        return l
+          .filter((x) => x.kunci !== kunci)
+          .map((x) => (x.kunci === kembar.kunci ? { ...x, qty: String(Number(x.qty) + Number(b.qty)) } : x))
+      }
+      return l.map((x) => (x.kunci === kunci ? { ...x, varian: v } : x))
+    })
+  }
   const komisi = kanal ? Math.round((kotor * persenKomisi(kanal)) / 100) : 0
 
   const catat = useMutation({
@@ -1042,7 +1094,11 @@ function DialogPesanan({
         channel_id: kanal!.id,
         external_order_id: nomor.trim(),
         buyer_name: pembeli.trim() || undefined,
-        items: baris.map((b) => ({ product_id: b.produk.id, qty: b.qty })),
+        items: baris.map((b) => ({
+          product_id: b.produk.id,
+          ...(b.varian ? { variant_id: b.varian.id } : {}),
+          qty: b.qty,
+        })),
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pesanan-kanal'] })
@@ -1132,10 +1188,7 @@ function DialogPesanan({
                   <li key={p.id}>
                     <button
                       type="button"
-                      onClick={() => {
-                        setBaris((l) => (l.some((b) => b.produk.id === p.id) ? l : [...l, { produk: p, qty: '1' }]))
-                        setCari('')
-                      }}
+                      onClick={() => tambahBarang(p)}
                       className="flex min-h-12 w-full items-center justify-between gap-3 px-3 text-left hover:bg-permukaan-2"
                     >
                       <span className="min-w-0 truncate text-label text-teks-utama">{p.name}</span>
@@ -1152,13 +1205,16 @@ function DialogPesanan({
           {baris.length > 0 && (
             <ul className="flex flex-col divide-y divide-garis rounded-kontrol border border-garis">
               {baris.map((b, i) => (
-                <li key={b.produk.id} className="flex flex-col gap-2 p-3">
+                <li key={b.kunci} className="flex flex-col gap-2 p-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="font-medium text-teks-utama">{b.produk.name}</p>
+                      <p className="font-medium text-teks-utama">
+                        {b.produk.name}
+                        {b.varian && ` (${b.varian.name})`}
+                      </p>
                       <p className="text-keterangan tabular-nums text-teks-redup">
-                        {formatRupiah(b.produk.sell_price)} · subtotal{' '}
-                        {formatRupiah(Math.round(b.produk.sell_price * Number(b.qty)))}
+                        {formatRupiah(hargaPesanan(b))} · subtotal{' '}
+                        {formatRupiah(Math.round(hargaPesanan(b) * Number(b.qty)))}
                       </p>
                     </div>
                     <button
@@ -1170,6 +1226,17 @@ function DialogPesanan({
                       <Trash2 className="h-5 w-5" aria-hidden />
                     </button>
                   </div>
+                  {b.pilihan?.length ? (
+                    <SegmenPilihan
+                      label={`Varian ${b.produk.name}`}
+                      nilai={b.varian?.id ?? ''}
+                      onPilih={(id) => {
+                        const v = b.pilihan!.find((x) => x.id === id)
+                        if (v) pilihVarian(b.kunci, v)
+                      }}
+                      pilihan={b.pilihan.map((v) => [v.id, v.name] as const)}
+                    />
+                  ) : null}
                   <StepperJumlah
                     nilai={b.qty}
                     onNilai={(q) => setBaris((l) => l.map((x, j) => (j === i ? { ...x, qty: q } : x)))}
@@ -1201,6 +1268,9 @@ function DialogPesanan({
             </dl>
           )}
 
+          {belumPilih && (
+            <p className="text-label text-jingga-700">Pilih varian {belumPilih.produk.name} dulu.</p>
+          )}
           {galat && (
             <p className="rounded-kontrol border border-bahaya bg-bahaya-teks/10 px-3 py-2 text-label text-bahaya-teks">
               {galat}
@@ -1211,7 +1281,7 @@ function DialogPesanan({
         <AksiDialog>
           <Tombol
             memuat={catat.isPending}
-            disabled={!kanal || !nomor.trim() || baris.length === 0}
+            disabled={!kanal || !nomor.trim() || baris.length === 0 || !!belumPilih}
             onClick={() => {
               setGalat(null)
               catat.mutate()

@@ -162,7 +162,7 @@ menu aktif selalu digulir ke dalam pandangan.
 | Kanal Online: ringkasan 30 hari (diterima bersih, pesanan, penjualan, komisi), kartu per kanal dengan kinerjanya & saklar aktif, catat pesanan (pilih kanal, perkiraan komisi), impor CSV per SKU, daftar pesanan + rincian & pembatalan | `GET\|POST\|PUT /channels[/:id]` · `POST /channels/:id/orders/import` | `channel.manage` |
 | Pemetaan SKU kanal ↔ produk | `GET\|POST /channels/:id/products` · `DELETE /channels/:id/products/:pid` | `channel.manage` |
 | Pesanan kanal | `GET /channel-orders` · `GET /channel-orders/:id` | `channel.order.accept` |
-| Catat pesanan manual (WA/IG) | `POST /channel-orders` | `channel.order.accept` |
+| Catat pesanan manual (WA/IG) — barang bervarian memuat variannya (`GET /products/:id/variants`) dan baris itu wajib dipilih variannya lewat pilihan "Reguler \| Besar" (tombol Catat terkunci + "Pilih varian X dulu"); barang bervarian boleh ditambah lagi untuk varian lain, varian kembar digabung; perkiraan harga = harga jual + selisih | `POST /channel-orders` (`items[].variant_id`) | `channel.order.accept` |
 | Ubah status / batalkan | `POST /channel-orders/:id/status` · `POST /channel-orders/:id/cancel` | `channel.order.accept` |
 | Impor laporan harian (CSV) | `POST /channels/:id/orders/import` | `channel.order.accept` |
 | Antrean peristiwa & sinkron stok | `GET /channels/:id/events` · `GET /channels/:id/stock-syncs` | `channel.manage` |
