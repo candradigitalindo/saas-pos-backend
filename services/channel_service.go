@@ -193,8 +193,11 @@ func UpsertChannelProduct(ctx context.Context, channelID string, in structs.Chan
 	if err != nil {
 		return out, err
 	}
+	var ch models.Channel
+	berRef := false
 	err = repositories.WithTenant(ctx, func(tx *gorm.DB) error {
-		if _, err := repositories.FindChannel(ctx, tx, channelID); err != nil {
+		var err error
+		if ch, err = repositories.FindChannel(ctx, tx, channelID); err != nil {
 			return err
 		}
 		if err := repositories.FindProductInTenant(ctx, tx, in.ProductID, &models.Product{}); err != nil {
@@ -217,15 +220,23 @@ func UpsertChannelProduct(ctx context.Context, channelID string, in structs.Chan
 		}
 		if found {
 			cp.ID = existing.ID
+			cp.ExternalProductID = existing.ExternalProductID // ref hasil pencocokan tetap
 			if err := repositories.SaveChannelProduct(ctx, tx, &cp); err != nil {
 				return err
 			}
 		} else if err := repositories.CreateChannelProduct(ctx, tx, &cp); err != nil {
 			return err
 		}
+		berRef = cp.ExternalProductID != ""
 		out = channelProductToResponse(cp)
 		return nil
 	})
+	// Penyangga/ketersediaan berubah → stok di marketplace dikirim ulang.
+	if err == nil && berRef {
+		if _, bisa := providerAdapters[ch.Provider].(stockSyncer); bisa {
+			err = antreStokBarang(ctx, ch, in.ProductID)
+		}
+	}
 	return out, err
 }
 

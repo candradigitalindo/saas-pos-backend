@@ -79,6 +79,7 @@ func (tokopediaAdapter) Info() structs.ChannelProviderInfo {
 			"Pembatalan membatalkan penjualan dan mengembalikan stok",
 			"Status pengiriman ikut tercatat",
 			"Webhook didaftarkan & token diperbarui otomatis — toko cukup memberi izin sekali",
+			"Stok toko dikirim ke Tokopedia & Shop setiap berubah (barang yang sudah dicocokkan)",
 		},
 	}
 }
@@ -601,4 +602,150 @@ func (a tokopediaAdapter) FetchOrder(ctx context.Context, cred ChannelCredential
 		return nil, fmt.Errorf("pesanan %s tanpa barang", orderID)
 	}
 	return ev, nil
+}
+
+// ── Stok ───────────────────────────────────────────────────────────────────
+
+// Ref stok Tokopedia & Shop: "product_id:sku_id:warehouse_id" (gudang kosong =
+// satu gudang default); "*" = SKU di lebih dari satu gudang.
+func tokopediaRef(produk, sku, gudang string) string { return produk + ":" + sku + ":" + gudang }
+
+// ListListings: Search Products (semua status selain dihapus), 100 per halaman.
+func (a tokopediaAdapter) ListListings(ctx context.Context, cred ChannelCredentials) ([]ListingPenyedia, error) {
+	if err := a.pastikanToken(ctx, cred); err != nil {
+		return nil, err
+	}
+	var out []ListingPenyedia
+	halaman := ""
+	for i := 0; i < 200; i++ {
+		q := url.Values{"page_size": {"100"}}
+		if halaman != "" {
+			q.Set("page_token", halaman)
+		}
+		data, err := a.panggil(ctx, cred, http.MethodPost, "/product/202502/products/search", q, map[string]string{"status": "ALL"}, true)
+		if err != nil {
+			return nil, err
+		}
+		var r struct {
+			Products []struct {
+				ID     string `json:"id"`
+				Title  string `json:"title"`
+				Status string `json:"status"`
+				Skus   []struct {
+					ID        string `json:"id"`
+					SellerSKU string `json:"seller_sku"`
+					Inventory []struct {
+						WarehouseID string `json:"warehouse_id"`
+					} `json:"inventory"`
+				} `json:"skus"`
+			} `json:"products"`
+			Next string `json:"next_page_token"`
+		}
+		if err := json.Unmarshal(data, &r); err != nil {
+			return nil, fmt.Errorf("daftar produk Tokopedia & Shop tidak terbaca")
+		}
+		for _, p := range r.Products {
+			switch strings.ToUpper(p.Status) {
+			case "DELETED", "FREEZE":
+				continue
+			}
+			for _, s := range p.Skus {
+				gudang := ""
+				switch len(s.Inventory) {
+				case 1:
+					gudang = s.Inventory[0].WarehouseID
+				case 0:
+				default:
+					gudang = "*"
+				}
+				out = append(out, ListingPenyedia{SKU: s.SellerSKU, Ref: tokopediaRef(p.ID, s.ID, gudang), Nama: p.Title})
+			}
+		}
+		if r.Next == "" || len(r.Products) == 0 {
+			break
+		}
+		halaman = r.Next
+	}
+	return out, nil
+}
+
+// PushStock: Update Inventory per produk (SKU satu produk sekali panggil).
+// Kode 0 belum tentu semua berhasil — data.errors dibaca per SKU.
+func (a tokopediaAdapter) PushStock(ctx context.Context, cred ChannelCredentials, stok []StokKirim) map[string]error {
+	galat := map[string]error{}
+	if err := a.pastikanToken(ctx, cred); err != nil {
+		for _, s := range stok {
+			galat[s.Ref] = err
+		}
+		return galat
+	}
+	type skuKirim struct {
+		ref, sku, gudang string
+		qty              int64
+	}
+	perProduk := map[string][]skuKirim{}
+	var urut []string
+	for _, s := range stok {
+		b := strings.SplitN(s.Ref, ":", 3)
+		if len(b) != 3 || b[0] == "" || b[1] == "" {
+			galat[s.Ref] = fmt.Errorf("pengenal listing tidak dikenal — cocokkan barang lagi")
+			continue
+		}
+		if b[2] == "*" {
+			galat[s.Ref] = fmt.Errorf("SKU ini tersebar di lebih dari satu gudang — atur stoknya di Seller Center")
+			continue
+		}
+		if _, ada := perProduk[b[0]]; !ada {
+			urut = append(urut, b[0])
+		}
+		perProduk[b[0]] = append(perProduk[b[0]], skuKirim{ref: s.Ref, sku: b[1], gudang: b[2], qty: s.Qty})
+	}
+	for _, pid := range urut {
+		var skus []map[string]any
+		refSKU := map[string]string{}
+		for _, k := range perProduk[pid] {
+			inv := map[string]any{"quantity": k.qty}
+			if k.gudang != "" {
+				inv["warehouse_id"] = k.gudang
+			}
+			skus = append(skus, map[string]any{"id": k.sku, "inventory": []any{inv}})
+			refSKU[k.sku] = k.ref
+		}
+		data, err := a.panggil(ctx, cred, http.MethodPost, "/product/202309/products/"+pid+"/inventory/update", nil,
+			map[string]any{"skus": skus}, true)
+		if err != nil {
+			for _, k := range perProduk[pid] {
+				galat[k.ref] = err
+			}
+			continue
+		}
+		var r struct {
+			Errors []struct {
+				Code    int    `json:"code"`
+				Message string `json:"message"`
+				Detail  struct {
+					SkuID       string `json:"sku_id"`
+					ExtraErrors []struct {
+						Message string `json:"message"`
+					} `json:"extra_errors"`
+				} `json:"detail"`
+			} `json:"errors"`
+		}
+		_ = json.Unmarshal(data, &r)
+		for _, e := range r.Errors {
+			pesan := e.Message
+			if len(e.Detail.ExtraErrors) > 0 && e.Detail.ExtraErrors[0].Message != "" {
+				pesan = e.Detail.ExtraErrors[0].Message
+			}
+			err := fmt.Errorf("Tokopedia & Shop menolak stok: %s (kode %d)", pesan, e.Code)
+			if ref, ada := refSKU[e.Detail.SkuID]; ada {
+				galat[ref] = err
+				continue
+			}
+			for _, k := range perProduk[pid] { // galat tanpa SKU → seluruh produk
+				galat[k.ref] = err
+			}
+		}
+	}
+	return galat
 }

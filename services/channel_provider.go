@@ -138,11 +138,18 @@ func ProviderCode(s string) string {
 
 // ListChannelProviders: katalog penyedia untuk layar "Hubungkan API".
 func ListChannelProviders() []structs.ChannelProviderInfo {
-	return []structs.ChannelProviderInfo{
-		whatsappAdapter{}.Info(), gofoodAdapter{}.Info(), grabfoodAdapter{}.Info(), shopeeAdapter{}.Info(),
-		tokopediaAdapter{}.Info(), lazadaAdapter{}.Info(),
+	out := make([]structs.ChannelProviderInfo, 0, len(urutanPenyedia))
+	for _, k := range urutanPenyedia {
+		ad := providerAdapters[k]
+		info := ad.Info()
+		_, info.StockSync = ad.(stockSyncer)
+		out = append(out, info)
 	}
+	return out
 }
+
+// urutanPenyedia: urutan tampil di katalog.
+var urutanPenyedia = []string{"whatsapp", "gofood", "grabfood", "shopee", "tokopedia", "lazada"}
 
 // genericFromEvent menyimpan peristiwa penyedia dalam bentuk payload adaptor
 // generik — pekerja memprosesnya dengan jalur yang sama seperti peristiwa lain.

@@ -519,6 +519,8 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	ch.POST("/:id/connection/test", controllers.TestChannelConnection)
 	ch.POST("/:id/connection/authorize", controllers.AuthorizeChannelConnection)
 	ch.DELETE("/:id/connection", controllers.DeleteChannelConnection)
+	ch.POST("/:id/products/match", controllers.MatchChannelProducts)
+	ch.GET("/:id/stock-status", controllers.ChannelStockStatus)
 	t.GET("/channel-providers", chMgr, controllers.ListChannelProviders)
 
 	co := t.Group("/channel-orders", chOrd)

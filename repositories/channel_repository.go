@@ -391,6 +391,97 @@ func FindChannelByWebhookToken(ctx context.Context, token string) (models.Channe
 	return c, err
 }
 
+// ChannelByIDAnyTenant memuat kanal tanpa sesi (pekerja lintas tenant).
+func ChannelByIDAnyTenant(ctx context.Context, id string) (models.Channel, error) {
+	var c models.Channel
+	err := database.DB.WithContext(ctx).First(&c, "id = ?", id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return c, ErrChannelNotFound
+	}
+	return c, err
+}
+
+// ChannelProductsForProduct: semua pemetaan satu barang di kanal (satu barang
+// bisa dijual lewat lebih dari satu SKU/listing).
+func ChannelProductsForProduct(ctx context.Context, tx *gorm.DB, channelID, productID string) ([]models.ChannelProduct, error) {
+	var out []models.ChannelProduct
+	err := scopeTenant(ctx, tenantDB(ctx, tx)).
+		Where("channel_id = ? AND product_id = ?", channelID, productID).Order("external_sku").Find(&out).Error
+	return out, err
+}
+
+// SetChannelProductRef menyimpan pengenal penyedia (hasil pencocokan) dan
+// waktu sinkron stok terakhir.
+func SetChannelProductRef(ctx context.Context, tx *gorm.DB, id, ref string) error {
+	return scopeTenant(ctx, tenantDB(ctx, tx)).Model(&models.ChannelProduct{}).
+		Where("id = ?", id).Update("external_product_id", ref).Error
+}
+
+func MarkChannelProductSynced(ctx context.Context, tx *gorm.DB, ids []string, at time.Time) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	return scopeTenant(ctx, tenantDB(ctx, tx)).Model(&models.ChannelProduct{}).
+		Where("id IN ?", ids).Update("last_synced_at", at).Error
+}
+
+// StokKanalRingkas: angka ringkas sinkron stok satu kanal.
+type StokKanalRingkas struct {
+	Terpetakan int64
+	BerRef     int64
+	Menunggu   int64
+	Gagal      int64
+	TerakhirAt *time.Time
+	GalatAkhir string
+	SKUGalat   string
+}
+
+func ChannelStockSummary(ctx context.Context, channelID string) (StokKanalRingkas, error) {
+	var r StokKanalRingkas
+	db := tenantDB(ctx, nil)
+	if err := scopeTenant(ctx, db.Model(&models.ChannelProduct{})).Where("channel_id = ?", channelID).Count(&r.Terpetakan).Error; err != nil {
+		return r, err
+	}
+	if err := scopeTenant(ctx, db.Model(&models.ChannelProduct{})).
+		Where("channel_id = ? AND COALESCE(external_product_id, '') <> ''", channelID).Count(&r.BerRef).Error; err != nil {
+		return r, err
+	}
+	if err := scopeTenant(ctx, db.Model(&models.ChannelStockSync{})).
+		Where("channel_id = ? AND status = 'pending'", channelID).Count(&r.Menunggu).Error; err != nil {
+		return r, err
+	}
+	// Gagal = barang yang antrean TERAKHIR-nya gagal (bukan riwayat lama).
+	var gagal []struct {
+		LastError   string
+		ExternalSKU string
+	}
+	err := db.Raw(`
+		SELECT s.last_error, COALESCE((SELECT cp.external_sku FROM channel_products cp
+		       WHERE cp.tenant_id = s.tenant_id AND cp.channel_id = s.channel_id AND cp.product_id = s.product_id
+		       ORDER BY cp.external_sku LIMIT 1), '') AS external_sku
+		FROM channel_stock_syncs s
+		WHERE s.tenant_id = ? AND s.channel_id = ? AND s.status = 'failed'
+		  AND s.queued_at = (SELECT max(t.queued_at) FROM channel_stock_syncs t
+		      WHERE t.tenant_id = s.tenant_id AND t.channel_id = s.channel_id AND t.product_id = s.product_id)
+		ORDER BY s.queued_at DESC`, currentTenantID(ctx), channelID).Scan(&gagal).Error
+	if err != nil {
+		return r, err
+	}
+	r.Gagal = int64(len(gagal))
+	if len(gagal) > 0 {
+		r.GalatAkhir, r.SKUGalat = gagal[0].LastError, gagal[0].ExternalSKU
+	}
+	var akhir sql.NullTime
+	if err := scopeTenant(ctx, db.Model(&models.ChannelStockSync{})).
+		Where("channel_id = ? AND status = 'sent'", channelID).Select("MAX(sent_at)").Row().Scan(&akhir); err != nil {
+		return r, err
+	}
+	if akhir.Valid {
+		r.TerakhirAt = &akhir.Time
+	}
+	return r, nil
+}
+
 // ChannelsForPull: kanal aktif LINTAS tenant yang tersambung ke penyedia
 // dengan tarikan berkala (pekerja, tanpa sesi).
 func ChannelsForPull(ctx context.Context, providers []string) ([]models.Channel, error) {

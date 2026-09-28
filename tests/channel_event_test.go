@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"testing"
 	"time"
-
-	"github.com/shopspring/decimal"
 )
 
 // Uji integrasi Fase 11b — pipeline peristiwa kanal provider-agnostik
@@ -222,9 +220,11 @@ func TestChannelSettlementReconcile(t *testing.T) {
 	}).mustCode(t, "receipt tanpa settlement", 404)
 }
 
-// TestChannelStockSyncQueued — memproses order.created mengantre sinkron stok
-// per produk; adaptor generik menandai 'sent' (no-op) dan antrean bisa dilihat.
-func TestChannelStockSyncQueued(t *testing.T) {
+// TestChannelStockSyncHanyaKanalTersambung — pesanan dari kanal yang TIDAK
+// tersambung ke API penyedia (webhook generik) tetap memotong stok, tetapi
+// tidak mengantre kiriman stok: tidak ada API untuk menerimanya. Kiriman stok
+// ke marketplace diuji di sinkron_stok_test.go.
+func TestChannelStockSyncHanyaKanalTersambung(t *testing.T) {
 	requireDB(t)
 	f := setupPOS(t, "chss")
 	chID := makeChannelWithRef(t, f, "tokopedia", "0", "MERCH-chss")
@@ -234,24 +234,17 @@ func TestChannelStockSyncQueued(t *testing.T) {
 		"items": []map[string]any{{"product_id": f.prodA, "qty": "3"}},
 	}).mustCode(t, "webhook", 200)
 	p := processChannelEvents(t, f.token)
-	assertI64(t, p, "stock_syncs_sent", 1)
+	assertI64(t, p, "events_done", 1)
+	assertI64(t, p, "stock_syncs_sent", 0)
 
 	ss := call(t, "GET", "/api/v1/channels/"+chID+"/stock-syncs", f.token, nil).
 		mustOK(t, "antrean sinkron stok").Body["data"].([]any)
-	if len(ss) != 1 {
-		t.Fatalf("channel_stock_syncs = %d, mau 1", len(ss))
+	if len(ss) != 0 {
+		t.Fatalf("channel_stock_syncs = %d, mau 0 (kanal tanpa API)", len(ss))
 	}
-	row := ss[0].(map[string]any)
-	if row["product_id"] != f.prodA {
-		t.Fatalf("product_id = %v, mau %s", row["product_id"], f.prodA)
-	}
-	if row["status"] != "sent" {
-		t.Fatalf("status = %v, mau sent", row["status"])
-	}
-	// requested_qty = stok terkini setelah pesanan (100 - 3 = 97).
-	got, _ := decimal.NewFromString(row["requested_qty"].(string))
-	if !got.Equal(decimal.NewFromInt(97)) {
-		t.Fatalf("requested_qty = %v, mau 97", row["requested_qty"])
+	st := call(t, "GET", "/api/v1/channels/"+chID+"/stock-status", f.token, nil).mustOK(t, "status stok").data(t)
+	if st["supported"] != false {
+		t.Fatalf("kanal tanpa sambungan API tidak mendukung kirim stok: %v", st)
 	}
 }
 

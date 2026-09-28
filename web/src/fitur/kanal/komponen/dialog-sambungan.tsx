@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Copy, ExternalLink, Loader2, PlugZap, Store, TriangleAlert, Unplug } from 'lucide-react'
+import { Boxes, Check, Copy, ExternalLink, Loader2, PlugZap, Store, TriangleAlert, Unplug } from 'lucide-react'
 import { Kolom } from '@/bersama/ui/kolom'
 import { Tombol } from '@/bersama/ui/tombol'
 import { AksiDialog, Dialog, IsiDialog } from '@/bersama/ui/dialog'
@@ -9,7 +9,7 @@ import { useToast } from '@/bersama/komponen/toast'
 import { GalatAPI } from '@/lib/api-client'
 import { formatTanggalJam } from '@/bersama/util/tanggal'
 import { cn } from '@/bersama/util/cn'
-import { kanalApi, type Kanal, type PenyediaKanal, type SambunganKanal } from '../api'
+import { kanalApi, type HasilCocokBarang, type Kanal, type PenyediaKanal, type SambunganKanal } from '../api'
 
 /** Nama bebas saat membuat kanal → kode penyedia (sama dengan services.ProviderCode). */
 const ALIAS: Record<string, string> = {
@@ -303,6 +303,10 @@ export function DialogSambungan({ kanal, onTutup }: { kanal: Kanal; onTutup: () 
                   />
                 )}
 
+                {tersimpan && s?.status === 'connected' && dipilih.stock_sync && (!perluIzin || s.authorized) && (
+                  <StokKeMarketplace kanalId={kanal.id} penyedia={dipilih.name} />
+                )}
+
                 {galat && (
                   <p role="alert" className="text-label text-bahaya-teks">
                     {galat}
@@ -513,6 +517,97 @@ function IzinToko({
         <ExternalLink className="h-5 w-5" aria-hidden />
         {menunggu ? 'Buka Lagi Halaman Izin' : `Otorisasi Toko ${penyedia}`}
       </Tombol>
+    </div>
+  )
+}
+
+/**
+ * Kiriman stok ke marketplace. Hanya barang yang sudah dicocokkan (SKU/barcode
+ * sama dengan listing penyedia) yang dikirim — barang lain toko tidak menjadi
+ * galat. Setelah itu stok dikirim sendiri setiap berubah (kasir, retur,
+ * penyesuaian, pesanan kanal lain), dikurangi penyangga per barang.
+ */
+function StokKeMarketplace({ kanalId, penyedia }: { kanalId: string; penyedia: string }) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const [hasil, setHasil] = useState<HasilCocokBarang | null>(null)
+  const status = useQuery({
+    queryKey: ['stok-kanal', kanalId],
+    queryFn: () => kanalApi.statusStok(kanalId),
+    // Selama ada yang menunggu dikirim, angka diperbarui sendiri.
+    refetchInterval: (q) => ((q.state.data?.pending ?? 0) > 0 ? 5000 : false),
+  })
+  const cocok = useMutation({
+    mutationFn: () => kanalApi.cocokkanBarang(kanalId),
+    onSuccess: (r) => {
+      setHasil(r)
+      qc.invalidateQueries({ queryKey: ['stok-kanal', kanalId] })
+      toast.berhasil(`${r.matched} barang tersambung ke ${penyedia}.`)
+    },
+    onError: (e) => toast.gagal(e instanceof GalatAPI ? e.pesan : 'Gagal mencocokkan barang.'),
+  })
+  const st = status.data
+  const kosong = !st || st.linked === 0
+  return (
+    <div className="flex flex-col gap-3 rounded-kontrol border border-garis p-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex min-w-0 flex-1 basis-56 items-start gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sorot text-utama">
+            <Boxes className="h-5 w-5" aria-hidden />
+          </span>
+          <div className="min-w-0 text-label">
+            <p className="font-semibold text-teks-utama">Stok ke {penyedia}</p>
+            <p className="text-teks-sekunder">
+              {status.isLoading
+                ? 'Memuat…'
+                : kosong
+                  ? `Belum ada barang yang dicocokkan dengan listing di ${penyedia}.`
+                  : [
+                      `${st.linked} barang tertaut`,
+                      st.pending > 0 ? `${st.pending} menunggu dikirim` : null,
+                      st.last_sent_at ? `stok terakhir dikirim ${formatTanggalJam(st.last_sent_at)}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+            </p>
+          </div>
+        </div>
+        <Tombol
+          jenis={kosong ? 'utama' : 'kedua'}
+          ukuran="padat"
+          className="w-full sm:w-auto"
+          onClick={() => cocok.mutate()}
+          memuat={cocok.isPending}
+          labelMemuat="Mencocokkan…"
+        >
+          Cocokkan Barang
+        </Tombol>
+      </div>
+      {st && st.failed > 0 && (
+        <p className="flex items-start gap-1.5 text-keterangan text-jingga-700">
+          <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+          <span>
+            {st.failed} barang gagal dikirim{st.last_error_sku ? ` — ${st.last_error_sku}` : ''}: {st.last_error}
+          </span>
+        </p>
+      )}
+      {hasil && (
+        <p role="status" className="rounded-kontrol bg-permukaan-2 px-3 py-2 text-keterangan text-teks-sekunder">
+          {hasil.listings} SKU di {penyedia}: {hasil.matched} cocok
+          {hasil.created > 0 ? ` (${hasil.created} baru)` : ''}.
+          {hasil.unmatched_count > 0 &&
+            ` ${hasil.unmatched_count} tanpa pasangan di toko: ${hasil.unmatched.join(', ')}${
+              hasil.unmatched_count > hasil.unmatched.length ? ', …' : ''
+            } — samakan SKU/barcode barangnya, lalu cocokkan lagi.`}
+          {hasil.without_sku > 0 && ` ${hasil.without_sku} listing belum punya Seller SKU.`}
+        </p>
+      )}
+      {kosong && !hasil && (
+        <p className="text-keterangan text-teks-redup">
+          Barang dicocokkan lewat SKU/barcode yang sama dengan Seller SKU di {penyedia}. Setelah itu stok dikirim
+          sendiri setiap berubah — dari kasir, retur, penyesuaian, maupun pesanan kanal lain.
+        </p>
+      )}
     </div>
   )
 }

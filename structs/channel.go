@@ -171,6 +171,8 @@ type ChannelProviderInfo struct {
 	WebhookLabel string `json:"webhook_label,omitempty"`
 	// RequiresAuthorization: toko harus memberi izin lewat peramban (OAuth).
 	RequiresAuthorization bool `json:"requires_authorization,omitempty"`
+	// StockSync: stok toko bisa dikirim ke penyedia ini (setelah barang dicocokkan).
+	StockSync bool `json:"stock_sync,omitempty"`
 }
 
 // ChannelConnectionRequest: PUT /channels/:id/connection. Isian rahasia yang

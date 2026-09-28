@@ -20,6 +20,28 @@ type WebhookIngestResult struct {
 
 // ── Pekerja ───────────────────────────────────────────────────────────────
 
+// ChannelProductMatchResult: hasil "Cocokkan barang" dengan listing penyedia.
+type ChannelProductMatchResult struct {
+	Listings       int      `json:"listings"`    // SKU unik di penyedia
+	Matched        int      `json:"matched"`     // terpetakan ke barang toko (lama + baru)
+	Created        int      `json:"created"`     // pemetaan baru
+	WithoutSKU     int      `json:"without_sku"` // listing tanpa Seller SKU
+	Unmatched      []string `json:"unmatched"`   // SKU penyedia tanpa pasangan (maks 20)
+	UnmatchedCount int      `json:"unmatched_count"`
+}
+
+// ChannelStockStatusResponse: ringkasan sinkron stok satu kanal.
+type ChannelStockStatusResponse struct {
+	Supported    bool   `json:"supported"`
+	Mapped       int64  `json:"mapped"` // pemetaan barang di kanal ini
+	Linked       int64  `json:"linked"` // … yang sudah bertaut ke listing penyedia
+	Pending      int64  `json:"pending"`
+	Failed       int64  `json:"failed"`
+	LastSentAt   string `json:"last_sent_at,omitempty"`
+	LastError    string `json:"last_error,omitempty"`
+	LastErrorSKU string `json:"last_error_sku,omitempty"`
+}
+
 // ChannelWorkerResult merangkum satu putaran pekerja pemroses.
 type ChannelWorkerResult struct {
 	EventsDone     int `json:"events_done"`

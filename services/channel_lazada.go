@@ -8,6 +8,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
@@ -74,6 +75,7 @@ func (lazadaAdapter) Info() structs.ChannelProviderInfo {
 			"Pembatalan seluruh pesanan membatalkan penjualan dan mengembalikan stok",
 			"Status pengiriman ikut tercatat",
 			"Token diperbarui otomatis — toko cukup memberi izin sekali",
+			"Stok toko dikirim ke Lazada setiap berubah (barang yang sudah dicocokkan)",
 		},
 	}
 }
@@ -587,4 +589,96 @@ func (a lazadaAdapter) PullOrders(ctx context.Context, cred ChannelCredentials, 
 		}
 	}
 	return evs, mulai, nil
+}
+
+// ── Stok ───────────────────────────────────────────────────────────────────
+
+// Ref stok Lazada: "item_id:sku_id:SellerSku" — SellerSku terakhir karena
+// boleh berisi titik dua ("39817:01:01" di contoh resmi).
+
+// ListListings: GetProducts (filter=all), 50 per halaman.
+func (a lazadaAdapter) ListListings(ctx context.Context, cred ChannelCredentials) ([]ListingPenyedia, error) {
+	if err := a.pastikanToken(ctx, cred); err != nil {
+		return nil, err
+	}
+	api, _, _ := lazadaURL()
+	var hasil []ListingPenyedia
+	for offset := 0; offset <= 10000; offset += 50 {
+		out, err := a.panggil(ctx, cred, api, "/products/get", url.Values{
+			"filter": {"all"}, "offset": {strconv.Itoa(offset)}, "limit": {"50"},
+		}, true)
+		if err != nil {
+			return nil, err
+		}
+		var d struct {
+			Products []struct {
+				ItemID     json.RawMessage `json:"item_id"`
+				Attributes struct {
+					Name string `json:"name"`
+				} `json:"attributes"`
+				Skus []struct {
+					SellerSKU string          `json:"SellerSku"`
+					SkuID     json.RawMessage `json:"SkuId"`
+				} `json:"skus"`
+			} `json:"products"`
+		}
+		_ = json.Unmarshal(out["data"], &d)
+		for _, p := range d.Products {
+			item := teksJSON(p.ItemID)
+			for _, s := range p.Skus {
+				if item == "" || teksJSON(s.SkuID) == "" {
+					continue
+				}
+				hasil = append(hasil, ListingPenyedia{SKU: s.SellerSKU, Ref: item + ":" + teksJSON(s.SkuID) + ":" + s.SellerSKU, Nama: p.Attributes.Name})
+			}
+		}
+		if len(d.Products) < 50 {
+			break
+		}
+	}
+	return hasil, nil
+}
+
+// PushStock: UpdateSellableQuantity (payload XML), 20 SKU per panggilan
+// (anjuran dokumen; batas 50).
+func (a lazadaAdapter) PushStock(ctx context.Context, cred ChannelCredentials, stok []StokKirim) map[string]error {
+	galat := map[string]error{}
+	if err := a.pastikanToken(ctx, cred); err != nil {
+		for _, s := range stok {
+			galat[s.Ref] = err
+		}
+		return galat
+	}
+	var sah []StokKirim
+	for _, s := range stok {
+		if b := strings.SplitN(s.Ref, ":", 3); len(b) != 3 || b[0] == "" || b[1] == "" {
+			galat[s.Ref] = fmt.Errorf("pengenal listing tidak dikenal — cocokkan barang lagi")
+			continue
+		}
+		sah = append(sah, s)
+	}
+	api, _, _ := lazadaURL()
+	for awal := 0; awal < len(sah); awal += 20 {
+		bagian := sah[awal:min(awal+20, len(sah))]
+		var b strings.Builder
+		b.WriteString("<Request><Product><Skus>")
+		for _, s := range bagian {
+			p := strings.SplitN(s.Ref, ":", 3)
+			b.WriteString("<Sku><ItemId>" + xmlTeks(p[0]) + "</ItemId><SkuId>" + xmlTeks(p[1]) + "</SkuId><SellerSku>" + xmlTeks(p[2]) +
+				"</SellerSku><SellableQuantity>" + strconv.FormatInt(s.Qty, 10) + "</SellableQuantity></Sku>")
+		}
+		b.WriteString("</Skus></Product></Request>")
+		if _, err := a.panggil(ctx, cred, api, "/product/stock/sellable/update", url.Values{"payload": {b.String()}}, true); err != nil {
+			for _, s := range bagian {
+				galat[s.Ref] = err
+			}
+		}
+	}
+	return galat
+}
+
+func xmlTeks(s string) string {
+	var b strings.Builder
+	_ = xml.EscapeText(&b, []byte(s))
+	return b.String()
 }

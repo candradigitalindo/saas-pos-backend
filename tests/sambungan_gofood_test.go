@@ -110,7 +110,7 @@ func TestSambunganGoFoodDariKredensialTenant(t *testing.T) {
 		req := httptest.NewRequest("POST", "/webhooks/channels/gofood/"+token, strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-Go-Signature", hex.EncodeToString(m.Sum(nil)))
-		req.RemoteAddr = ipPenyedia
+		req.RemoteAddr = "203.0.113.51:4431" // IP sendiri: batas laju webhook per IP
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 		out := apiResp{Code: rec.Code, Raw: rec.Body.String()}

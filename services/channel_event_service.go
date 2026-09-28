@@ -37,10 +37,12 @@ import (
 //  4. Percobaan ulang bertahap + antrean mati (status 'dead') yang bisa dilihat
 //     pemilik.
 //
-// Adaptor spesifik-provider (gofood, shopee, ...) menyusul seiring kemitraan API
-// disetujui (blueprint F.9). Sampai itu ada, semua provider memakai
-// `genericAdapter` yang menerima payload yang SUDAH ternormalisasi — cukup untuk
-// klien webhook internal / jembatan pihak ketiga.
+// Adaptor penyedia nyata (channel_provider.go: WhatsApp, GoFood, GrabFood,
+// Shopee, Tokopedia & Shop, Lazada — kredensial milik tenant) menerjemahkan
+// payload penyedia saat webhook diterima; yang tersimpan & diproses di sini
+// selalu berbentuk generik (`genericAdapter`), sama seperti klien webhook
+// internal / jembatan pihak ketiga. Kiriman stok ke marketplace:
+// channel_stok_service.go.
 
 // ── Adaptor kanal ─────────────────────────────────────────────────────────
 
@@ -325,37 +327,6 @@ func ProcessChannelEvents(ctx context.Context) (structs.ChannelWorkerResult, err
 	return res, err
 }
 
-// ProcessStockSyncs mengirim permintaan sinkron stok yang menunggu. Adaptor
-// generik = no-op (belum ada API kanal) → langsung ditandai 'sent'. Adaptor
-// provider nyata akan mendorong stok di sini. GLOBAL.
-func ProcessStockSyncs(ctx context.Context) (sent, failed int, err error) {
-	const maxIter = 1000
-	for i := 0; i < maxIter; i++ {
-		n := 0
-		e := repositories.Transaction(ctx, func(tx *gorm.DB) error {
-			rows, err := repositories.ClaimPendingStockSyncs(ctx, tx, 50)
-			if err != nil {
-				return err
-			}
-			n = len(rows)
-			for _, r := range rows {
-				if err := repositories.SaveStockSyncResult(ctx, tx, r.ID, "sent", "", r.Attempts+1); err != nil {
-					return err
-				}
-				sent++
-			}
-			return nil
-		})
-		if e != nil {
-			return sent, failed, e
-		}
-		if n == 0 {
-			break
-		}
-	}
-	return sent, failed, nil
-}
-
 // dispatchChannelEvent menerapkan satu peristiwa. Mengembalikan status akhir
 // ('done'/'failed'/'dead') + pesan error. Tidak mengembalikan error ke pemanggil
 // agar status TETAP tersimpan meski penerapannya gagal.
@@ -479,20 +450,9 @@ func applyOrderCreated(ctx context.Context, ch models.Channel, norm NormalizedEv
 				return err
 			}
 		}
-		seen := map[string]bool{}
-		for _, it := range in.Items {
-			if seen[it.ProductID] {
-				continue
-			}
-			seen[it.ProductID] = true
-			qty, err := repositories.CurrentStockQty(ctx, tx, ch.OutletID, it.ProductID, "")
-			if err != nil {
-				return err
-			}
-			if err := repositories.QueueStockSync(ctx, tx, ch.ID, it.ProductID, qty.String()); err != nil {
-				return err
-			}
-		}
+		// Stok ke marketplace TIDAK diantre di sini: pekerja mencocokkan dari
+		// stock_movements untuk SEMUA kanal tersambung (channel_stok_service.go)
+		// — penjualan ini, kasir, retur, dan penyesuaian ikut terkirim.
 		return nil
 	})
 }

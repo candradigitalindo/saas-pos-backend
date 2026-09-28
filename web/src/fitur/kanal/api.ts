@@ -78,6 +78,36 @@ export interface PenyediaKanal {
   webhook_label?: string
   /** Toko harus memberi izin lewat peramban (OAuth) setelah kredensial disimpan — mis. Shopee. */
   requires_authorization?: boolean
+  /** Stok toko bisa dikirim ke penyedia ini (setelah barang dicocokkan). */
+  stock_sync?: boolean
+}
+
+/** GET /channels/:id/stock-status — ringkasan kiriman stok ke marketplace. */
+export interface StatusStokKanal {
+  /** Penyedia menerima stok DAN kanal tersambung ke API-nya. */
+  supported: boolean
+  /** Pemetaan barang di kanal ini. */
+  mapped: number
+  /** … yang sudah bertaut ke listing penyedia (yang dikirimi stok). */
+  linked: number
+  pending: number
+  /** Barang yang kiriman terakhirnya gagal. */
+  failed: number
+  last_sent_at?: string
+  last_error?: string
+  last_error_sku?: string
+}
+
+/** POST /channels/:id/products/match. */
+export interface HasilCocokBarang {
+  /** SKU unik di penyedia. */
+  listings: number
+  matched: number
+  created: number
+  without_sku: number
+  /** SKU penyedia tanpa pasangan (maks 20). */
+  unmatched: string[]
+  unmatched_count: number
 }
 
 /** GET /channels/:id/connection — rahasia hanya pratinjau 4 karakter terakhir. */
@@ -150,6 +180,9 @@ export const kanalApi = {
   putusSambungan: (id: string) => api.hapus<null>(`/channels/${id}/connection`),
   /** Alamat halaman izin toko di penyedia; setiap panggilan membuat state baru. */
   otorisasi: (id: string) => api.post<{ url: string }>(`/channels/${id}/connection/authorize`),
+  statusStok: (id: string) => api.get<StatusStokKanal>(`/channels/${id}/stock-status`),
+  /** Cocokkan listing penyedia dengan barang toko (SKU/barcode), lalu kirim stok pertama. */
+  cocokkanBarang: (id: string) => api.post<HasilCocokBarang>(`/channels/${id}/products/match`),
 
   /** Impor laporan harian dari marketplace sebagai CSV. */
   imporPesanan: (channelId: string, csv: string) =>

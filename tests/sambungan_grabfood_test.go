@@ -69,7 +69,7 @@ func TestSambunganGrabFoodDariKredensialTenant(t *testing.T) {
 		if auth != "" {
 			req.Header.Set("Authorization", auth)
 		}
-		req.RemoteAddr = ipPenyedia
+		req.RemoteAddr = "203.0.113.52:4431" // IP sendiri: batas laju webhook per IP
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 		out := apiResp{Code: rec.Code, Raw: rec.Body.String()}

@@ -143,7 +143,7 @@ func TestSambunganLazadaDariAplikasiTenant(t *testing.T) {
 	}
 	callback := func(kueri string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest("GET", lokal+"/oauth/callback?"+kueri, nil)
-		req.RemoteAddr = ipPenyedia
+		req.RemoteAddr = "203.0.113.53:4431" // IP sendiri: batas laju webhook per IP
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 		return rec
@@ -170,7 +170,7 @@ func TestSambunganLazadaDariAplikasiTenant(t *testing.T) {
 		req := httptest.NewRequest("POST", lokal, bytes.NewReader([]byte(body)))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", hex.EncodeToString(m.Sum(nil)))
-		req.RemoteAddr = ipPenyedia
+		req.RemoteAddr = "203.0.113.53:4431" // IP sendiri: batas laju webhook per IP
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
 		return rec

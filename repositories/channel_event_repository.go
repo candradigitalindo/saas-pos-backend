@@ -221,25 +221,61 @@ func ListSettlements(ctx context.Context, channelID string) ([]models.ChannelSet
 
 // ── Channel stock sync ────────────────────────────────────────────────────
 
-func QueueStockSync(ctx context.Context, tx *gorm.DB, channelID, productID string, qty string) error {
-	tid := currentTenantID(ctx)
-	return tx.WithContext(ctx).Exec(`
+// QueueStockSyncOnce: antre sinkron stok satu barang bila belum ada yang
+// menunggu (pemetaan baru/diubah, gerakan stok). qty = stok saat diantre;
+// yang dikirim dihitung ulang saat dikirim.
+func QueueStockSyncOnce(ctx context.Context, tenantID, channelID, productID string, qty string) error {
+	return database.DB.WithContext(ctx).Exec(`
 		INSERT INTO channel_stock_syncs (id, tenant_id, channel_id, product_id, requested_qty, status, queued_at)
-		VALUES (?, ?, ?, ?, ?, 'pending', now())`,
-		ulid.New(), tid, channelID, productID, qty).Error
+		SELECT ?, ?, ?, ?, ?, 'pending', now()
+		WHERE NOT EXISTS (SELECT 1 FROM channel_stock_syncs
+			WHERE tenant_id = ? AND channel_id = ? AND product_id = ? AND status = 'pending')`,
+		ulid.New(), tenantID, channelID, productID, qty, tenantID, channelID, productID).Error
 }
 
-func ClaimPendingStockSyncs(ctx context.Context, tx *gorm.DB, limit int) ([]models.ChannelStockSync, error) {
+// ProductsNeedingStockSync: barang TERPETAKAN (ber-ref penyedia) di kanal
+// yang belum pernah diantre, atau stoknya bergerak (stock_movements) setelah
+// antrean terakhirnya — dan tidak sedang menunggu. Lintas tenant (pekerja).
+// Patokan antrean terakhir, bukan kiriman terakhir: SKU yang gagal permanen
+// tidak diantre ulang sampai stoknya bergerak lagi.
+func ProductsNeedingStockSync(ctx context.Context, tenantID, channelID, outletID string) ([]string, error) {
+	var ids []string
+	err := database.DB.WithContext(ctx).Raw(`
+		SELECT DISTINCT cp.product_id FROM channel_products cp
+		WHERE cp.tenant_id = ? AND cp.channel_id = ? AND COALESCE(cp.external_product_id, '') <> ''
+		  AND NOT EXISTS (SELECT 1 FROM channel_stock_syncs s
+		      WHERE s.tenant_id = cp.tenant_id AND s.channel_id = cp.channel_id AND s.product_id = cp.product_id AND s.status = 'pending')
+		  AND (
+		    NOT EXISTS (SELECT 1 FROM channel_stock_syncs s
+		        WHERE s.tenant_id = cp.tenant_id AND s.channel_id = cp.channel_id AND s.product_id = cp.product_id)
+		    OR EXISTS (SELECT 1 FROM stock_movements m
+		        WHERE m.tenant_id = cp.tenant_id AND m.outlet_id = ? AND m.product_id = cp.product_id
+		          AND m.created_at > (SELECT max(s.queued_at) FROM channel_stock_syncs s
+		              WHERE s.tenant_id = cp.tenant_id AND s.channel_id = cp.channel_id AND s.product_id = cp.product_id)))`,
+		tenantID, channelID, outletID).Scan(&ids).Error
+	return ids, err
+}
+
+// ClaimPendingStockSyncs mengunci antrean yang siap dikirim; kecuali = baris
+// yang sudah dicoba di putaran ini (dicoba lagi di putaran pekerja berikutnya,
+// bukan beruntun dalam hitungan milidetik).
+func ClaimPendingStockSyncs(ctx context.Context, tx *gorm.DB, limit int, kecuali ...string) ([]models.ChannelStockSync, error) {
 	var rows []models.ChannelStockSync
 	err := tx.WithContext(ctx).
 		Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).
 		Where("status = 'pending' AND attempts < ?", MaxEventAttempts).
-		Order("queued_at").Limit(limit).Find(&rows).Error
+		Where("id NOT IN ?", append([]string{""}, kecuali...)).
+		// Yang belum pernah dicoba dulu — baris yang terus gagal tidak
+		// menghalangi kiriman baru.
+		Order("attempts").Order("queued_at").Limit(limit).Find(&rows).Error
 	return rows, err
 }
 
-func SaveStockSyncResult(ctx context.Context, tx *gorm.DB, id, status, lastErr string, attempts int) error {
+func SaveStockSyncResult(ctx context.Context, tx *gorm.DB, id, status, lastErr string, attempts int, qty ...string) error {
 	upd := map[string]any{"status": status, "attempts": attempts, "last_error": lastErr}
+	if len(qty) > 0 && qty[0] != "" {
+		upd["requested_qty"] = qty[0]
+	}
 	if status == "sent" {
 		now := time.Now().UTC()
 		upd["sent_at"] = now

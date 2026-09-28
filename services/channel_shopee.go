@@ -66,6 +66,7 @@ func (shopeeAdapter) Info() structs.ChannelProviderInfo {
 			"Pembatalan dari Shopee membatalkan penjualan dan mengembalikan stok",
 			"Status pengiriman (diproses, dikirim, selesai) ikut tercatat",
 			"Token akses diperbarui otomatis — toko cukup memberi izin sekali",
+			"Stok toko dikirim ke Shopee setiap berubah (barang yang sudah dicocokkan)",
 		},
 	}
 }
@@ -434,4 +435,155 @@ func (shopeeAdapter) FetchOrder(ctx context.Context, cred ChannelCredentials, or
 		ev.Items = append(ev.Items, NormalizedItem{SKU: sku, Qty: qty, UnitPrice: &h})
 	}
 	return ev, nil
+}
+
+// ── Stok ───────────────────────────────────────────────────────────────────
+
+// Ref stok Shopee: "item_id:model_id" (model 0 = barang tanpa variasi).
+
+// ListListings: semua item NORMAL/UNLIST → info dasar (SKU induk) → model
+// (SKU variasi) untuk item bervariasi.
+func (shopeeAdapter) ListListings(ctx context.Context, cred ChannelCredentials) ([]ListingPenyedia, error) {
+	if err := pastikanToken(ctx, cred); err != nil {
+		return nil, err
+	}
+	var ids []int64
+	offset := int64(0)
+	for i := 0; i < 500; i++ {
+		out, err := shopeePanggil(ctx, cred, http.MethodGet, "/api/v2/product/get_item_list", url.Values{
+			"offset": {strconv.FormatInt(offset, 10)}, "page_size": {"100"}, "item_status": {"NORMAL", "UNLIST"},
+		}, nil, true)
+		if err != nil {
+			return nil, err
+		}
+		var r struct {
+			Item []struct {
+				ItemID int64 `json:"item_id"`
+			} `json:"item"`
+			HasNext    bool  `json:"has_next_page"`
+			NextOffset int64 `json:"next_offset"`
+		}
+		_ = json.Unmarshal(out["response"], &r)
+		for _, it := range r.Item {
+			ids = append(ids, it.ItemID)
+		}
+		if !r.HasNext || r.NextOffset <= offset {
+			break
+		}
+		offset = r.NextOffset
+	}
+	var hasil []ListingPenyedia
+	for awal := 0; awal < len(ids); awal += 50 {
+		akhir := min(awal+50, len(ids))
+		daftar := make([]string, 0, akhir-awal)
+		for _, id := range ids[awal:akhir] {
+			daftar = append(daftar, strconv.FormatInt(id, 10))
+		}
+		out, err := shopeePanggil(ctx, cred, http.MethodGet, "/api/v2/product/get_item_base_info",
+			url.Values{"item_id_list": {strings.Join(daftar, ",")}}, nil, true)
+		if err != nil {
+			return nil, err
+		}
+		var r struct {
+			ItemList []struct {
+				ItemID   int64  `json:"item_id"`
+				ItemName string `json:"item_name"`
+				ItemSKU  string `json:"item_sku"`
+				HasModel bool   `json:"has_model"`
+			} `json:"item_list"`
+		}
+		_ = json.Unmarshal(out["response"], &r)
+		for _, it := range r.ItemList {
+			item := strconv.FormatInt(it.ItemID, 10)
+			if !it.HasModel {
+				hasil = append(hasil, ListingPenyedia{SKU: it.ItemSKU, Ref: item + ":0", Nama: it.ItemName})
+				continue
+			}
+			m, err := shopeePanggil(ctx, cred, http.MethodGet, "/api/v2/product/get_model_list",
+				url.Values{"item_id": {item}}, nil, true)
+			if err != nil {
+				return nil, err
+			}
+			var mr struct {
+				Model []struct {
+					ModelID  int64  `json:"model_id"`
+					ModelSKU string `json:"model_sku"`
+				} `json:"model"`
+			}
+			_ = json.Unmarshal(m["response"], &mr)
+			for _, md := range mr.Model {
+				hasil = append(hasil, ListingPenyedia{SKU: md.ModelSKU, Ref: item + ":" + strconv.FormatInt(md.ModelID, 10), Nama: it.ItemName})
+			}
+		}
+	}
+	return hasil, nil
+}
+
+// PushStock: update_stock per item (≤50 model sekali panggil); failure_list
+// dibaca per model.
+func (shopeeAdapter) PushStock(ctx context.Context, cred ChannelCredentials, stok []StokKirim) map[string]error {
+	galat := map[string]error{}
+	if err := pastikanToken(ctx, cred); err != nil {
+		for _, s := range stok {
+			galat[s.Ref] = err
+		}
+		return galat
+	}
+	type modelKirim struct {
+		ref   string
+		model int64
+		qty   int64
+	}
+	perItem := map[int64][]modelKirim{}
+	var urut []int64
+	for _, s := range stok {
+		b := strings.SplitN(s.Ref, ":", 2)
+		item, e1 := strconv.ParseInt(b[0], 10, 64)
+		var model int64
+		var e2 error
+		if len(b) == 2 {
+			model, e2 = strconv.ParseInt(b[1], 10, 64)
+		}
+		if e1 != nil || e2 != nil || len(b) != 2 {
+			galat[s.Ref] = fmt.Errorf("pengenal listing tidak dikenal — cocokkan barang lagi")
+			continue
+		}
+		if _, ada := perItem[item]; !ada {
+			urut = append(urut, item)
+		}
+		perItem[item] = append(perItem[item], modelKirim{ref: s.Ref, model: model, qty: s.Qty})
+	}
+	for _, item := range urut {
+		semua := perItem[item]
+		for awal := 0; awal < len(semua); awal += 50 {
+			bagian := semua[awal:min(awal+50, len(semua))]
+			daftar := make([]map[string]any, 0, len(bagian))
+			refModel := map[int64]string{}
+			for _, m := range bagian {
+				daftar = append(daftar, map[string]any{"model_id": m.model, "seller_stock": []any{map[string]any{"stock": m.qty}}})
+				refModel[m.model] = m.ref
+			}
+			out, err := shopeePanggil(ctx, cred, http.MethodPost, "/api/v2/product/update_stock", nil,
+				map[string]any{"item_id": item, "stock_list": daftar}, true)
+			if err != nil {
+				for _, m := range bagian {
+					galat[m.ref] = err
+				}
+				continue
+			}
+			var r struct {
+				FailureList []struct {
+					ModelID      int64  `json:"model_id"`
+					FailedReason string `json:"failed_reason"`
+				} `json:"failure_list"`
+			}
+			_ = json.Unmarshal(out["response"], &r)
+			for _, f := range r.FailureList {
+				if ref, ada := refModel[f.ModelID]; ada {
+					galat[ref] = fmt.Errorf("Shopee menolak stok: %s", firstNonEmpty(f.FailedReason, "alasan tidak disebut"))
+				}
+			}
+		}
+	}
+	return galat
 }

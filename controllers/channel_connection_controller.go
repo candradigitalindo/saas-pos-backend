@@ -130,6 +130,31 @@ func ProviderWebhook(c *gin.Context) {
 	})
 }
 
+// MatchChannelProducts: POST /api/v1/channels/:id/products/match — cocokkan
+// listing penyedia dengan barang toko (SKU/barcode) lalu sinkron stok pertama.
+func MatchChannelProducts(c *gin.Context) {
+	res, err := services.CocokkanBarangKanal(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		notFoundOr(c, err, repositories.ErrChannelNotFound, "Kanal tidak ditemukan")
+		return
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[structs.ChannelProductMatchResult]{
+		Success: true, Message: "Barang dicocokkan", Data: res,
+	})
+}
+
+// ChannelStockStatus: GET /api/v1/channels/:id/stock-status.
+func ChannelStockStatus(c *gin.Context) {
+	res, err := services.StatusStokKanal(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		notFoundOr(c, err, repositories.ErrChannelNotFound, "Kanal tidak ditemukan")
+		return
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[structs.ChannelStockStatusResponse]{
+		Success: true, Message: "Status sinkron stok", Data: res,
+	})
+}
+
 // AuthorizeChannelConnection: POST /api/v1/channels/:id/connection/authorize —
 // alamat halaman otorisasi toko di penyedia (dibuka tenant di tab baru). POST,
 // bukan GET: setiap panggilan menulis state otorisasi baru, jadi ikut kunci
