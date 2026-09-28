@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie'
+import type { TagihanTerbuka } from '@/bersama/tipe/pos'
 
 /**
  * Penyimpanan lokal untuk mode offline.
@@ -41,6 +42,15 @@ export interface VarianLokal {
   sync_version: number
 }
 
+/**
+ * Salinan lokal tagihan terbuka (open bill). Sumber kebenarannya server —
+ * salinan ini supaya daftar tagihan tetap tampil & bisa diubah saat offline.
+ * `tertunda` = ada perubahan lokal yang belum sampai server (di antrean).
+ */
+export interface TagihanLokal extends TagihanTerbuka {
+  tertunda?: boolean
+}
+
 export interface KategoriLokal {
   id: string
   name: string
@@ -78,7 +88,7 @@ export type StatusAntrean = 'menunggu' | 'mengirim' | 'terkirim' | 'perlu-diperi
 export interface AntreanOperasi {
   /** ULID entitas, dibuat klien. Juga dipakai sebagai kunci idempotensi. */
   id: string
-  op: 'sale.create' | 'visit.upsert'
+  op: 'sale.create' | 'visit.upsert' | 'open_bill.upsert' | 'open_bill.cancel'
   payload: unknown
   status: StatusAntrean
   dibuatPada: number
@@ -98,6 +108,7 @@ export interface Meta {
 class DBOffline extends Dexie {
   produk!: EntityTable<ProdukLokal, 'id'>
   varian!: EntityTable<VarianLokal, 'id'>
+  tagihan!: EntityTable<TagihanLokal, 'id'>
   kategori!: EntityTable<KategoriLokal, 'id'>
   satuan!: EntityTable<SatuanLokal, 'id'>
   pelanggan!: EntityTable<PelangganLokal, 'id'>
@@ -150,6 +161,19 @@ class DBOffline extends Dexie {
         meta: 'kunci',
       })
       .upgrade((tx) => tx.table('meta').delete('kursor-sync'))
+
+    // v4 menambah salinan tagihan terbuka (open bill) per cabang.
+    this.version(4).stores({
+      produk: 'id, name, cari, category_id, is_active, barcode, sku',
+      varian: 'id, product_id, barcode, sku',
+      tagihan: 'id, outlet_id',
+      kategori: 'id, name',
+      satuan: 'id, name',
+      pelanggan: 'id, name, phone',
+      stok: 'kunci, product_id, outlet_id',
+      antrean: 'id, status, dibuatPada',
+      meta: 'kunci',
+    })
   }
 }
 
@@ -184,6 +208,7 @@ export async function kosongkanDB(): Promise<void> {
   await Promise.all([
     db.produk.clear(),
     db.varian.clear(),
+    db.tagihan.clear(),
     db.kategori.clear(),
     db.satuan.clear(),
     db.pelanggan.clear(),

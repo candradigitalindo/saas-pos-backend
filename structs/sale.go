@@ -22,16 +22,19 @@ type CheckoutPaymentRequest struct {
 // CheckoutRequest adalah body POST /api/v1/sales. Wajib menyertakan header
 // Idempotency-Key.
 type CheckoutRequest struct {
-	ID              string                   `json:"id" binding:"omitempty,ulid"` // ULID dari klien (mode offline); server buat bila kosong
-	OutletID        string                   `json:"outlet_id" binding:"required,ulid"`
-	ShiftID         string                   `json:"shift_id" binding:"omitempty,ulid"` // kosong = pakai shift terbuka outlet
-	CustomerID      string                   `json:"customer_id" binding:"omitempty,ulid"`
-	OrderType       string                   `json:"order_type" binding:"omitempty,oneof=dine_in takeaway delivery pickup"`
-	OrderDiscount   int64                    `json:"order_discount" binding:"omitempty,gte=0"`
-	Note            string                   `json:"note" binding:"omitempty,max=500"`
-	ClientCreatedAt string                   `json:"client_created_at" binding:"omitempty"` // RFC3339 dgn offset
-	Items           []CheckoutItemRequest    `json:"items" binding:"required,min=1,dive"`
-	Payments        []CheckoutPaymentRequest `json:"payments" binding:"required,min=1,dive"`
+	ID              string `json:"id" binding:"omitempty,ulid"` // ULID dari klien (mode offline); server buat bila kosong
+	OutletID        string `json:"outlet_id" binding:"required,ulid"`
+	ShiftID         string `json:"shift_id" binding:"omitempty,ulid"` // kosong = pakai shift terbuka outlet
+	CustomerID      string `json:"customer_id" binding:"omitempty,ulid"`
+	OrderType       string `json:"order_type" binding:"omitempty,oneof=dine_in takeaway delivery pickup"`
+	OrderDiscount   int64  `json:"order_discount" binding:"omitempty,gte=0"`
+	Note            string `json:"note" binding:"omitempty,max=500"`
+	ClientCreatedAt string `json:"client_created_at" binding:"omitempty"` // RFC3339 dgn offset
+	// OpenBillID: tagihan terbuka yang dilunasi transaksi ini — ditutup di
+	// transaksi database yang sama (lihat services/open_bill_service.go).
+	OpenBillID string                   `json:"open_bill_id" binding:"omitempty,ulid"`
+	Items      []CheckoutItemRequest    `json:"items" binding:"required,min=1,dive"`
+	Payments   []CheckoutPaymentRequest `json:"payments" binding:"required,min=1,dive"`
 }
 
 // ── Void / refund ──────────────────────────────────────────────────────────

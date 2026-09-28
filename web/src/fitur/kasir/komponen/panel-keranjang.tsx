@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, SquarePen, Trash2 } from 'lucide-react'
+import { Plus, SquarePen, Trash2, X } from 'lucide-react'
 import { Tombol } from '@/bersama/ui/tombol'
 import { StepperJumlah } from '@/bersama/ui/stepper-jumlah'
 import { useIzin } from '@/bersama/hooks/use-sesi'
@@ -18,12 +18,17 @@ import { DialogDiskonTransaksi } from './dialog-diskon-transaksi'
 export function PanelKeranjang({
   keranjang,
   onBayar,
-  tanpaJudul = false,
+  onTahan,
+  menahan = false,
+  onTutup,
 }: {
   keranjang: Keranjang
   onBayar: () => void
-  /** Di lembar keranjang HP kepalanya sudah bertuliskan "Keranjang". */
-  tanpaJudul?: boolean
+  /** Simpan keranjang sebagai tagihan terbuka (open bill). */
+  onTahan?: () => void
+  menahan?: boolean
+  /** Lembar keranjang HP: tombol tutup di kepala. */
+  onTutup?: () => void
 }) {
   const { baris, pratinjauTotal, rincian, ubahQty, hapus, diskonTransaksi, diskonTransaksiNominal } = keranjang
   const bolehDiskon = useIzin().boleh('sale.discount')
@@ -43,11 +48,32 @@ export function PanelKeranjang({
       aria-label="Keranjang"
       className="flex h-full flex-col border-garis bg-permukaan lg:border-l"
     >
-      {!tanpaJudul && (
-        <h2 className="border-b border-garis px-4 py-3 text-judul-kartu font-semibold text-teks-utama">
-          Keranjang
+      {/* Kepala: nama tagihan bila keranjang ini tagihan terbuka, lalu Tahan.
+          "Tahan" di sini, bukan di sebelah BAYAR — baris bayar tetap satu
+          tombol besar yang tidak bisa salah tekan. */}
+      <div className="flex items-center gap-2 border-b border-garis px-4 py-2">
+        <h2 className="min-w-0 flex-1 truncate text-judul-kartu font-semibold text-teks-utama">
+          {keranjang.tagihan ? keranjang.tagihan.label : 'Keranjang'}
+          {keranjang.tagihan && (
+            <span className="block text-keterangan font-normal text-teks-redup">Tagihan terbuka</span>
+          )}
         </h2>
-      )}
+        {onTahan && (
+          <Tombol jenis="kedua" ukuran="padat" onClick={onTahan} disabled={kosong} memuat={menahan}>
+            {keranjang.tagihan ? 'Simpan' : 'Tahan'}
+          </Tombol>
+        )}
+        {onTutup && (
+          <button
+            type="button"
+            onClick={onTutup}
+            aria-label="Tutup keranjang"
+            className="-mr-2 flex h-12 w-12 shrink-0 items-center justify-center rounded-kontrol text-teks-redup hover:bg-permukaan-2"
+          >
+            <X className="h-6 w-6" aria-hidden />
+          </button>
+        )}
+      </div>
 
       <div className="flex-1 overflow-y-auto">
         {kosong ? (

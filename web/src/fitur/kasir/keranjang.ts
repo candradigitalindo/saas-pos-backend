@@ -69,6 +69,14 @@ export interface Keranjang {
   kosongkan: () => void
   /** Total qty satu barang di keranjang, semua variannya dijumlah. */
   qtyDari: (produkId: string) => string
+  /** Tagihan terbuka yang sedang dimuat — null untuk keranjang biasa. */
+  tagihan: { id: string; version: number; label: string } | null
+  /** Mengganti seluruh isi keranjang dengan isi sebuah tagihan. */
+  muatTagihan: (
+    tagihan: { id: string; version: number; label: string },
+    baris: BarisKeranjang[],
+    diskonTransaksi: DiskonTransaksi | null,
+  ) => void
 }
 
 function bulat(d: Decimal): number {
@@ -113,6 +121,13 @@ export function namaBaris(b: Pick<BarisKeranjang, 'produk' | 'varian'>): string 
 export function useKeranjang(aturan?: AturanHarga): Keranjang {
   const [baris, setBaris] = useState<BarisKeranjang[]>([])
   const [diskonTransaksi, setDiskonTransaksi] = useState<DiskonTransaksi | null>(null)
+  const [tagihan, setTagihan] = useState<Keranjang['tagihan']>(null)
+
+  const muatTagihan = useCallback<Keranjang['muatTagihan']>((t, isi, diskon) => {
+    setBaris(isi)
+    setDiskonTransaksi(diskon)
+    setTagihan(t)
+  }, [])
 
   const tambah = useCallback((p: Produk, qty = '1', varian?: VarianProduk) => {
     const kunci = kunciBaris(p.id, varian?.id)
@@ -161,6 +176,7 @@ export function useKeranjang(aturan?: AturanHarga): Keranjang {
   const kosongkan = useCallback(() => {
     setBaris([])
     setDiskonTransaksi(null)
+    setTagihan(null)
   }, [])
 
   const qtyDari = useCallback(
@@ -190,6 +206,8 @@ export function useKeranjang(aturan?: AturanHarga): Keranjang {
     hapus,
     kosongkan,
     qtyDari,
+    tagihan,
+    muatTagihan,
   }
 }
 

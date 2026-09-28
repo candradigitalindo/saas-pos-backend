@@ -1,8 +1,11 @@
 import { api, type Halaman } from '@/lib/api-client'
 import type { RingkasanPenjualan,
+  DiskonTagihan,
   GerakanKas,
+  ItemTagihan,
   MetodeBayar,
   Shift,
+  TagihanTerbuka,
   Transaksi,
 } from '@/bersama/tipe/pos'
 import type { Produk, SaldoStok } from '@/bersama/tipe/katalog'
@@ -31,8 +34,19 @@ export interface InputCheckout {
   order_discount?: number
   note?: string
   client_created_at?: string
+  /** Tagihan terbuka yang dilunasi transaksi ini (ditutup server di transaksi yang sama). */
+  open_bill_id?: string
   items: ItemCheckout[]
   payments: BayarCheckout[]
+}
+
+/** Isi PUT /open-bills/:id — tagihan utuh; base_version 0 = baru. */
+export interface InputTagihan {
+  outlet_id: string
+  label: string
+  items: ItemTagihan[]
+  order_discount?: DiskonTagihan
+  base_version: number
 }
 
 export const kasirApi = {
@@ -75,6 +89,12 @@ export const kasirApi = {
 
   stok: (outlet_id: string, limit = 100) =>
     api.get<Halaman<SaldoStok>>('/stocks', { query: { outlet_id, limit } }),
+
+  // ── Tagihan terbuka ──────────────────────────────────────────────────────
+  daftarTagihan: (outlet_id: string) => api.get<TagihanTerbuka[]>('/open-bills', { query: { outlet_id } }),
+  simpanTagihan: (id: string, input: InputTagihan) => api.put<TagihanTerbuka>(`/open-bills/${id}`, input),
+  batalkanTagihan: (id: string, base_version: number) =>
+    api.post<null>(`/open-bills/${id}/cancel`, { base_version }),
 
   // ── Transaksi ────────────────────────────────────────────────────────────
   /**

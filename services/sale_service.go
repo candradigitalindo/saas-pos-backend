@@ -62,6 +62,7 @@ type CheckoutInput struct {
 	OrderType       string
 	OrderDiscount   int64
 	Note            string
+	OpenBillID      string // "" = bukan dari tagihan terbuka
 	ClientCreatedAt *time.Time
 	Items           []CheckoutItem
 	Payments        []CheckoutPayment
@@ -143,6 +144,16 @@ func Checkout(ctx context.Context, in CheckoutInput) (int, []byte, bool, error) 
 			return err
 		}
 
+		// 1c. Tagihan terbuka yang dilunasi (bila ada) dikunci SEBELUM menulis
+		//     apa pun: dua kasir yang menagih meja yang sama antre di sini, dan
+		//     yang kedua ditolak karena tagihannya sudah dibayar.
+		var tagihan *models.OpenBill
+		if in.OpenBillID != "" {
+			if tagihan, err = lockOpenBillForCheckout(ctx, tx, in.OpenBillID, in.OutletID); err != nil {
+				return err
+			}
+		}
+
 		// 2. Muat produk, varian, dan resep (F&B) → SNAPSHOT. Harga dari master,
 		//    bukan klien. Penguncian baris stok dilakukan ApplyStockDeltas di
 		//    langkah 8 (URUT product_id MENAIK atas gabungan produk + bahan baku).
@@ -183,6 +194,11 @@ func Checkout(ctx context.Context, in CheckoutInput) (int, []byte, bool, error) 
 		sale := buildSale(ctx, in, shift, bizDate, now, receiptNo, priced, totals, pay)
 		if err := repositories.CreateSale(ctx, tx, &sale); err != nil {
 			return err
+		}
+		if tagihan != nil {
+			if err := closeOpenBillForSale(ctx, tx, tagihan, sale.ID); err != nil {
+				return err
+			}
 		}
 
 		// 8. Gerakan stok: 'sale' untuk produk ber-track_stock + 'recipe' untuk

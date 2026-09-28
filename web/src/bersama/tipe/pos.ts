@@ -144,3 +144,39 @@ export interface Pelanggan {
   updated_at: string
   stats?: StatistikPelanggan
 }
+
+/** Satu baris tagihan terbuka — bentuk yang disimpan server (tanpa harga). */
+export interface ItemTagihan {
+  product_id: string
+  variant_id?: string
+  qty: string
+  discount_amount?: number
+  /** Diskon persen 1–100; bila diisi, discount_amount diabaikan. */
+  discount_percent?: number
+  note?: string
+}
+
+/** Diskon transaksi pada tagihan. */
+export interface DiskonTagihan {
+  kind: 'nominal' | 'percent'
+  value: number
+}
+
+/** Tagihan terbuka (open bill): pesanan yang disimpan untuk dibayar nanti. */
+export interface TagihanTerbuka {
+  id: string
+  outlet_id: string
+  label: string
+  customer_id?: string
+  order_type: string
+  items: ItemTagihan[]
+  order_discount?: DiskonTagihan
+  note?: string
+  status: 'open' | 'paid' | 'canceled'
+  version: number
+  created_by: string
+  created_by_name?: string
+  updated_by_name?: string
+  created_at: string
+  updated_at: string
+}

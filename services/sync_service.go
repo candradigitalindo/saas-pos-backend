@@ -154,6 +154,35 @@ func applySyncOp(ctx context.Context, op structs.SyncOperation) (structs.SyncOpR
 			return structs.SyncOpResult{ID: op.ID, Status: "applied"}, nil
 		}
 
+	case "open_bill.upsert", "open_bill.cancel":
+		// id OPERASI (op.ID) berbeda dari id tagihan (payload.id): satu tagihan
+		// bisa diubah berkali-kali selama offline, masing-masing satu operasi.
+		var err error
+		var dup bool
+		if op.Op == "open_bill.upsert" {
+			var payload structs.OpenBillSyncPayload
+			if berr := binding.JSON.BindBody(op.Payload, &payload); berr != nil {
+				return reject("payload tidak valid: " + berr.Error()), nil
+			}
+			_, dup, err = UpsertOpenBill(ctx, payload.ID, op.ID, payload.OpenBillUpsertRequest)
+		} else {
+			var payload structs.OpenBillCancelSyncPayload
+			if berr := binding.JSON.BindBody(op.Payload, &payload); berr != nil {
+				return reject("payload tidak valid: " + berr.Error()), nil
+			}
+			dup, err = CancelOpenBill(ctx, payload.ID, op.ID, payload.BaseVersion)
+		}
+		switch {
+		case err != nil && helpers.StatusForError(err) >= 500:
+			return structs.SyncOpResult{}, err // fatal
+		case err != nil:
+			return reject(cleanReason(err)), nil
+		case dup:
+			return structs.SyncOpResult{ID: op.ID, Status: "duplicate"}, nil
+		default:
+			return structs.SyncOpResult{ID: op.ID, Status: "applied"}, nil
+		}
+
 	default:
 		return reject("operasi tidak dikenal: " + op.Op), nil
 	}
@@ -162,8 +191,10 @@ func applySyncOp(ctx context.Context, op structs.SyncOperation) (structs.SyncOpR
 // syncOpPermission memetakan jenis operasi /sync/push ke izin yang sama dengan
 // endpoint HTTP padanannya.
 var syncOpPermission = map[string]string{
-	"sale.create":  "sale.create",
-	"visit.upsert": "crm.visit.checkin",
+	"sale.create":      "sale.create",
+	"visit.upsert":     "crm.visit.checkin",
+	"open_bill.upsert": "sale.create",
+	"open_bill.cancel": "sale.create",
 }
 
 // cleanReason menampilkan pesan error yang aman untuk klien.

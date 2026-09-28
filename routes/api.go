@@ -360,6 +360,12 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	t.POST("/sales/:id/void", middlewares.Require("sale.void"), controllers.VoidSale)
 	t.POST("/sales/:id/refund", middlewares.Require("sale.refund"), controllers.RefundSale)
 
+	// Tagihan terbuka (open bill / tahan transaksi) — dibayar lewat POST /sales
+	// dengan open_bill_id.
+	t.GET("/open-bills", middlewares.Require("sale.create"), controllers.ListOpenBills)
+	t.PUT("/open-bills/:id", middlewares.Require("sale.create"), controllers.UpsertOpenBill)
+	t.POST("/open-bills/:id/cancel", middlewares.Require("sale.create"), controllers.CancelOpenBill)
+
 	// Piutang.
 	t.GET("/receivables", middlewares.Require("receivable.manage"), controllers.ListReceivables)
 	t.GET("/receivables/:id", middlewares.Require("receivable.manage"), controllers.GetReceivable)

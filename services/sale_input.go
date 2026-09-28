@@ -26,6 +26,7 @@ func BuildCheckoutInput(req structs.CheckoutRequest, idempotencyKey, requestHash
 		OrderType:      req.OrderType,
 		OrderDiscount:  req.OrderDiscount,
 		Note:           req.Note,
+		OpenBillID:     req.OpenBillID,
 		IdempotencyKey: idempotencyKey,
 		RequestHash:    requestHash,
 	}

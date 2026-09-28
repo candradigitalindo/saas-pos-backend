@@ -1,9 +1,9 @@
 import { useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db } from '@/lib/offline/db'
+import { db, type TagihanLokal } from '@/lib/offline/db'
 import { Link } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { PackageX, ScanLine, Search, ShoppingCart, X } from 'lucide-react'
+import { ClipboardList, PackageX, ScanLine, Search, ShoppingCart } from 'lucide-react'
 import { Tombol } from '@/bersama/ui/tombol'
 import { KeadaanKosong } from '@/bersama/komponen/keadaan-kosong'
 import { Kerangka } from '@/bersama/komponen/kerangka'
@@ -23,6 +23,15 @@ import type { Produk } from '@/bersama/tipe/katalog'
 import { KartuProduk } from '../komponen/kartu-produk'
 import { PanelKeranjang } from '../komponen/panel-keranjang'
 import { DialogPilihVarian } from '../komponen/dialog-pilih-varian'
+import { DialogTahan } from '../komponen/dialog-tahan'
+import { DialogTagihan } from '../komponen/dialog-tagihan'
+import {
+  batalkanTagihan,
+  itemTagihanKeBaris,
+  simpanTagihan,
+  tagihanKeDiskon,
+  useTagihanTerbuka,
+} from '../tagihan'
 import { SegmenPilihan } from '@/bersama/ui/segmen'
 import { LayarBayar, type BagianBayar } from '../komponen/layar-bayar'
 import { Struk } from '../komponen/struk'
@@ -40,7 +49,7 @@ import { FITUR } from '@/lib/fitur'
  * yang SELALU KELIHATAN (bukan geser atau tekan-lama).
  */
 export function HalamanKasir() {
-  const { tokoAktif, rincianToko, punyaFitur, paketUntuk } = useSesi()
+  const { tokoAktif, rincianToko, punyaFitur, paketUntuk, profil } = useSesi()
   const qc = useQueryClient()
   const toast = useToast()
   const sinkron = useSinkron()
@@ -58,6 +67,11 @@ export function HalamanKasir() {
   const [bukaKeranjangHP, setBukaKeranjangHP] = useState(false)
   const [struk, setStruk] = useState<{ transaksi: Transaksi; diantre: boolean } | null>(null)
   const [galatBayar, setGalatBayar] = useState<string | null>(null)
+  const [bukaTagihan, setBukaTagihan] = useState(false)
+  const [bukaTahan, setBukaTahan] = useState(false)
+  const [menahan, setMenahan] = useState(false)
+  // Tagihan terbuka cabang ini (open bill) — hook di atas return bersyarat.
+  const tagihan = useTagihanTerbuka(tokoAktif)
 
   const checkout = useCheckout()
 
@@ -106,8 +120,13 @@ export function HalamanKasir() {
           // kembaliannya.
           payments: pembayaran,
           customer_id: pelangganId,
+          // Tagihan terbuka ditutup server di transaksi yang sama.
+          ...(keranjang.tagihan ? { open_bill_id: keranjang.tagihan.id } : {}),
         },
       })
+      // Tagihan yang dilunasi hilang dari daftar — juga saat penjualannya
+      // baru diantre (segarkanTagihan tidak memunculkannya lagi).
+      if (keranjang.tagihan) await db.tagihan.delete(keranjang.tagihan.id)
       setBukaBayar(false)
       setBukaKeranjangHP(false)
       keranjang.kosongkan()
@@ -125,12 +144,54 @@ export function HalamanKasir() {
     }
   }
 
+  /** Simpan keranjang sebagai tagihan terbuka, lalu kosongkan untuk pembeli berikutnya. */
+  async function tahan(label: string) {
+    if (!tokoAktif) return
+    const { tagihan: t, diantre } = await simpanTagihan({
+      outletId: tokoAktif,
+      aktif: keranjang.tagihan,
+      label,
+      baris: keranjang.baris,
+      diskonTransaksi: keranjang.diskonTransaksi,
+      nominal: keranjang.pratinjauTotal,
+      namaPengguna: profil?.user.name,
+    })
+    keranjang.kosongkan()
+    setBukaTahan(false)
+    setBukaKeranjangHP(false)
+    sinkron.segarkan()
+    toast.berhasil(
+      diantre ? `Tagihan ${t.label} disimpan di perangkat — dikirim saat online.` : `Tagihan ${t.label} disimpan.`,
+    )
+  }
+
+  function tekanTahan() {
+    // Tagihan yang sudah bernama langsung disimpan; yang baru ditanya namanya.
+    if (!keranjang.tagihan) {
+      setBukaTahan(true)
+      return
+    }
+    setMenahan(true)
+    tahan(keranjang.tagihan.label)
+      .catch((e) => toast.tampilkan(e instanceof Error ? e.message : 'Gagal menyimpan tagihan.', 'perhatian'))
+      .finally(() => setMenahan(false))
+  }
+
+  async function bukaTagihanDiKeranjang(t: TagihanLokal) {
+    const { baris, hilang } = await itemTagihanKeBaris(t.items)
+    keranjang.muatTagihan({ id: t.id, version: t.version, label: t.label }, baris, tagihanKeDiskon(t.order_discount))
+    setBukaTagihan(false)
+    if (hilang > 0) {
+      toast.tampilkan(`${hilang} barang di tagihan ini sudah tidak ada di katalog dan dilewati.`, 'perhatian')
+    }
+  }
+
   return (
     <div className="flex h-dvh flex-col bg-latar">
       {/* Di bawah 360px, tiga kendali plus kotak pencarian memang tidak muat
           dalam satu baris — kotak pencariannya turun ke 69px dan placeholder-nya
           terpotong. Di lebar itu saja kotaknya mengambil barisnya sendiri. */}
-      <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-garis bg-permukaan px-4 py-3">
+      <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-garis bg-permukaan px-4 py-3 sm:gap-3">
         <div className="relative flex-1 max-[359px]:basis-full">
           <Search
             className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-teks-redup"
@@ -143,7 +204,7 @@ export function HalamanKasir() {
             placeholder="Cari barang"
             aria-label="Cari barang"
             className={cn(
-              'h-12 w-full rounded-kontrol border border-garis bg-permukaan pl-10 pr-3',
+              'h-12 w-full rounded-kontrol border border-garis bg-permukaan pl-9 pr-2',
               'text-isi text-teks-utama placeholder:text-teks-redup',
               'focus:border-utama focus:outline-none focus:ring-2 focus:ring-utama/30',
             )}
@@ -157,16 +218,43 @@ export function HalamanKasir() {
             ukuran="normal"
             onClick={() => setBukaPindai(true)}
             aria-label="Pindai barcode"
+            // Di HP cukup selebar ikonnya: tiap piksel yang dihemat di sini
+            // kembali ke kotak pencarian (placeholder "Cari barang" utuh di 390px).
+            className="max-sm:w-12 max-sm:px-0"
           >
             <ScanLine className="h-5 w-5" aria-hidden />
             <span className="hidden sm:inline">Pindai</span>
           </Tombol>
         )}
+        {/* Tagihan terbuka: di HP cukup ikon + lencana jumlah supaya kotak
+            pencarian tetap lega; di layar lebar ditulis lengkap. */}
+        <Tombol
+          jenis="kedua"
+          ukuran="normal"
+          onClick={() => {
+            setBukaTagihan(true)
+            // Langsung segarkan: pelayan di HP lain mungkin baru menambah tagihan.
+            if (navigator.onLine) void tagihan.segarkan()
+          }}
+          aria-label={`Tagihan terbuka, ${tagihan.daftar.length}`}
+          className="relative max-sm:w-12 max-sm:px-0"
+        >
+          <ClipboardList className="h-5 w-5" aria-hidden />
+          <span className="hidden sm:inline">Tagihan</span>
+          {tagihan.daftar.length > 0 && (
+            <span
+              aria-hidden
+              className="flex h-6 min-w-6 items-center justify-center rounded-full bg-utama px-1.5 text-keterangan font-bold text-utama-teks max-sm:absolute max-sm:-right-2 max-sm:-top-2"
+            >
+              {tagihan.daftar.length}
+            </span>
+          )}
+        </Tombol>
         {/* Label memendek di HP. Diukur pada 390px: "Tutup Shift" utuh menyisakan
             hanya ~93px untuk teks kotak pencarian, dan placeholder-nya terpotong
             jadi "Cari baran". Kotak pencarian adalah cara utama menemukan barang
             saat katalognya panjang, jadi ia yang diberi ruang. */}
-        <Tombol jenis="kedua" ukuran="normal" asChild>
+        <Tombol jenis="kedua" ukuran="normal" asChild className="max-sm:px-4">
           <Link to="/kasir/tutup-shift" aria-label="Tutup shift">
             <span className="sm:hidden">Shift</span>
             <span className="hidden sm:inline">Tutup Shift</span>
@@ -260,7 +348,7 @@ export function HalamanKasir() {
 
         {/* Layar lebar: keranjang menetap di kanan. */}
         <div className="hidden w-96 shrink-0 lg:block">
-          <PanelKeranjang keranjang={keranjang} onBayar={bukaLayarBayar} />
+          <PanelKeranjang keranjang={keranjang} onBayar={bukaLayarBayar} onTahan={tekanTahan} menahan={menahan} />
         </div>
       </div>
 
@@ -284,20 +372,13 @@ export function HalamanKasir() {
 
       {bukaKeranjangHP && (
         <div className="fixed inset-0 z-40 flex flex-col bg-permukaan lg:hidden">
-          <div className="flex items-center justify-between border-b border-garis px-4 py-3">
-            <h2 className="text-judul-kartu font-semibold text-teks-utama">Keranjang</h2>
-            <button
-              type="button"
-              onClick={() => setBukaKeranjangHP(false)}
-              aria-label="Tutup keranjang"
-              className="-m-3 flex h-12 w-12 items-center justify-center rounded-kontrol text-teks-redup hover:bg-permukaan-2"
-            >
-              <X className="h-6 w-6" aria-hidden />
-            </button>
-          </div>
-          <div className="min-h-0 flex-1">
-            <PanelKeranjang keranjang={keranjang} onBayar={bukaLayarBayar} tanpaJudul />
-          </div>
+          <PanelKeranjang
+            keranjang={keranjang}
+            onBayar={bukaLayarBayar}
+            onTahan={tekanTahan}
+            menahan={menahan}
+            onTutup={() => setBukaKeranjangHP(false)}
+          />
         </div>
       )}
 
@@ -359,6 +440,22 @@ export function HalamanKasir() {
           punyaFitur(FITUR.qris) ? undefined : `Paket ${paketUntuk(FITUR.qris) ?? 'berbayar'}`
         }
       />
+
+      {bukaTahan && <DialogTahan onSimpan={tahan} onTutup={() => setBukaTahan(false)} />}
+      {bukaTagihan && (
+        <DialogTagihan
+          daftar={tagihan.daftar}
+          aturan={rincianToko}
+          keranjangBerisi={keranjang.jumlahBaris > 0}
+          onBuka={(t) => void bukaTagihanDiKeranjang(t)}
+          onBatalkan={async (t) => {
+            const { diantre } = await batalkanTagihan(t)
+            sinkron.segarkan()
+            toast.berhasil(diantre ? `Tagihan ${t.label} dibatalkan — dikirim saat online.` : `Tagihan ${t.label} dibatalkan.`)
+          }}
+          onTutup={() => setBukaTagihan(false)}
+        />
+      )}
 
       {struk && (
         <Struk
