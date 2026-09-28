@@ -87,7 +87,7 @@ menu aktif selalu digulir ke dalam pandangan.
 | Buka shift | `POST /shifts/open` | `shift.open` |
 | Daftar produk (grid) | `GET /products` · cache Dexie | `product.view` |
 | Pilih varian — kartu barang bervarian menampilkan "mulai Rp…" + "N pilihan"; ketukan membuka dialog wajib-pilih-satu (nama varian 2 baris, harga jadi, lencana jumlah di keranjang). Pindai barcode/SKU varian langsung masuk sebagai "Barang (Varian)"; barcode barang induknya membuka dialog | varian dari `GET /sync/pull` (`product_variants`, Dexie v3) → checkout `items[].variant_id` | `sale.create` |
-| Bayar / checkout | `POST /sales` + header `Idempotency-Key` | `sale.create` |
+| Bayar / checkout (tetap jalan saat browser offline — masuk antrean, struk "Menunggu dikirim") | `POST /sales` + header `Idempotency-Key` | `sale.create` |
 | Riwayat transaksi (ringkasan hari, cari nota, saring cara bayar/status, muat bertahap) | `GET /sales?search=&method=` · `GET /sales/day-summary` | `sale.create` |
 | Detail struk | `GET /sales/:id` | `sale.create` |
 | Batalkan transaksi | `POST /sales/:id/void` | `sale.void` |

@@ -82,6 +82,11 @@ export function useCheckout() {
     Error,
     { input: InputCheckout; kunci: string; aturan?: AturanHarga }
   >({
+    // WAJIB 'always'. Bawaan TanStack ('online') MENJEDA mutasi selama
+    // browser melapor offline — checkout lalu diam di "Menyimpan transaksi…"
+    // dan tidak pernah sampai ke jalur antrean di bawah. Keadaan offline
+    // ditangani mutationFn sendiri.
+    networkMode: 'always',
     mutationFn: async ({ input, kunci, aturan }) => {
       try {
         const transaksi = await kasirApi.bayar(input, kunci)

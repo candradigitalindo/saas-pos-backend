@@ -166,6 +166,9 @@ function DialogCheckin({
   const [galat, setGalat] = useState<string | null>(null)
 
   const checkin = useMutation({
+    // 'always': bawaan TanStack menjeda mutasi saat offline, padahal
+    // kunjungan justru diantre di jalur itu (lihat useCheckout).
+    networkMode: 'always',
     mutationFn: async () => {
       // ULID dibuat KLIEN — kunci yang sama dipakai baik lewat POST langsung
       // maupun lewat antrean, jadi kunjungan tidak pernah tercatat dua kali.
