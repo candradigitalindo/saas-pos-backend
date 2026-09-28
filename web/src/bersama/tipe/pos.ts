@@ -140,6 +140,8 @@ export interface Pelanggan {
   type: string
   credit_limit: number
   note?: string
+  /** Daftar harga khusus (member/reseller); kosong = harga umum. */
+  price_list_id?: string
   created_at: string
   updated_at: string
   stats?: StatistikPelanggan

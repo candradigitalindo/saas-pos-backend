@@ -89,6 +89,8 @@ export interface PelangganLokal {
   name: string
   phone: string | null
   credit_limit: number
+  /** Daftar harga khusus (member/reseller); null = harga umum. */
+  price_list_id?: string | null
   sync_version: number
 }
 
@@ -201,6 +203,25 @@ class DBOffline extends Dexie {
     // pratinjau keranjang dan struk offline memakai harga yang sama dengan
     // server. Kursor dibuang: harga yang sudah ada di server ikut tertarik.
     this.version(5)
+      .stores({
+        produk: 'id, name, cari, category_id, is_active, barcode, sku',
+        varian: 'id, product_id, barcode, sku',
+        tagihan: 'id, outlet_id',
+        daftarHarga: 'id',
+        hargaProduk: 'id, product_id, price_list_id',
+        kategori: 'id, name',
+        satuan: 'id, name',
+        pelanggan: 'id, name, phone',
+        stok: 'kunci, product_id, outlet_id',
+        antrean: 'id, status, dibuatPada',
+        meta: 'kunci',
+      })
+      .upgrade((tx) => tx.table('meta').delete('kursor-sync'))
+
+    // v6: pelanggan membawa daftar harga khususnya. Skema tabel tidak berubah;
+    // kursor dibuang supaya pelanggan lama ditarik ulang lengkap dengan
+    // price_list_id-nya.
+    this.version(6)
       .stores({
         produk: 'id, name, cari, category_id, is_active, barcode, sku',
         varian: 'id, product_id, barcode, sku',

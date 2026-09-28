@@ -34,8 +34,28 @@ export interface Produk {
    * di kasir: dari data lokal (daftar harga default).
    */
   wholesale_prices?: TingkatGrosir[]
+  /**
+   * Harga khusus per daftar harga (member/reseller). Dari API: satu harga per
+   * daftar; di kasir: dari data lokal (min_qty ikut, bawaannya 1).
+   */
+  special_prices?: HargaKhusus[]
   created_at: string
   updated_at: string
+}
+
+/** Harga barang pada satu daftar harga khusus. */
+export interface HargaKhusus {
+  price_list_id: string
+  price: number
+  /** Jumlah minimal (desimal string); tidak ada = 1. */
+  min_qty?: string
+}
+
+/** Daftar harga khusus (member, reseller). */
+export interface DaftarHarga {
+  id: string
+  name: string
+  kind: string
 }
 
 /** Satu tingkat harga grosir: beli minimal min_qty → harga satuan price. */

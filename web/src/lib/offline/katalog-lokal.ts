@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import type { Produk, TingkatGrosir, VarianProduk } from '@/bersama/tipe/katalog'
+import type { HargaKhusus, Produk, TingkatGrosir, VarianProduk } from '@/bersama/tipe/katalog'
 import { db, type HargaProdukLokal, type ProdukLokal, type VarianLokal } from './db'
 import { bandingQty } from '@/bersama/util/desimal'
 import { petaWarnaKategori } from '@/bersama/util/warna-kategori'
@@ -42,7 +42,7 @@ export function useKatalogLokal(
       db.varian.filter((v) => v.is_active).toArray(),
     ])
     const varianPer = kelompokkanVarian(semuaVarian)
-    const grosirPer = await grosirPerProduk()
+    const { grosir: grosirPer, khusus: khususPer } = await hargaPerProduk()
 
     const namaSatuan = new Map(satuan.map((s) => [s.id, s.name]))
     const kunci = cari.trim().toLowerCase()
@@ -52,7 +52,9 @@ export function useKatalogLokal(
 
     const produk = cocok
       .sort((a, b) => a.name.localeCompare(b.name, 'id'))
-      .map((p) => keProduk(p, namaSatuan.get(p.unit_id), varianPer.get(p.id), grosirPer.get(p.id)))
+      .map((p) =>
+        keProduk(p, namaSatuan.get(p.unit_id), varianPer.get(p.id), grosirPer.get(p.id), khususPer.get(p.id)),
+      )
 
     const petaStok = new Map<string, string>()
     for (const s of stok) petaStok.set(s.product_id, s.qty)
@@ -129,31 +131,50 @@ export async function varianDariBarcode(
 export async function produkLokal(id: string): Promise<Produk | undefined> {
   const p = await db.produk.get(id)
   if (!p) return undefined
-  const [s, varian, grosir] = await Promise.all([
+  const [s, varian, harga] = await Promise.all([
     db.satuan.get(p.unit_id),
     db.varian.where('product_id').equals(id).toArray(),
-    grosirPerProduk(id),
+    hargaPerProduk(id),
   ])
-  return keProduk(p, s?.name, kelompokkanVarian(varian.filter((v) => v.is_active)).get(id), grosir.get(id))
+  return keProduk(
+    p,
+    s?.name,
+    kelompokkanVarian(varian.filter((v) => v.is_active)).get(id),
+    harga.grosir.get(id),
+    harga.khusus.get(id),
+  )
 }
 
 /**
- * Tingkat harga grosir per barang dari daftar harga DEFAULT (baris tanpa
- * varian) — sama dengan yang dipakai server saat checkout. Jumlah terkecil dulu.
+ * Harga dari daftar harga, per barang (baris tanpa varian) — sama dengan yang
+ * dipakai server saat checkout:
+ *   - grosir: tingkat per jumlah di daftar DEFAULT, jumlah terkecil dulu;
+ *   - khusus: harga di daftar khusus (member/reseller) yang masih ada.
  */
-async function grosirPerProduk(produkId?: string): Promise<Map<string, TingkatGrosir[]>> {
-  const peta = new Map<string, TingkatGrosir[]>()
-  const bawaan = (await db.daftarHarga.toArray()).find((l) => l.is_default)
-  if (!bawaan) return peta
+async function hargaPerProduk(
+  produkId?: string,
+): Promise<{ grosir: Map<string, TingkatGrosir[]>; khusus: Map<string, HargaKhusus[]> }> {
+  const grosir = new Map<string, TingkatGrosir[]>()
+  const khusus = new Map<string, HargaKhusus[]>()
+  const daftar = new Map((await db.daftarHarga.toArray()).map((l) => [l.id, l]))
+  if (daftar.size === 0) return { grosir, khusus }
   const baris: HargaProdukLokal[] = produkId
     ? await db.hargaProduk.where('product_id').equals(produkId).toArray()
-    : await db.hargaProduk.where('price_list_id').equals(bawaan.id).toArray()
+    : await db.hargaProduk.toArray()
   for (const h of baris) {
-    if (h.price_list_id !== bawaan.id || h.variant_id) continue
-    peta.set(h.product_id, [...(peta.get(h.product_id) ?? []), { min_qty: h.min_qty, price: h.price }])
+    const l = daftar.get(h.price_list_id)
+    if (!l || h.variant_id) continue
+    if (l.is_default) {
+      grosir.set(h.product_id, [...(grosir.get(h.product_id) ?? []), { min_qty: h.min_qty, price: h.price }])
+    } else {
+      khusus.set(h.product_id, [
+        ...(khusus.get(h.product_id) ?? []),
+        { price_list_id: h.price_list_id, price: h.price, min_qty: h.min_qty },
+      ])
+    }
   }
-  for (const t of peta.values()) t.sort((a, b) => bandingQty(a.min_qty, b.min_qty))
-  return peta
+  for (const t of grosir.values()) t.sort((a, b) => bandingQty(a.min_qty, b.min_qty))
+  return { grosir, khusus }
 }
 
 /**
@@ -208,7 +229,13 @@ export async function kurangiStokLokal(
   })
 }
 
-function keProduk(p: ProdukLokal, unitName?: string, varian?: VarianProduk[], grosir?: TingkatGrosir[]): Produk {
+function keProduk(
+  p: ProdukLokal,
+  unitName?: string,
+  varian?: VarianProduk[],
+  grosir?: TingkatGrosir[],
+  khusus?: HargaKhusus[],
+): Produk {
   return {
     id: p.id,
     name: p.name,
@@ -225,6 +252,7 @@ function keProduk(p: ProdukLokal, unitName?: string, varian?: VarianProduk[], gr
     image_url: p.image_url,
     varian: varian?.length ? varian : undefined,
     wholesale_prices: grosir?.length ? grosir : undefined,
+    special_prices: khusus?.length ? khusus : undefined,
     created_at: '',
     updated_at: '',
   }

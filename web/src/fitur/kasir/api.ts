@@ -44,6 +44,7 @@ export interface InputCheckout {
 export interface InputTagihan {
   outlet_id: string
   label: string
+  customer_id?: string
   items: ItemTagihan[]
   order_discount?: DiskonTagihan
   base_version: number

@@ -25,7 +25,7 @@ import { useOnline } from '@/bersama/hooks/use-online'
 import type { DiskonTagihan, ItemTagihan } from '@/bersama/tipe/pos'
 import { tambahQty } from '@/bersama/util/desimal'
 import { kasirApi, type InputTagihan } from './api'
-import { kunciBaris, type BarisKeranjang, type DiskonTransaksi } from './keranjang'
+import { kunciBaris, type BarisKeranjang, type DiskonTransaksi, type PelangganKeranjang } from './keranjang'
 
 /** Tagihan yang sedang dimuat di keranjang. */
 export interface TagihanAktif {
@@ -100,11 +100,14 @@ export async function simpanTagihan(a: {
   /** Pratinjau total, untuk ringkasan antrean. */
   nominal: number
   namaPengguna?: string
+  /** Pelanggan keranjang — ikut disimpan supaya harga khususnya terbawa. */
+  pelangganId?: string
 }): Promise<{ tagihan: TagihanLokal; diantre: boolean }> {
   const id = a.aktif?.id ?? ulid()
   const input: InputTagihan = {
     outlet_id: a.outletId,
     label: a.label.trim(),
+    ...(a.pelangganId ? { customer_id: a.pelangganId } : {}),
     items: barisKeItemTagihan(a.baris),
     order_discount: diskonKeTagihan(a.diskonTransaksi),
     base_version: a.aktif?.version ?? 0,
@@ -128,6 +131,7 @@ export async function simpanTagihan(a: {
       id,
       outlet_id: a.outletId,
       label: input.label,
+      customer_id: a.pelangganId,
       order_type: lama?.order_type ?? 'dine_in',
       items: input.items,
       order_discount: input.order_discount,
@@ -162,6 +166,24 @@ export async function batalkanTagihan(t: TagihanLokal): Promise<{ diantre: boole
     })
     await db.tagihan.delete(t.id)
     return { diantre: true }
+  }
+}
+
+/**
+ * Pelanggan (dari data lokal) dalam bentuk keranjang, lengkap dengan nama
+ * daftar harga khususnya. Pelanggan yang tidak ada lagi → null (umum).
+ */
+export async function pelangganKeranjang(id?: string): Promise<PelangganKeranjang | null> {
+  if (!id) return null
+  const p = await db.pelanggan.get(id)
+  if (!p) return null
+  const daftar = p.price_list_id ? await db.daftarHarga.get(p.price_list_id) : undefined
+  return {
+    id: p.id,
+    name: p.name,
+    phone: p.phone,
+    price_list_id: daftar && !daftar.is_default ? daftar.id : null,
+    nama_daftar: daftar && !daftar.is_default ? daftar.name : undefined,
   }
 }
 

@@ -9,7 +9,7 @@ import { KolomUang } from '@/bersama/ui/kolom-uang'
 import { Tombol } from '@/bersama/ui/tombol'
 import { KerangkaBaris } from '@/bersama/komponen/kerangka'
 import { useToast } from '@/bersama/komponen/toast'
-import { useKategori, useSatuan } from '@/bersama/hooks/use-katalog'
+import { useDaftarHarga, useKategori, useSatuan } from '@/bersama/hooks/use-katalog'
 import { GalatAPI } from '@/lib/api-client'
 import { galatKolom } from '@/lib/galat-kolom'
 import { PemindaiBarcode } from '@/bersama/komponen/pemindai-barcode'
@@ -17,6 +17,7 @@ import { bisaMemindai } from '@/bersama/hooks/use-pemindai'
 import { produkApi } from '../api'
 import { BagianVarian } from '../komponen/bagian-varian'
 import { IsianGrosir, siapkanGrosir } from '../komponen/isian-grosir'
+import { IsianHargaKhusus } from '../komponen/isian-harga-khusus'
 import type { TingkatGrosir } from '@/bersama/tipe/katalog'
 import { formatRupiah } from '@/bersama/util/uang'
 import { cn } from '@/bersama/util/cn'
@@ -67,6 +68,8 @@ export function HalamanFormBarang() {
     description: '',
   })
   const [grosir, setGrosir] = useState<TingkatGrosir[]>([])
+  const [khusus, setKhusus] = useState<Record<string, number>>({})
+  const daftarHarga = useDaftarHarga()
   const [bukaDetail, setBukaDetail] = useState(false)
   const [bukaPindai, setBukaPindai] = useState(false)
   const [kolomGalat, setKolomGalat] = useState<Record<string, string>>({})
@@ -89,6 +92,7 @@ export function HalamanFormBarang() {
       description: p.description ?? '',
     })
     setGrosir(p.wholesale_prices ?? [])
+    setKhusus(Object.fromEntries((p.special_prices ?? []).map((s) => [s.price_list_id, s.price])))
     setFotoURL(p.image_url || null)
   }, [detail.data])
 
@@ -105,6 +109,16 @@ export function HalamanFormBarang() {
       if ('galat' in g) return Promise.reject(new GalatAPI(400, g.galat))
       const isi = {
         wholesale_prices: g.tingkat,
+        // Hanya daftar yang masih ada; yang dikosongkan tidak dikirim (= dihapus).
+        // Selama daftar harga belum termuat kolom ini TIDAK dikirim — "[]"
+        // akan menghapus harga khusus yang sudah ada.
+        ...(daftarHarga.data
+          ? {
+              special_prices: daftarHarga.data
+                .filter((d) => (khusus[d.id] ?? 0) > 0)
+                .map((d) => ({ price_list_id: d.id, price: khusus[d.id]! })),
+            }
+          : {}),
         name: form.name.trim(),
         unit_id: form.unit_id,
         sell_price: form.sell_price,
@@ -254,6 +268,13 @@ export function HalamanFormBarang() {
             hargaJual={form.sell_price}
             hargaBeli={form.cost_price}
             satuan={satuan.data?.data.find((s) => s.id === form.unit_id)?.name}
+          />
+
+          <IsianHargaKhusus
+            daftar={daftarHarga.data ?? []}
+            nilai={khusus}
+            onNilai={setKhusus}
+            hargaBeli={form.cost_price}
           />
 
           <button

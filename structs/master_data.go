@@ -93,6 +93,8 @@ type ProductCreateRequest struct {
 	Description string `json:"description" binding:"omitempty,max=500"`
 	// WholesalePrices: harga grosir per jumlah (maks. 5 tingkat).
 	WholesalePrices []WholesalePriceRequest `json:"wholesale_prices" binding:"omitempty,max=5,dive"`
+	// SpecialPrices: harga khusus per daftar harga (member, reseller).
+	SpecialPrices []SpecialPriceRequest `json:"special_prices" binding:"omitempty,dive"`
 }
 
 // WholesalePriceRequest: satu tingkat harga grosir — beli minimal MinQty
@@ -122,6 +124,8 @@ type ProductUpdateRequest struct {
 	Description *string `json:"description" binding:"omitempty,max=500"`
 	// WholesalePrices: nil = tidak diubah; [] = semua tingkat dihapus.
 	WholesalePrices *[]WholesalePriceRequest `json:"wholesale_prices" binding:"omitempty,dive"`
+	// SpecialPrices: nil = tidak diubah; [] = semua harga khusus dihapus.
+	SpecialPrices *[]SpecialPriceRequest `json:"special_prices" binding:"omitempty,dive"`
 }
 
 type ProductResponse struct {
@@ -142,6 +146,7 @@ type ProductResponse struct {
 	Description  string `json:"description,omitempty"`
 	// WholesalePrices hanya di GET satu barang & balasan buat/ubah.
 	WholesalePrices []WholesalePriceResponse `json:"wholesale_prices,omitempty"`
+	SpecialPrices   []SpecialPriceResponse   `json:"special_prices,omitempty"`
 	CreatedAt       string                   `json:"created_at"`
 	UpdatedAt       string                   `json:"updated_at"`
 }
@@ -182,4 +187,28 @@ type ProductImportResult struct {
 	Imported int                     `json:"imported"` // baris yang berhasil (atau akan berhasil bila dry-run)
 	Failed   int                     `json:"failed"`
 	Errors   []ProductImportRowError `json:"errors"`
+}
+
+// ── Daftar harga khusus (member, reseller) ──────────────────────────────────
+
+type PriceListRequest struct {
+	Name string `json:"name" binding:"required,min=1,max=60"`
+}
+
+type PriceListResponse struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Kind      string `json:"kind"`
+	IsDefault bool   `json:"is_default"`
+}
+
+// SpecialPriceRequest: harga barang pada satu daftar harga khusus.
+type SpecialPriceRequest struct {
+	PriceListID string `json:"price_list_id" binding:"required,ulid"`
+	Price       int64  `json:"price" binding:"required,gt=0"`
+}
+
+type SpecialPriceResponse struct {
+	PriceListID string `json:"price_list_id"`
+	Price       int64  `json:"price"`
 }

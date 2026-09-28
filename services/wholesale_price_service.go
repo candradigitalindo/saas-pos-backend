@@ -67,6 +67,16 @@ func WholesaleTiersResponse(ctx context.Context, productID string) ([]structs.Wh
 	return out, nil
 }
 
+// hargaDaftar: harga dari tingkat daftar harga khusus yang terpenuhi, bila ada.
+func hargaDaftar(tiers []models.ProductPrice, total decimal.Decimal) (int64, bool) {
+	for _, t := range tiers {
+		if total.GreaterThanOrEqual(t.MinQty) {
+			return t.Price, true
+		}
+	}
+	return 0, false
+}
+
 // hargaDasarGrosir: harga satuan dasar barang untuk total jumlah `total` —
 // tingkat ber-min_qty terbesar yang terpenuhi, selain itu harga jual.
 // `tiers` urut min_qty menurun (repositories.WholesaleTiers).

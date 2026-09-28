@@ -17,6 +17,7 @@ func customerToResponse(c models.Customer) structs.CustomerResponse {
 		Type:        c.Type,
 		CreditLimit: c.CreditLimit,
 		Note:        c.Note,
+		PriceListID: deref(c.PriceListID),
 		CreatedAt:   c.CreatedAt.UTC().Format(timeLayout),
 		UpdatedAt:   c.UpdatedAt.UTC().Format(timeLayout),
 	}

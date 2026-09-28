@@ -1,5 +1,5 @@
 import { api, type Halaman } from '@/lib/api-client'
-import type { Kategori, Pemasok, Produk, Satuan, TingkatGrosir, VarianProduk } from '@/bersama/tipe/katalog'
+import type { DaftarHarga, Kategori, Pemasok, Produk, Satuan, TingkatGrosir, VarianProduk } from '@/bersama/tipe/katalog'
 
 export interface InputProduk {
   name: string
@@ -16,6 +16,8 @@ export interface InputProduk {
   description?: string
   /** Harga grosir per jumlah; [] = dihapus semua. */
   wholesale_prices?: TingkatGrosir[]
+  /** Harga khusus per daftar harga (member/reseller); [] = dihapus semua. */
+  special_prices?: { price_list_id: string; price: number }[]
 }
 
 /** Isi varian. PUT mengganti utuh, jadi semua kolom selalu dikirim. */
@@ -83,6 +85,11 @@ export const produkApi = {
     api.postMentah<HasilImpor>('/products/import', csv, 'text/csv', {
       query: { dry_run: dryRun },
     }),
+
+  // ── Daftar harga khusus (member, reseller) ─────────────────────────────
+  daftarHarga: () => api.get<DaftarHarga[]>('/price-lists'),
+  buatDaftarHarga: (name: string) => api.post<DaftarHarga>('/price-lists', { name }),
+  hapusDaftarHarga: (id: string) => api.hapus<null>(`/price-lists/${id}`),
 
   // ── Master data ──────────────────────────────────────────────────────────
   buatKategori: (name: string) => api.post<Kategori>('/categories', { name }),

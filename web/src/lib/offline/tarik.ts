@@ -75,6 +75,7 @@ export interface PerubahanTarik {
     name: string
     phone: string | null
     credit_limit: number
+    price_list_id?: string | null
     sync_version: number
   }[]
   stocks: null | {
@@ -204,6 +205,7 @@ export async function tarikMasterData(outletId: string): Promise<{ halaman: numb
               name: c.name,
               phone: c.phone,
               credit_limit: c.credit_limit,
+              price_list_id: c.price_list_id ?? null,
               sync_version: c.sync_version,
             })),
           )

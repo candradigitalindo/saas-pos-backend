@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, Plus, Search, Users } from 'lucide-react'
 import { Kartu } from '@/bersama/ui/kartu'
-import { Kolom } from '@/bersama/ui/kolom'
+import { Kolom, Pilihan } from '@/bersama/ui/kolom'
 import { KolomUang } from '@/bersama/ui/kolom-uang'
 import { Tombol } from '@/bersama/ui/tombol'
 import { AksiDialog, Dialog, IsiDialog } from '@/bersama/ui/dialog'
@@ -11,6 +11,7 @@ import { KeadaanGagal, KeadaanKosong } from '@/bersama/komponen/keadaan-kosong'
 import { KerangkaBaris } from '@/bersama/komponen/kerangka'
 import { useToast } from '@/bersama/komponen/toast'
 import { useSesi } from '@/bersama/hooks/use-sesi'
+import { useDaftarHarga } from '@/bersama/hooks/use-katalog'
 import { GalatAPI } from '@/lib/api-client'
 import { galatKolom } from '@/lib/galat-kolom'
 import { IZIN } from '@/lib/izin'
@@ -248,6 +249,8 @@ function DialogPelanggan({
   const [nama, setNama] = useState(awal?.name ?? '')
   const [hp, setHp] = useState(awal?.phone ?? '')
   const [batas, setBatas] = useState(awal?.credit_limit ?? 0)
+  const [daftar, setDaftar] = useState(awal?.price_list_id ?? '')
+  const daftarHarga = useDaftarHarga()
   const [kolomGalat, setKolomGalat] = useState<Record<string, string>>({})
   const [galat, setGalat] = useState<string | null>(null)
 
@@ -257,6 +260,7 @@ function DialogPelanggan({
         name: nama.trim(),
         phone: hp.trim() || undefined,
         credit_limit: batas,
+        price_list_id: daftar,
       }
       return awal ? pelangganApi.ubah(awal.id, isi) : pelangganApi.buat(isi)
     },
@@ -310,6 +314,23 @@ function DialogPelanggan({
             bantuan="Utang pelanggan tidak boleh melebihi angka ini. Isi Rp 0 bila tidak dibatasi."
             galat={galatKolom(kolomGalat, 'credit_limit')}
           />
+          {/* Hanya tampil bila toko sudah membuat daftar harga khusus. */}
+          {(daftarHarga.data?.length ?? 0) > 0 && (
+            <Pilihan
+              label="Daftar harga"
+              value={daftar}
+              onChange={(e) => setDaftar(e.target.value)}
+              bantuan="Di kasir, pelanggan ini mendapat harga khusus daftarnya."
+              galat={galatKolom(kolomGalat, 'price_list_id')}
+            >
+              <option value="">Harga umum</option>
+              {daftarHarga.data!.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </Pilihan>
+          )}
 
           {galat && (
             <p className="rounded-kontrol border border-bahaya bg-bahaya-teks/10 px-3 py-2 text-label text-bahaya-teks">

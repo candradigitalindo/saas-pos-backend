@@ -321,6 +321,12 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 		g.DELETE("/:id", middlewares.Require("product.edit"), res.del)
 	}
 
+	// Daftar harga khusus (member, reseller) — seperti master data lain.
+	pl := t.Group("/price-lists")
+	pl.GET("", middlewares.Require("product.view"), controllers.ListPriceLists)
+	pl.POST("", middlewares.Require("product.edit"), controllers.CreatePriceList)
+	pl.DELETE("/:id", middlewares.Require("product.edit"), controllers.DeletePriceList)
+
 	// Produk — perizinan lebih rinci.
 	prod := t.Group("/products")
 	prod.GET("", middlewares.Require("product.view"), controllers.ListProducts)

@@ -113,6 +113,10 @@ func GetProduct(c *gin.Context) {
 		return
 	}
 	res.WholesalePrices = tiers
+	if res.SpecialPrices, err = services.SpecialPricesResponse(c.Request.Context(), row.ID); err != nil {
+		respondServiceError(c, err)
+		return
+	}
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.ProductResponse]{
 		Success: true, Message: "Berhasil mengambil data produk", Data: res,
 	})
@@ -171,6 +175,11 @@ func CreateProduct(c *gin.Context) {
 		if err := repositories.CreateProduct(ctx, tx, &row); err != nil {
 			return err
 		}
+		if len(req.SpecialPrices) > 0 {
+			if err := services.SaveSpecialPrices(ctx, tx, row.ID, req.SpecialPrices); err != nil {
+				return err
+			}
+		}
 		if len(grosir) == 0 {
 			return nil
 		}
@@ -188,6 +197,9 @@ func CreateProduct(c *gin.Context) {
 	row.Category = cat
 	res := productToResponse(row)
 	res.WholesalePrices = wholesaleToResponse(grosir)
+	for _, s := range req.SpecialPrices {
+		res.SpecialPrices = append(res.SpecialPrices, structs.SpecialPriceResponse{PriceListID: s.PriceListID, Price: s.Price})
+	}
 	c.JSON(http.StatusCreated, structs.SuccessResponse[structs.ProductResponse]{
 		Success: true, Message: "Produk berhasil dibuat", Data: res,
 	})
@@ -294,6 +306,11 @@ func UpdateProduct(c *gin.Context) {
 		if err := repositories.UpdateProduct(ctx, tx, &row); err != nil {
 			return err
 		}
+		if req.SpecialPrices != nil {
+			if err := services.SaveSpecialPrices(ctx, tx, row.ID, *req.SpecialPrices); err != nil {
+				return err
+			}
+		}
 		if req.WholesalePrices == nil {
 			return nil
 		}
@@ -313,6 +330,10 @@ func UpdateProduct(c *gin.Context) {
 		return
 	}
 	res.WholesalePrices = tiers
+	if res.SpecialPrices, err = services.SpecialPricesResponse(ctx, row.ID); err != nil {
+		respondServiceError(c, err)
+		return
+	}
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.ProductResponse]{
 		Success: true, Message: "Produk berhasil diperbarui", Data: res,
 	})

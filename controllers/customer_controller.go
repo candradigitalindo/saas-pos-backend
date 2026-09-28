@@ -8,6 +8,7 @@ import (
 	"candra/backend-api/internal/reqctx"
 	"candra/backend-api/models"
 	"candra/backend-api/repositories"
+	"candra/backend-api/services"
 	"candra/backend-api/structs"
 
 	"github.com/gin-gonic/gin"
@@ -93,6 +94,11 @@ func CreateCustomer(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
+	// Daftar harga tak dikenal ditolak dengan pesan, bukan galat FK (500).
+	if err := services.ValidateCustomerPriceList(ctx, req.PriceListID); err != nil {
+		respondServiceError(c, err)
+		return
+	}
 	ownerID := reqctx.UserID(ctx)
 	row := models.Customer{
 		TenantID:    reqctx.TenantID(ctx),
@@ -154,6 +160,10 @@ func UpdateCustomer(c *gin.Context) {
 		row.Type = *req.Type
 	}
 	if req.PriceListID != nil {
+		if err := services.ValidateCustomerPriceList(ctx, *req.PriceListID); err != nil {
+			respondServiceError(c, err)
+			return
+		}
 		row.PriceListID = nilIfEmpty(*req.PriceListID)
 	}
 	if req.CreditLimit != nil {

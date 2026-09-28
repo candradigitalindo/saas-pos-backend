@@ -6,12 +6,12 @@ import { Kolom } from '@/bersama/ui/kolom'
 import { Tombol } from '@/bersama/ui/tombol'
 import { KerangkaBaris } from '@/bersama/komponen/kerangka'
 import { useToast } from '@/bersama/komponen/toast'
-import { useKategori, usePemasok, useSatuan } from '@/bersama/hooks/use-katalog'
+import { useDaftarHarga, useKategori, usePemasok, useSatuan } from '@/bersama/hooks/use-katalog'
 import { GalatAPI } from '@/lib/api-client'
 import { produkApi } from '../api'
 import { SegmenPilihan } from '@/bersama/ui/segmen'
 
-type Tab = 'kategori' | 'satuan' | 'pemasok'
+type Tab = 'kategori' | 'satuan' | 'pemasok' | 'harga'
 
 const JUDUL: Record<Tab, { label: string; tunggal: string; contoh: string; bantuan: string }> = {
   kategori: {
@@ -32,9 +32,19 @@ const JUDUL: Record<Tab, { label: string; tunggal: string; contoh: string; bantu
     contoh: 'Toko Grosir Jaya',
     bantuan: 'Tempat Anda kulakan barang.',
   },
+  harga: {
+    label: 'Daftar Harga',
+    tunggal: 'daftar harga',
+    contoh: 'Member',
+    bantuan:
+      'Harga khusus untuk kelompok pelanggan, mis. Member atau Reseller. Harganya diisi di form barang, lalu pelanggannya dipilihkan daftar ini.',
+  },
 }
 
-/** Kategori, satuan, dan pemasok — data pendukung yang jarang diubah. */
+/**
+ * Kategori, satuan, pemasok, dan daftar harga khusus — data pendukung yang
+ * jarang diubah. Menghapus daftar harga mengembalikan pelanggannya ke harga umum.
+ */
 export function HalamanMaster() {
   const [tab, setTab] = useState<Tab>('kategori')
   const toast = useToast()
@@ -43,16 +53,23 @@ export function HalamanMaster() {
   const kategori = useKategori()
   const satuan = useSatuan()
   const pemasok = usePemasok()
+  const daftarHarga = useDaftarHarga()
 
   const [nama, setNama] = useState('')
   const [galat, setGalat] = useState<string | null>(null)
 
-  const sumber =
-    tab === 'kategori' ? kategori : tab === 'satuan' ? satuan : pemasok
-  const daftar = sumber.data?.data ?? []
+  const sumber = tab === 'kategori' ? kategori : tab === 'satuan' ? satuan : tab === 'pemasok' ? pemasok : null
+  const daftar: { id: string; name: string }[] = sumber ? (sumber.data?.data ?? []) : (daftarHarga.data ?? [])
+  const memuat = sumber ? sumber.isLoading : daftarHarga.isLoading
 
   const kunciCache =
-    tab === 'kategori' ? 'katalog-kategori' : tab === 'satuan' ? 'katalog-satuan' : 'katalog-pemasok'
+    tab === 'kategori'
+      ? 'katalog-kategori'
+      : tab === 'satuan'
+        ? 'katalog-satuan'
+        : tab === 'pemasok'
+          ? 'katalog-pemasok'
+          : 'daftar-harga'
 
   // Ketiganya dibuat lewat endpoint berbeda tapi yang dipakai layar ini cuma
   // id dan nama, jadi hasilnya disamakan ke bentuk itu.
@@ -61,6 +78,7 @@ export function HalamanMaster() {
       const n = nama.trim()
       if (tab === 'kategori') return produkApi.buatKategori(n)
       if (tab === 'satuan') return produkApi.buatSatuan(n)
+      if (tab === 'harga') return produkApi.buatDaftarHarga(n)
       return produkApi.buatPemasok({ name: n })
     },
     onSuccess: () => {
@@ -75,6 +93,7 @@ export function HalamanMaster() {
     mutationFn: (id: string) => {
       if (tab === 'kategori') return produkApi.hapusKategori(id)
       if (tab === 'satuan') return produkApi.hapusSatuan(id)
+      if (tab === 'harga') return produkApi.hapusDaftarHarga(id)
       return produkApi.hapusPemasok(id)
     },
     onSuccess: () => {
@@ -93,7 +112,7 @@ export function HalamanMaster() {
 
   return (
     <div className="flex w-full max-w-2xl flex-col gap-4">
-      <h1 className="text-judul font-bold text-teks-utama">Kategori, Satuan & Pemasok</h1>
+      <h1 className="text-judul font-bold text-teks-utama">Kategori, Satuan, Pemasok & Harga</h1>
 
       {/* `aria-pressed` pada satu grup, bukan role="tab". Markup sebelumnya
           memakai role="tablist"/"tab" tanpa `tabpanel` maupun `aria-controls`
@@ -134,7 +153,7 @@ export function HalamanMaster() {
         </form>
       </Kartu>
 
-      {sumber.isLoading ? (
+      {memuat ? (
         <KerangkaBaris jumlah={3} />
       ) : daftar.length === 0 ? (
         <p className="text-center text-isi text-teks-redup">

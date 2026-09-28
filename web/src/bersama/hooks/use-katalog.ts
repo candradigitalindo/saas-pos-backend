@@ -7,7 +7,7 @@
  */
 import { useQuery } from '@tanstack/react-query'
 import { api, type Halaman } from '@/lib/api-client'
-import type { Kategori, Pemasok, Produk, Satuan } from '@/bersama/tipe/katalog'
+import type { DaftarHarga, Kategori, Pemasok, Produk, Satuan } from '@/bersama/tipe/katalog'
 import type { Pelanggan } from '@/bersama/tipe/pos'
 
 export function useDaftarProduk(cari?: string, kategoriId?: string, aktifSaja = true) {
@@ -38,6 +38,18 @@ export function useSatuan() {
   return useQuery({
     queryKey: ['katalog-satuan'],
     queryFn: () => api.get<Halaman<Satuan>>('/units', { query: { limit: 100 } }),
+    staleTime: 5 * 60_000,
+  })
+}
+
+/**
+ * Daftar harga khusus (member, reseller) — dibaca form barang & form
+ * pelanggan; dikelola di Barang › Master.
+ */
+export function useDaftarHarga() {
+  return useQuery({
+    queryKey: ['daftar-harga'],
+    queryFn: () => api.get<DaftarHarga[]>('/price-lists'),
     staleTime: 5 * 60_000,
   })
 }

@@ -57,6 +57,7 @@ export function LayarBayar({
   onSelesai,
   kunciQris,
   pelanggan = [],
+  pelangganTetap,
 }: {
   terbuka: boolean
   onTutup: () => void
@@ -83,6 +84,13 @@ export function LayarBayar({
    * baru ketahuan saat sinkron, jauh setelah pembelinya pergi.
    */
   pelanggan?: PelangganBayar[]
+  /**
+   * Pelanggan yang sudah dipilih di keranjang. Kasbon lalu tercatat atas
+   * namanya dan pilihannya dikunci: harga di keranjang sudah dihitung dengan
+   * daftar harga pelanggan ini — mengganti pelanggan di sini akan membuat
+   * total yang dibayar berbeda dari total di server.
+   */
+  pelangganTetap?: string
 }) {
   const [metode, setMetode] = useState<MetodeBayar>('cash')
   const [diterima, setDiterima] = useState(0)
@@ -101,8 +109,8 @@ export function LayarBayar({
     setBagian([])
     setJumlahSebagian(null)
     setMetode('cash')
-    setPelangganId('')
-  }, [terbuka])
+    setPelangganId(pelangganTetap ?? '')
+  }, [terbuka, pelangganTetap])
 
   const sudahDibayar = bagian.reduce((j, b) => j + b.amount, 0)
   const sisa = total - sudahDibayar
@@ -306,7 +314,13 @@ export function LayarBayar({
 
         {metode === 'credit' && (
           <div className="flex flex-col gap-3">
-            {pelanggan.length === 0 ? (
+            {pelangganTetap ? (
+              <p className="text-label text-teks-sekunder">
+                Atas nama <strong className="text-teks-utama">{pembeli?.name ?? 'pelanggan keranjang'}</strong>
+                {pembeli && pembeli.credit_limit > 0 && ` · batas kasbon ${formatRupiah(pembeli.credit_limit)}`}.
+                Ganti pelanggan dari keranjang.
+              </p>
+            ) : pelanggan.length === 0 ? (
               <p className="rounded-kontrol border border-jingga-600 bg-permukaan-2 px-3 py-2 text-label text-jingga-700">
                 Belum ada pelanggan. Kasbon harus dicatat atas nama seseorang — tambahkan
                 pelanggannya dulu di menu Pelanggan.

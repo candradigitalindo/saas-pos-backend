@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { Plus, SquarePen, Trash2, X } from 'lucide-react'
+import { ChevronRight, Plus, SquarePen, Trash2, UserRound, X } from 'lucide-react'
 import { Tombol } from '@/bersama/ui/tombol'
 import { StepperJumlah } from '@/bersama/ui/stepper-jumlah'
 import { useIzin } from '@/bersama/hooks/use-sesi'
 import { formatRupiah, pratinjauBaris } from '@/bersama/util/uang'
-import { diskonBaris, hargaBaris, hargaGrosir, namaBaris, type Keranjang } from '../keranjang'
+import { diskonBaris, hargaBaris, hargaGrosir, hargaKhusus, namaBaris, type Keranjang } from '../keranjang'
+import { DialogPilihPelanggan } from './dialog-pilih-pelanggan'
 import { DialogAturBaris } from './dialog-atur-baris'
 import { DialogDiskonTransaksi } from './dialog-diskon-transaksi'
 
@@ -34,6 +35,7 @@ export function PanelKeranjang({
   const bolehDiskon = useIzin().boleh('sale.discount')
   const [kunciAtur, setKunciAtur] = useState<string | null>(null)
   const [aturDiskon, setAturDiskon] = useState(false)
+  const [pilihPelanggan, setPilihPelanggan] = useState(false)
   const barisAtur = baris.find((b) => b.kunci === kunciAtur)
   // Pajak eksklusif MENAMBAH total (total = subtotal − diskon + pajak +
   // layanan); pajak inklusif sudah ada di dalam harga dan hanya disebutkan.
@@ -75,6 +77,24 @@ export function PanelKeranjang({
         )}
       </div>
 
+      {/* Pembeli: menentukan harga khusus (member/reseller) dan dipakai kasbon.
+          Satu baris tipis — kebanyakan transaksi tetap "Umum". */}
+      <button
+        type="button"
+        onClick={() => setPilihPelanggan(true)}
+        className="flex min-h-11 items-center gap-2 border-b border-garis px-4 text-left text-label hover:bg-permukaan-2"
+      >
+        <UserRound className="h-4 w-4 shrink-0 text-teks-redup" aria-hidden />
+        <span className="shrink-0 text-teks-redup">Pelanggan</span>
+        <span className="min-w-0 flex-1 truncate text-right font-medium text-teks-utama">
+          {keranjang.pelanggan ? keranjang.pelanggan.name : 'Umum'}
+          {keranjang.pelanggan?.nama_daftar && (
+            <span className="font-normal text-utama"> · harga {keranjang.pelanggan.nama_daftar}</span>
+          )}
+        </span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-teks-redup" aria-hidden />
+      </button>
+
       <div className="flex-1 overflow-y-auto">
         {kosong ? (
           <p className="px-4 py-8 text-center text-isi text-teks-redup">
@@ -87,7 +107,8 @@ export function PanelKeranjang({
               const q = keranjang.qtyDari(b.produk.id)
               const harga = hargaBaris(b, q)
               const diskon = diskonBaris(b, q)
-              const grosir = hargaGrosir(b.produk, q) !== b.produk.sell_price
+              const khusus = hargaKhusus(b.produk, q, b.daftarHarga) !== undefined
+              const grosir = !khusus && hargaGrosir(b.produk, q) !== b.produk.sell_price
               return (
               <li key={b.kunci} className="flex flex-col gap-2 p-4">
                 <div className="flex items-start justify-between gap-3">
@@ -96,6 +117,9 @@ export function PanelKeranjang({
                     <p className="text-keterangan tabular-nums text-teks-redup">
                       {formatRupiah(harga)} × {b.qty}
                       {grosir && <span className="font-semibold text-utama"> · harga grosir</span>}
+                      {khusus && (
+                        <span className="font-semibold text-utama"> · harga {keranjang.pelanggan?.nama_daftar ?? 'khusus'}</span>
+                      )}
                       {diskon > 0 &&
                         ` − ${formatRupiah(diskon)}${b.diskonPersen !== undefined ? ` (${b.diskonPersen}%)` : ''}`}
                     </p>
@@ -213,6 +237,16 @@ export function PanelKeranjang({
             setKunciAtur(null)
           }}
           onTutup={() => setKunciAtur(null)}
+        />
+      )}
+      {pilihPelanggan && (
+        <DialogPilihPelanggan
+          sekarang={keranjang.pelanggan}
+          onPilih={(p) => {
+            keranjang.aturPelanggan(p)
+            setPilihPelanggan(false)
+          }}
+          onTutup={() => setPilihPelanggan(false)}
         />
       )}
       {aturDiskon && (

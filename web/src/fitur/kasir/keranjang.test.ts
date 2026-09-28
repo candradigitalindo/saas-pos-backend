@@ -179,6 +179,30 @@ describe('keranjang', () => {
     expect(itemUntukCheckout(result.current.baris)[0]?.discount_amount).toBe(5400)
   })
 
+  it('pelanggan ber-daftar harga: harga khusus menang, barang tanpa harga khusus tetap umum/grosir', () => {
+    const { result } = renderHook(() => useKeranjang())
+    const kopi: Produk = { ...produk('K1', 15000, 'Kopi'), special_prices: [{ price_list_id: 'MEMBER', price: 12000 }] }
+    const galon: Produk = { ...produk('G1', 10000, 'Galon'), wholesale_prices: [{ min_qty: '6', price: 9000 }] }
+    act(() => result.current.tambah(kopi, '2'))
+    expect(result.current.pratinjauTotal).toBe(30000)
+
+    // Memilih pelanggan member mengubah baris yang SUDAH ada…
+    act(() => result.current.aturPelanggan({ id: 'C1', name: 'Bu Rina', price_list_id: 'MEMBER', nama_daftar: 'Member' }))
+    expect(result.current.pratinjauTotal).toBe(24000)
+    // …dan baris yang ditambah sesudahnya; galon tanpa harga khusus → grosir.
+    act(() => result.current.tambah(galon, '6'))
+    expect(result.current.pratinjauTotal).toBe(24000 + 54000)
+
+    // Kembali ke umum → harga umum lagi; kosongkan → pelanggan ikut hilang.
+    act(() => result.current.aturPelanggan(null))
+    expect(result.current.pratinjauTotal).toBe(30000 + 54000)
+    act(() => result.current.aturPelanggan({ id: 'C1', name: 'Bu Rina', price_list_id: 'MEMBER' }))
+    act(() => result.current.kosongkan())
+    expect(result.current.pelanggan).toBeNull()
+    act(() => result.current.tambah(kopi, '1'))
+    expect(result.current.pratinjauTotal).toBe(15000)
+  })
+
   it('mengosongkan keranjang setelah transaksi selesai', () => {
     const { result } = renderHook(() => useKeranjang())
     act(() => result.current.tambah(produk('P1', 18000)))

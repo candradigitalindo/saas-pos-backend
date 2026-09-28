@@ -36,6 +36,8 @@ type CustomerResponse struct {
 	Type        string `json:"type"`
 	CreditLimit int64  `json:"credit_limit"`
 	Note        string `json:"note,omitempty"`
+	// PriceListID: daftar harga khusus pelanggan ini (kosong = harga umum).
+	PriceListID string `json:"price_list_id,omitempty"`
 	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
 	// Ringkasan belanja — hanya diisi GET /customers (daftar).

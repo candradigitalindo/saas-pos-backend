@@ -21,6 +21,8 @@ export interface InputPelanggan {
   address?: string
   credit_limit?: number
   note?: string
+  /** "" = kembali ke harga umum. */
+  price_list_id?: string
 }
 
 export const pelangganApi = {

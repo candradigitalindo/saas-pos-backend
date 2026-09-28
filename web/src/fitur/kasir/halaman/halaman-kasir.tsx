@@ -28,6 +28,7 @@ import { DialogTagihan } from '../komponen/dialog-tagihan'
 import {
   batalkanTagihan,
   itemTagihanKeBaris,
+  pelangganKeranjang,
   simpanTagihan,
   tagihanKeDiskon,
   useTagihanTerbuka,
@@ -119,7 +120,9 @@ export function HalamanKasir() {
           // uang yang benar-benar diterima supaya server yang menghitung
           // kembaliannya.
           payments: pembayaran,
-          customer_id: pelangganId,
+          // Pelanggan keranjang ikut tercatat (harga khusus dihitung server
+          // dari daftarnya); kasbon memakai pelanggan yang sama.
+          customer_id: pelangganId ?? keranjang.pelanggan?.id,
           // Tagihan terbuka ditutup server di transaksi yang sama.
           ...(keranjang.tagihan ? { open_bill_id: keranjang.tagihan.id } : {}),
         },
@@ -155,6 +158,7 @@ export function HalamanKasir() {
       diskonTransaksi: keranjang.diskonTransaksi,
       nominal: keranjang.pratinjauTotal,
       namaPengguna: profil?.user.name,
+      pelangganId: keranjang.pelanggan?.id,
     })
     keranjang.kosongkan()
     setBukaTahan(false)
@@ -179,7 +183,12 @@ export function HalamanKasir() {
 
   async function bukaTagihanDiKeranjang(t: TagihanLokal) {
     const { baris, hilang } = await itemTagihanKeBaris(t.items)
-    keranjang.muatTagihan({ id: t.id, version: t.version, label: t.label }, baris, tagihanKeDiskon(t.order_discount))
+    keranjang.muatTagihan(
+      { id: t.id, version: t.version, label: t.label },
+      baris,
+      tagihanKeDiskon(t.order_discount),
+      await pelangganKeranjang(t.customer_id),
+    )
     setBukaTagihan(false)
     if (hilang > 0) {
       toast.tampilkan(`${hilang} barang di tagihan ini sudah tidak ada di katalog dan dilewati.`, 'perhatian')
@@ -436,6 +445,7 @@ export function HalamanKasir() {
         galat={galatBayar}
         onSelesai={selesaikan}
         pelanggan={daftarPelanggan}
+        pelangganTetap={keranjang.pelanggan?.id}
         kunciQris={
           punyaFitur(FITUR.qris) ? undefined : `Paket ${paketUntuk(FITUR.qris) ?? 'berbayar'}`
         }

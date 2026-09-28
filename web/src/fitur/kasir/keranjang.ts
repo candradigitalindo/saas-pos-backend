@@ -22,7 +22,7 @@
  *     Karena itu fungsi harga menerima `qtyProduk`; tanpa itu dipakai qty
  *     barisnya sendiri.
  */
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import Decimal from 'decimal.js'
 import type { Produk, VarianProduk } from '@/bersama/tipe/katalog'
 import { bandingQty, kurangQty, qtyKosong, tambahQty } from '@/bersama/util/desimal'
@@ -40,6 +40,22 @@ export interface BarisKeranjang {
   diskonPersen?: number
   /** Catatan untuk barang ini ("tanpa es"), ikut tercetak di struk. */
   catatan?: string
+  /**
+   * Daftar harga khusus yang berlaku (dari pelanggan keranjang). Disimpan per
+   * baris supaya semua fungsi harga cukup menerima barisnya.
+   */
+  daftarHarga?: string
+}
+
+/** Pelanggan keranjang — menentukan harga khusus & dipakai kasbon. */
+export interface PelangganKeranjang {
+  id: string
+  name: string
+  phone?: string | null
+  /** Daftar harga khusus pelanggan (member/reseller); kosong = harga umum. */
+  price_list_id?: string | null
+  /** Nama daftar harganya, untuk label di keranjang ("harga Member"). */
+  nama_daftar?: string
 }
 
 /** Diskon transaksi: nominal rupiah, atau persen dari belanja setelah diskon baris. */
@@ -80,7 +96,12 @@ export interface Keranjang {
     tagihan: { id: string; version: number; label: string },
     baris: BarisKeranjang[],
     diskonTransaksi: DiskonTransaksi | null,
+    pelanggan?: PelangganKeranjang | null,
   ) => void
+  /** Pembeli transaksi ini; null = umum. */
+  pelanggan: PelangganKeranjang | null
+  /** Mengganti pembeli — harga khusus seluruh baris ikut berganti. */
+  aturPelanggan: (p: PelangganKeranjang | null) => void
 }
 
 function bulat(d: Decimal): number {
@@ -88,7 +109,10 @@ function bulat(d: Decimal): number {
 }
 
 /** Nilai kotor baris = bulat(qty × harga), sama dengan server. */
-export function kotorBaris(b: Pick<BarisKeranjang, 'produk' | 'varian' | 'qty'>, qtyProduk?: string): number {
+export function kotorBaris(
+  b: Pick<BarisKeranjang, 'produk' | 'varian' | 'qty' | 'daftarHarga'>,
+  qtyProduk?: string,
+): number {
   try {
     return bulat(new Decimal(b.qty || '0').mul(hargaBaris(b, qtyProduk)))
   } catch {
@@ -98,7 +122,7 @@ export function kotorBaris(b: Pick<BarisKeranjang, 'produk' | 'varian' | 'qty'>,
 
 /** Diskon baris yang berlaku (rupiah), sudah dijepit 0..nilai baris. */
 export function diskonBaris(
-  b: Pick<BarisKeranjang, 'produk' | 'varian' | 'qty' | 'diskon' | 'diskonPersen'>,
+  b: Pick<BarisKeranjang, 'produk' | 'varian' | 'qty' | 'diskon' | 'diskonPersen' | 'daftarHarga'>,
   qtyProduk?: string,
 ): number {
   const kotor = kotorBaris(b, qtyProduk)
@@ -123,9 +147,39 @@ export function hargaGrosir(produk: Pick<Produk, 'sell_price' | 'wholesale_price
   return harga
 }
 
-/** Harga satuan pratinjau: harga dasar (grosir bila memenuhi) + selisih varian. */
-export function hargaBaris(b: Pick<BarisKeranjang, 'produk' | 'varian' | 'qty'>, qtyProduk?: string): number {
-  return hargaGrosir(b.produk, qtyProduk ?? b.qty) + (b.varian?.price_delta ?? 0)
+/**
+ * Harga khusus daftar `daftarHarga` untuk jumlah `qtyTotal`, bila barangnya
+ * punya harga di daftar itu (services.hargaDaftar).
+ */
+export function hargaKhusus(
+  produk: Pick<Produk, 'special_prices'>,
+  qtyTotal: string,
+  daftarHarga?: string,
+): number | undefined {
+  if (!daftarHarga) return undefined
+  let harga: number | undefined
+  let ambang: string | undefined
+  for (const k of produk.special_prices ?? []) {
+    const min = k.min_qty ?? '1'
+    if (k.price_list_id !== daftarHarga || bandingQty(qtyTotal, min) < 0) continue
+    if (ambang === undefined || bandingQty(min, ambang) > 0) {
+      harga = k.price
+      ambang = min
+    }
+  }
+  return harga
+}
+
+/**
+ * Harga satuan pratinjau: harga khusus pelanggan bila ada, selain itu harga
+ * dasar (grosir bila memenuhi) — lalu + selisih varian. Sama dengan server.
+ */
+export function hargaBaris(
+  b: Pick<BarisKeranjang, 'produk' | 'varian' | 'qty' | 'daftarHarga'>,
+  qtyProduk?: string,
+): number {
+  const q = qtyProduk ?? b.qty
+  return (hargaKhusus(b.produk, q, b.daftarHarga) ?? hargaGrosir(b.produk, q)) + (b.varian?.price_delta ?? 0)
 }
 
 /** Total qty per barang di keranjang (semua varian dijumlah) — dasar harga grosir. */
@@ -148,18 +202,31 @@ export function useKeranjang(aturan?: AturanHarga): Keranjang {
   const [baris, setBaris] = useState<BarisKeranjang[]>([])
   const [diskonTransaksi, setDiskonTransaksi] = useState<DiskonTransaksi | null>(null)
   const [tagihan, setTagihan] = useState<Keranjang['tagihan']>(null)
+  const [pelanggan, setPelanggan] = useState<PelangganKeranjang | null>(null)
+  // Daftar harga yang berlaku untuk baris BARU — ref supaya `tambah` tetap stabil.
+  const daftarAktif = useRef<string | undefined>(undefined)
 
-  const muatTagihan = useCallback<Keranjang['muatTagihan']>((t, isi, diskon) => {
-    setBaris(isi)
+  const aturPelanggan = useCallback((p: PelangganKeranjang | null) => {
+    const daftar = p?.price_list_id || undefined
+    daftarAktif.current = daftar
+    setPelanggan(p)
+    setBaris((lama) => lama.map((b) => ({ ...b, daftarHarga: daftar })))
+  }, [])
+
+  const muatTagihan = useCallback<Keranjang['muatTagihan']>((t, isi, diskon, p) => {
+    const daftar = p?.price_list_id || undefined
+    daftarAktif.current = daftar
+    setBaris(isi.map((b) => ({ ...b, daftarHarga: daftar })))
     setDiskonTransaksi(diskon)
     setTagihan(t)
+    setPelanggan(p ?? null)
   }, [])
 
   const tambah = useCallback((p: Produk, qty = '1', varian?: VarianProduk) => {
     const kunci = kunciBaris(p.id, varian?.id)
     setBaris((lama) => {
       const ada = lama.find((b) => b.kunci === kunci)
-      if (!ada) return [...lama, { kunci, produk: p, varian, qty, diskon: 0 }]
+      if (!ada) return [...lama, { kunci, produk: p, varian, qty, diskon: 0, daftarHarga: daftarAktif.current }]
       return lama.map((b) =>
         b.kunci === kunci ? { ...b, qty: tambahQty(b.qty, qty) } : b,
       )
@@ -203,6 +270,8 @@ export function useKeranjang(aturan?: AturanHarga): Keranjang {
     setBaris([])
     setDiskonTransaksi(null)
     setTagihan(null)
+    setPelanggan(null)
+    daftarAktif.current = undefined
   }, [])
 
   const qtyDari = useCallback(
@@ -234,6 +303,8 @@ export function useKeranjang(aturan?: AturanHarga): Keranjang {
     qtyDari,
     tagihan,
     muatTagihan,
+    pelanggan,
+    aturPelanggan,
   }
 }
 
