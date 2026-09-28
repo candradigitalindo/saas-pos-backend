@@ -90,6 +90,10 @@ export const kasirApi = {
   stok: (outlet_id: string, limit = 100) =>
     api.get<Halaman<SaldoStok>>('/stocks', { query: { outlet_id, limit } }),
 
+  // ── Struk digital ────────────────────────────────────────────────────────
+  /** Token tautan struk digital (dibuat sekali di server, dipakai ulang). */
+  tautanStruk: (saleId: string) => api.post<{ token: string }>(`/sales/${saleId}/receipt-link`),
+
   // ── Tagihan terbuka ──────────────────────────────────────────────────────
   daftarTagihan: (outlet_id: string) => api.get<TagihanTerbuka[]>('/open-bills', { query: { outlet_id } }),
   simpanTagihan: (id: string, input: InputTagihan) => api.put<TagihanTerbuka>(`/open-bills/${id}`, input),

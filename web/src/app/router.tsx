@@ -21,6 +21,7 @@ const HalamanKasir = muat(() => import('@/fitur/kasir/halaman/halaman-kasir'), '
 const HalamanTutupShift = muat(() => import('@/fitur/kasir/halaman/halaman-tutup-shift'), 'HalamanTutupShift')
 const HalamanGantiShift = muat(() => import('@/fitur/kasir/halaman/halaman-ganti-shift'), 'HalamanGantiShift')
 const HalamanRiwayat = muat(() => import('@/fitur/kasir/halaman/halaman-riwayat'), 'HalamanRiwayat')
+const HalamanStrukPublik = muat(() => import('@/fitur/kasir/halaman/halaman-struk-publik'), 'HalamanStrukPublik')
 const HalamanKas = muat(() => import('@/fitur/kasir/halaman/halaman-kas'), 'HalamanKas')
 const HalamanPerluDiperiksa = muat(() => import('@/fitur/kasir/halaman/halaman-perlu-diperiksa'), 'HalamanPerluDiperiksa')
 const HalamanLaporan = muat(() => import('@/fitur/laporan/halaman/halaman-laporan'), 'HalamanLaporan')
@@ -116,6 +117,16 @@ const router = createBrowserRouter([
       { path: '/masuk', element: <HalamanMasuk /> },
       { path: '/daftar', element: <HalamanDaftar /> },
     ],
+  },
+  // Struk digital untuk PEMBELI — tanpa penjaga masuk/tamu: dibuka dari
+  // tautan WhatsApp oleh siapa pun, termasuk yang sedang masuk sebagai kasir.
+  {
+    path: '/struk/:token',
+    element: (
+      <Tunggu>
+        <HalamanStrukPublik />
+      </Tunggu>
+    ),
   },
   {
     path: '/selamat-datang',

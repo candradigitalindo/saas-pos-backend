@@ -1,4 +1,6 @@
-import { Printer } from 'lucide-react'
+import { useState } from 'react'
+import { MessageCircle, Printer } from 'lucide-react'
+import { DialogKirimWA } from './dialog-kirim-wa'
 import { Dialog, IsiDialog } from '@/bersama/ui/dialog'
 import { Tombol } from '@/bersama/ui/tombol'
 import { LencanaStatus } from '@/bersama/komponen/lencana-status'
@@ -30,6 +32,7 @@ export function Struk({
   /** true bila transaksi masih di antrean offline. */
   menungguDikirim?: boolean
 }) {
+  const [kirimWA, setKirimWA] = useState(false)
   return (
     <Dialog open={terbuka} onOpenChange={(o) => !o && onTutup()}>
       <IsiDialog judul="Transaksi tersimpan" className="sm:max-w-md">
@@ -114,12 +117,22 @@ export function Struk({
           <Tombol ukuran="kasir" lebarPenuh onClick={onTransaksiBaru}>
             Transaksi Baru
           </Tombol>
-          <Tombol jenis="kedua" lebarPenuh onClick={() => window.print()}>
-            <Printer className="h-5 w-5" aria-hidden />
-            Cetak Struk
-          </Tombol>
+          {/* Berdampingan: dua cara memberi struk, tanpa menambah tinggi dialog. */}
+          <div className="grid grid-cols-2 gap-2">
+            <Tombol jenis="kedua" onClick={() => window.print()}>
+              <Printer className="h-5 w-5" aria-hidden />
+              Cetak
+            </Tombol>
+            <Tombol jenis="kedua" onClick={() => setKirimWA(true)}>
+              <MessageCircle className="h-5 w-5" aria-hidden />
+              WhatsApp
+            </Tombol>
+          </div>
         </div>
       </IsiDialog>
+      {kirimWA && (
+        <DialogKirimWA transaksi={transaksi} diantre={menungguDikirim} onTutup={() => setKirimWA(false)} />
+      )}
     </Dialog>
   )
 }

@@ -121,6 +121,14 @@ func SetupRouter() *gin.Engine {
 	r.POST("/webhooks/channels/:provider/:token/*aksi", webhookLimiter, controllers.ProviderWebhook)
 
 	v1 := r.Group("/api/v1")
+	// Struk digital publik — dibuka pembeli dari tautan WhatsApp, tanpa akun.
+	// Token 128 bit tidak bisa ditebak; rate limit per-IP hanya meredam
+	// penyisiran & beban (STRUK_PUBLIK_RATELIMIT_RPS / _BURST).
+	strukLimiter := middlewares.RateLimit("struk-publik",
+		config.GetFloatEnv("STRUK_PUBLIK_RATELIMIT_RPS", 1),
+		float64(config.GetIntEnv("STRUK_PUBLIK_RATELIMIT_BURST", 20)),
+	)
+	v1.GET("/public/receipts/:token", strukLimiter, controllers.PublicReceipt)
 	registerAuthRoutes(v1)
 	registerPartnerRoutes(v1)
 	registerPlatformRoutes(v1)
@@ -359,6 +367,7 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	t.GET("/sales/:id", middlewares.Require("sale.create"), controllers.GetSale)
 	t.POST("/sales/:id/void", middlewares.Require("sale.void"), controllers.VoidSale)
 	t.POST("/sales/:id/refund", middlewares.Require("sale.refund"), controllers.RefundSale)
+	t.POST("/sales/:id/receipt-link", middlewares.Require("sale.create"), controllers.CreateReceiptLink)
 
 	// Tagihan terbuka (open bill / tahan transaksi) — dibayar lewat POST /sales
 	// dengan open_bill_id.

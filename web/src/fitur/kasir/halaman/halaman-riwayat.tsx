@@ -5,6 +5,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  MessageCircle,
   ReceiptText,
   RotateCcw,
   Search,
@@ -33,6 +34,7 @@ import { kasirApi } from '../api'
 import { useRingkasanHari, useRiwayatBertahap } from '../hooks'
 import { NAMA_JENIS_PESANAN, ikonMetode, namaMetode } from '../label-transaksi'
 import { DaftarCaraBayar } from '../komponen/daftar-cara-bayar'
+import { DialogKirimWA } from '../komponen/dialog-kirim-wa'
 
 const POLA_TANGGAL = /^\d{4}-\d{2}-\d{2}$/
 
@@ -608,6 +610,10 @@ function DialogDetail({
   // Penjualan yang sudah diretur tidak bisa diretur/dibatalkan lagi (server
   // menolak) — tombolnya tidak ditawarkan.
   const selesai = t.status === 'completed' && !t.voided_at && !t.returned_by_receipt_no
+  // Struk yang dibatalkan tidak ditawarkan untuk dikirim; yang sudah diretur
+  // tetap boleh (halaman struk digital tidak menyembunyikan statusnya).
+  const bisaDikirim = t.status === 'completed' && !t.voided_at
+  const [kirimWA, setKirimWA] = useState(false)
   const baris = (label: string, nilai: number, tebal = false) =>
     nilai !== 0 || tebal ? (
       <div className={cn('flex items-baseline justify-between gap-3', tebal && 'font-bold text-teks-utama')}>
@@ -704,15 +710,23 @@ function DialogDetail({
           {t.change_amount > 0 && baris('Kembalian', t.change_amount)}
         </dl>
 
-        {selesai && (bolehBatalkan || bolehRetur) && (
+        {(selesai || bisaDikirim) && (
           <AksiDialog>
-            {bolehRetur && (
+            {/* Kirim ulang struk — pembeli yang minta belakangan, atau yang
+                lupa dikirimi saat bayar. */}
+            {bisaDikirim && (
+              <Tombol jenis="kedua" onClick={() => setKirimWA(true)}>
+                <MessageCircle className="h-5 w-5" aria-hidden />
+                Kirim WhatsApp
+              </Tombol>
+            )}
+            {selesai && bolehRetur && (
               <Tombol jenis="kedua" onClick={onRetur}>
                 <RotateCcw className="h-5 w-5" aria-hidden />
                 Retur
               </Tombol>
             )}
-            {bolehBatalkan && (
+            {selesai && bolehBatalkan && (
               <Tombol jenis="kedua" onClick={onBatalkan}>
                 Batalkan
               </Tombol>
@@ -720,6 +734,7 @@ function DialogDetail({
           </AksiDialog>
         )}
       </IsiDialog>
+      {kirimWA && <DialogKirimWA transaksi={t} onTutup={() => setKirimWA(false)} />}
     </Dialog>
   )
 }

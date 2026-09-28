@@ -50,6 +50,9 @@ type Sale struct {
 	VoidedBy        *string    `json:"voided_by" gorm:"type:char(26)"`
 	VoidReason      string     `json:"void_reason"`
 	CreatedBy       string     `json:"created_by" gorm:"type:char(26);not null"`
+	// ReceiptToken: token acak tautan struk digital (migrasi 000045); kosong
+	// sampai struk pertama kali dibagikan. Tidak pernah dikirim di JSON biasa.
+	ReceiptToken *string `json:"-" gorm:"column:receipt_token"`
 
 	Items    []SaleItem    `json:"items,omitempty" gorm:"foreignKey:SaleID;references:ID"`
 	Payments []SalePayment `json:"payments,omitempty" gorm:"foreignKey:SaleID;references:ID"`

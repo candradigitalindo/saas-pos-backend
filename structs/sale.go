@@ -131,3 +131,50 @@ type SaleMethodTotal struct {
 	Count  int64  `json:"count"`
 	Amount int64  `json:"amount"`
 }
+
+// ── Struk digital ────────────────────────────────────────────────────────────
+
+// ReceiptLinkResponse: token tautan struk; klien merangkai alamatnya sendiri
+// (<origin>/struk/<token>) karena alamat aplikasi web ditentukan klien.
+type ReceiptLinkResponse struct {
+	Token string `json:"token"`
+}
+
+// PublicReceiptResponse: isi halaman struk publik — hanya yang tercetak di
+// struk kertas. Tanpa modal, pelanggan, kasir, atau id internal.
+type PublicReceiptResponse struct {
+	StoreName  string                 `json:"store_name"`
+	Address    string                 `json:"address,omitempty"`
+	Phone      string                 `json:"phone,omitempty"`
+	Header     string                 `json:"header,omitempty"`
+	Footer     string                 `json:"footer,omitempty"`
+	Timezone   string                 `json:"timezone"`
+	ReceiptNo  string                 `json:"receipt_no"`
+	Status     string                 `json:"status"`
+	OccurredAt string                 `json:"occurred_at"`
+	Items      []PublicReceiptItem    `json:"items"`
+	Subtotal   int64                  `json:"subtotal"`
+	Discount   int64                  `json:"discount"`
+	Tax        int64                  `json:"tax"`
+	Service    int64                  `json:"service"`
+	Rounding   int64                  `json:"rounding"`
+	Total      int64                  `json:"total"`
+	Paid       int64                  `json:"paid"`
+	Change     int64                  `json:"change"`
+	Payments   []PublicReceiptPayment `json:"payments"`
+}
+
+type PublicReceiptItem struct {
+	Name      string `json:"name"`
+	Qty       string `json:"qty"`
+	Unit      string `json:"unit"`
+	UnitPrice int64  `json:"unit_price"`
+	Discount  int64  `json:"discount"`
+	LineTotal int64  `json:"line_total"`
+	Note      string `json:"note,omitempty"`
+}
+
+type PublicReceiptPayment struct {
+	Method string `json:"method"`
+	Amount int64  `json:"amount"`
+}

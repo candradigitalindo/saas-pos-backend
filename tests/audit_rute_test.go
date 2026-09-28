@@ -29,6 +29,9 @@ func TestAuditSemuaRuteMenolakTanpaToken(t *testing.T) {
 		"/webhooks/channels/:provider/:token":       "diamankan tanda tangan penyedia per kanal",
 		"/webhooks/channels/:provider/:token/*aksi": "sub-jalur webhook per kanal (token OAuth GrabFood, pesanan)",
 		"/uploads/*filepath":                        "foto barang; pagarnya nama ULID tak tertebak",
+		// Dibuka pembeli dari tautan WhatsApp, tanpa akun; pagarnya token
+		// 128 bit acak (diuji di struk_digital_test.go).
+		"/api/v1/public/receipts/:token": "struk digital untuk pembeli",
 	}
 
 	r := routes.SetupRouter()
