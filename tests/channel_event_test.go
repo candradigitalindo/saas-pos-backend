@@ -3,6 +3,7 @@ package tests
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/shopspring/decimal"
 )
@@ -67,6 +68,11 @@ func TestChannelWebhookDedupAndProcess(t *testing.T) {
 	}
 	if ev[0].(map[string]any)["status"] != "pending" {
 		t.Fatalf("status awal = %v, mau pending", ev[0].(map[string]any)["status"])
+	}
+	// Waktu terima = saat webhook datang (antrean pekerja diurutkan olehnya),
+	// bukan time.Time nol "0001-01-01" yang menimpa DEFAULT now().
+	if at, _ := time.Parse(time.RFC3339, fmt.Sprint(ev[0].(map[string]any)["received_at"])); time.Since(at) > time.Minute {
+		t.Fatalf("received_at = %v, mau baru saja", ev[0].(map[string]any)["received_at"])
 	}
 
 	// Proses.

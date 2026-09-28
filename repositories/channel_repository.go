@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"time"
 
@@ -392,10 +393,14 @@ func FindChannelByWebhookToken(ctx context.Context, token string) (models.Channe
 
 // LastChannelEventAt: kapan peristiwa terakhir dari kanal ini diterima.
 func LastChannelEventAt(ctx context.Context, channelID string) (*time.Time, error) {
-	var t *time.Time
+	// MAX tanpa baris = NULL → nil ("belum ada pesanan otomatis").
+	var t sql.NullTime
 	err := scopeTenant(ctx, tenantDB(ctx, nil).Model(&models.ChannelEvent{})).
-		Where("channel_id = ?", channelID).Select("MAX(received_at)").Scan(&t).Error
-	return t, err
+		Where("channel_id = ?", channelID).Select("MAX(received_at)").Row().Scan(&t)
+	if err != nil || !t.Valid {
+		return nil, err
+	}
+	return &t.Time, nil
 }
 
 // FindChannelForUpdate memuat kanal & MENGUNCI barisnya (FOR UPDATE) sampai tx

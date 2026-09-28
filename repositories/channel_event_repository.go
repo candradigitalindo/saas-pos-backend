@@ -37,9 +37,13 @@ func FindChannelByProviderRef(ctx context.Context, provider, merchantRef string)
 // InsertChannelEvent menyimpan peristiwa mentah, idempoten lewat
 // UNIQUE (tenant, channel, event_type, external_ref). Mengembalikan created.
 func InsertChannelEvent(ctx context.Context, tenantID, channelID, eventType, externalRef string, payload []byte) (bool, error) {
+	// ReceivedAt WAJIB diisi: time.Time nol ditulis GORM apa adanya ("0001-01-01")
+	// dan menimpa DEFAULT now() — antrean pekerja (urut received_at) dan
+	// "pesanan otomatis terakhir" lalu kehilangan waktunya.
 	row := models.ChannelEvent{
 		ID: ulid.New(), TenantID: tenantID, ChannelID: channelID,
 		EventType: eventType, ExternalRef: externalRef, Payload: payload, Status: "pending",
+		ReceivedAt: time.Now().UTC(),
 	}
 	res := database.DB.WithContext(ctx).
 		Clauses(clause.OnConflict{
