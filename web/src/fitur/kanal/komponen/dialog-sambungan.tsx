@@ -15,7 +15,9 @@ import { kanalApi, type Kanal, type PenyediaKanal, type SambunganKanal } from '.
 const ALIAS: Record<string, string> = {
   whatsapp: 'whatsapp', wa: 'whatsapp', 'whatsapp business': 'whatsapp',
   gofood: 'gofood', gobiz: 'gofood', grabfood: 'grabfood', grab: 'grabfood', shopee: 'shopee',
-  'tiktok shop': 'tiktokshop', tiktokshop: 'tiktokshop', tokopedia: 'tiktokshop', lazada: 'lazada',
+  // Tokopedia & TikTok Shop di Indonesia = satu toko, satu API ("Tokopedia & Shop").
+  tokopedia: 'tokopedia', 'tokopedia & shop': 'tokopedia', 'tiktok shop': 'tokopedia', tiktokshop: 'tokopedia',
+  tiktok: 'tokopedia', lazada: 'lazada',
 }
 export const kodePenyedia = (k: Kanal) =>
   ALIAS[k.provider.trim().toLowerCase()] ?? ALIAS[k.name.trim().toLowerCase()]
@@ -30,9 +32,10 @@ export const kodePenyedia = (k: Kanal) =>
  * (alamat webhook). Rahasia tidak pernah dikirim balik; yang tampil hanya
  * empat karakter terakhir.
  *
- * Penyedia ber-OAuth (Shopee) menambah satu langkah: setelah kredensial
- * aplikasi tersimpan, pemilik toko memberi izin di tab baru. Dialog ini
- * menunggu sendiri (memeriksa sambungan tiap 3 detik) sampai izinnya tercatat.
+ * Penyedia ber-OAuth (Shopee, Tokopedia & Shop) menambah satu langkah:
+ * setelah kredensial aplikasi tersimpan, pemilik toko memberi izin di tab
+ * baru. Dialog ini menunggu sendiri (memeriksa sambungan tiap 3 detik) sampai
+ * izinnya tercatat.
  */
 export function DialogSambungan({ kanal, onTutup }: { kanal: Kanal; onTutup: () => void }) {
   const toast = useToast()
@@ -69,14 +72,24 @@ export function DialogSambungan({ kanal, onTutup }: { kanal: Kanal; onTutup: () 
 
   const diizinkan = sambungan.data?.authorized
   const dicek = sambungan.data?.checked_at ?? ''
+  // Setelah izin tercatat, tes koneksi langsung dijalankan: hasilnya (toko,
+  // wilayah, webhook terdaftar atau belum) tampil tanpa perlu menekan apa pun.
+  const tesIzin = useMutation({
+    mutationFn: () => kanalApi.tesSambungan(kanal.id),
+    onSuccess: (r) => {
+      setHasil(r)
+      qc.invalidateQueries({ queryKey: ['kanal'] })
+    },
+  })
   useEffect(() => {
     if (!menunggu || !diizinkan || dicek === menunggu.sejak) return
     setMenunggu(null)
     setTautanIzin(null)
     setHasil(null)
     qc.invalidateQueries({ queryKey: ['kanal'] })
+    tesIzin.mutate()
     toast.berhasil(`${diizinkan} sudah memberi izin — pesanan baru akan masuk otomatis.`)
-  }, [menunggu, diizinkan, dicek, qc, toast])
+  }, [menunggu, diizinkan, dicek, qc, toast, tesIzin])
 
   const izin = useMutation({ mutationFn: () => kanalApi.otorisasi(kanal.id) })
   const mulaiIzin = () => {
@@ -273,6 +286,8 @@ export function DialogSambungan({ kanal, onTutup }: { kanal: Kanal; onTutup: () 
                 {tersimpan && perluIzin && (
                   <IzinToko
                     penyedia={dipilih.name}
+                    redirect={s?.webhook_values?.find((v) => v.label.startsWith('Redirect'))?.label ?? 'Redirect URL'}
+                    alasan={belumIzin && s?.status === 'error' ? s.error : undefined}
                     toko={s?.authorized}
                     menunggu={!!menunggu}
                     tautan={tautanIzin}
@@ -378,11 +393,13 @@ function StatusSambungan({ s }: { s: SambunganKanal }) {
 
 /**
  * Langkah izin toko (OAuth). Belum diizinkan: ajakan utama dengan pengingat
- * Redirect URL Domain — penyebab gagal paling umum. Sudah: nama tokonya, plus
+ * isian redirect di konsol penyedia — penyebab gagal paling umum. Sudah: nama tokonya, plus
  * jalan otorisasi ulang (ganti toko / izin dicabut / kedaluwarsa 1 tahun).
  */
 function IzinToko({
   penyedia,
+  redirect,
+  alasan,
   toko,
   menunggu,
   tautan,
@@ -391,6 +408,10 @@ function IzinToko({
   onMulai,
 }: {
   penyedia: string
+  /** Nama isian redirect di konsol penyedia ("Redirect URL Domain" di Shopee). */
+  redirect: string
+  /** Izin sebelumnya hilang (mis. toko mencabutnya di Seller Center). */
+  alasan?: string
   toko?: string
   menunggu: boolean
   tautan: string | null
@@ -459,10 +480,18 @@ function IzinToko({
           <Store className="h-5 w-5" aria-hidden />
         </span>
         <div className="flex min-w-0 flex-col gap-0.5 text-label">
-          <p className="font-semibold text-teks-utama">Langkah terakhir: izin toko {penyedia}</p>
+          <p className="font-semibold text-teks-utama">
+            {alasan ? `Izin toko ${penyedia} perlu diberikan ulang` : `Langkah terakhir: izin toko ${penyedia}`}
+          </p>
+          {alasan && (
+            <p className="flex items-start gap-1.5 text-jingga-700">
+              <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+              {alasan}
+            </p>
+          )}
           <p className="text-teks-sekunder">
-            Pastikan Redirect URL Domain di atas sudah diisi di aplikasi {penyedia}. Halaman izin terbuka di
-            tab baru — masuk dengan akun penjual, lalu setujui.
+            Pastikan {redirect} di atas sudah diisi di aplikasi {penyedia}. Halaman izin terbuka di tab
+            baru — masuk dengan akun penjual, lalu setujui.
           </p>
         </div>
       </div>

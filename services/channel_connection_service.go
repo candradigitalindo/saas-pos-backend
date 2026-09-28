@@ -149,7 +149,7 @@ func SaveChannelConnection(ctx context.Context, channelID string, in structs.Cha
 		ad.Prepare(cred)
 		// Akun/toko/lingkungan berganti → alamat webhook harus didaftarkan ulang,
 		// dan token hasil otorisasi (Shopee) tidak berlaku untuk aplikasi baru.
-		for _, k := range []string{"client_id", "outlet_id", "merchant_id", "environment", "phone_number_id", "partner_id", "partner_key"} {
+		for _, k := range []string{"client_id", "outlet_id", "merchant_id", "environment", "phone_number_id", "partner_id", "partner_key", "app_key"} {
 			if lama[k] != cred[k] {
 				delete(cred, "subscribed_url")
 				if sa, ok := ad.(statefulAuth); ok {
@@ -460,6 +460,24 @@ func IngestProviderWebhook(ctx context.Context, provider, token, aksi string, h 
 	var kosong *WebhookBalasan
 	if a, bisa := ad.(ackKosong); bisa && a.AckKosong() {
 		kosong = &WebhookBalasan{Status: http.StatusOK, Kosong: true}
+	}
+	if ic, bisa := ad.(izinDicabut); bisa {
+		if pesan, dicabut := ic.IzinDicabut(body, cred); dicabut {
+			tctx := reqctx.WithTenantID(ctx, ch.TenantID)
+			err := denganKredensialTerkunci(tctx, ch.ID, func(c *models.Channel, _ ProviderAdapter, simpan ChannelCredentials) error {
+				for _, k := range []string{"access_token", "refresh_token", "access_expires", "subscribed_url"} {
+					delete(simpan, k)
+				}
+				now := time.Now().UTC()
+				c.ConnectionStatus, c.ConnectionError, c.ConnectionCheckedAt = "error", pesan, &now
+				return nil
+			})
+			if err != nil {
+				return res, nil, err
+			}
+			res.Ignored = "izin toko dicabut"
+			return res, kosong, nil
+		}
 	}
 	evs, err := ad.Events(body, cred)
 	if err != nil {

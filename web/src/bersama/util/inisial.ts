@@ -54,12 +54,17 @@ export function inisialProduk(nama: string, hurufPerKata = 3): string {
 /**
  * Inisial ORANG untuk avatar: huruf pertama dua kata pertama.
  *
- *   Sari Dewi      → SD
- *   budi           → B
- *   Ahmad bin Umar → AB
+ *   Sari Dewi        → SD
+ *   budi             → B
+ *   Ahmad bin Umar   → AB
+ *   Tokopedia & Shop → TS  (tanda baca bukan huruf nama)
  */
 export function inisialNama(nama: string): string {
-  const kata = (nama ?? '').trim().split(/\s+/).filter(Boolean)
+  const kata = (nama ?? '')
+    .trim()
+    .split(/\s+/)
+    .map((k) => k.replace(/^[^\p{L}\p{N}]+/u, ''))
+    .filter(Boolean)
   if (kata.length === 0) return '?'
   return kata
     .slice(0, 2)

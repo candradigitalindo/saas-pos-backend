@@ -46,6 +46,12 @@ describe('inisialNama', () => {
     expect(inisialNama('  budi  ')).toBe('B')
   })
 
+  it('tanda baca tidak menjadi inisial', () => {
+    expect(inisialNama('Tokopedia & Shop')).toBe('TS')
+    expect(inisialNama('Warung (Pusat)')).toBe('WP')
+    expect(inisialNama('&')).toBe('?')
+  })
+
   it('nama kosong tidak menghasilkan avatar kosong', () => {
     expect(inisialNama('')).toBe('?')
   })

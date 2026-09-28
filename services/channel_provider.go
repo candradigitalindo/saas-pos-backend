@@ -48,10 +48,11 @@ type ProviderAdapter interface {
 
 // providerAdapters: penyedia yang SUDAH bisa disambungkan.
 var providerAdapters = map[string]ProviderAdapter{
-	"whatsapp": whatsappAdapter{},
-	"gofood":   gofoodAdapter{},
-	"grabfood": grabfoodAdapter{},
-	"shopee":   shopeeAdapter{},
+	"whatsapp":  whatsappAdapter{},
+	"gofood":    gofoodAdapter{},
+	"grabfood":  grabfoodAdapter{},
+	"shopee":    shopeeAdapter{},
+	"tokopedia": tokopediaAdapter{},
 }
 
 // WebhookBalasan: balasan langsung untuk sub-jalur webhook yang ditangani
@@ -104,8 +105,15 @@ type authorizer interface {
 // dihapus bila identitas aplikasinya berganti.
 type statefulAuth interface{ StateKeys() []string }
 
+// izinDicabut: penyedia yang memberi tahu lewat webhook bahwa toko mencabut
+// izin aplikasi (Tokopedia & Shop: SELLER_DEAUTHORIZATION) — token dihapus dan
+// sambungan ditandai galat supaya tenant tahu harus mengotorisasi ulang.
+type izinDicabut interface {
+	IzinDicabut(body []byte, cred ChannelCredentials) (pesan string, dicabut bool)
+}
+
 // webhookSubscriber: penyedia yang alamat webhook-nya bisa didaftarkan lewat
-// API (GoBiz) — tenant tidak perlu menempelkannya sendiri.
+// API (GoBiz, Tokopedia & Shop) — tenant tidak perlu menempelkannya sendiri.
 type webhookSubscriber interface {
 	SubscribeWebhook(ctx context.Context, cred ChannelCredentials, alamat string) error
 }
@@ -115,8 +123,10 @@ var providerAliases = map[string]string{
 	"whatsapp": "whatsapp", "wa": "whatsapp", "whatsapp business": "whatsapp",
 	"gofood": "gofood", "gobiz": "gofood",
 	"grabfood": "grabfood", "grab": "grabfood",
-	"shopee":      "shopee",
-	"tiktok shop": "tiktokshop", "tiktokshop": "tiktokshop", "tokopedia": "tiktokshop",
+	"shopee": "shopee",
+	// Tokopedia & TikTok Shop di Indonesia = satu toko, satu API.
+	"tokopedia": "tokopedia", "tokopedia & shop": "tokopedia",
+	"tiktok shop": "tokopedia", "tiktokshop": "tokopedia", "tiktok": "tokopedia",
 	"lazada": "lazada",
 }
 
@@ -138,10 +148,9 @@ func segera(code, name, kind, docs, catatan string) structs.ChannelProviderInfo 
 func ListChannelProviders() []structs.ChannelProviderInfo {
 	out := []structs.ChannelProviderInfo{
 		whatsappAdapter{}.Info(), gofoodAdapter{}.Info(), grabfoodAdapter{}.Info(), shopeeAdapter{}.Info(),
+		tokopediaAdapter{}.Info(),
 	}
 	out = append(out,
-		segera("tiktokshop", "TikTok Shop & Tokopedia", "marketplace", "https://partner.tiktokshop.com/",
-			"Tokopedia kini lewat API TikTok Shop — butuh App Key & App Secret milik toko."),
 		segera("lazada", "Lazada", "marketplace", "https://open.lazada.com/",
 			"Butuh aplikasi Lazada Open Platform (App Key & App Secret) milik toko."),
 	)

@@ -67,7 +67,7 @@ const JENIS: Record<
     label: 'Marketplace',
     ikon: ShoppingBag,
     warna: 'bg-info-teks/10 text-info-teks',
-    contoh: ['Shopee', 'Tokopedia', 'TikTok Shop'],
+    contoh: ['Shopee', 'Tokopedia & Shop', 'Lazada'],
     komisi: '0',
   },
   conversation: {
@@ -228,7 +228,9 @@ export function HalamanKanal() {
                 ringkas
               />
             </div>
-            <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {/* grid-cols-1 eksplisit: kolom implisit "auto" melebar mengikuti
+                kartu terlebar (nama panjang) sampai halaman bergulir mendatar. */}
+            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {daftar.map((k) => (
                 <li key={k.id}>
                   <KartuKanal
@@ -247,7 +249,7 @@ export function HalamanKanal() {
       <p className="flex items-start gap-2 text-keterangan text-teks-redup">
         <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
         Kanal yang disambungkan ke API penyedia memakai akun developer milik toko Anda sendiri, dan
-        pesanannya masuk otomatis (saat ini WhatsApp, GoFood, GrabFood, dan Shopee; penyedia lain menyusul). Kanal lain dicatat
+        pesanannya masuk otomatis (saat ini WhatsApp, GoFood, GrabFood, Shopee, dan Tokopedia & Shop; penyedia lain menyusul). Kanal lain dicatat
         manual atau diimpor dari laporan harian (CSV).
       </p>
 
@@ -363,7 +365,8 @@ function KartuKanal({
       <div className="flex items-start gap-3">
         <AvatarKanal kanal={kanal} besar />
         <div className="min-w-0 flex-1">
-          <p className="truncate font-semibold text-teks-utama">{kanal.name}</p>
+          {/* Dua baris, bukan terpotong: "Tokopedia & S…" tidak lagi terbaca. */}
+          <p className="line-clamp-2 font-semibold break-words text-teks-utama">{kanal.name}</p>
           <p className="text-keterangan text-teks-redup">
             {jenis.label} ·{' '}
             <span className="whitespace-nowrap">komisi {komisi.toLocaleString('id-ID')}%</span>
