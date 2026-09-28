@@ -167,11 +167,12 @@ var urutanPenyedia = []string{"whatsapp", "gofood", "grabfood", "shopee", "tokop
 // Payload asli penyedia ikut di "_raw" untuk penelusuran.
 func genericFromEvent(ev NormalizedEvent, raw []byte) ([]byte, error) {
 	type item struct {
-		SKU       string `json:"sku,omitempty"`
-		ProductID string `json:"product_id,omitempty"`
-		VariantID string `json:"variant_id,omitempty"`
-		Qty       string `json:"qty"`
-		UnitPrice *int64 `json:"unit_price,omitempty"`
+		SKU        string `json:"sku,omitempty"`
+		ProductID  string `json:"product_id,omitempty"`
+		VariantID  string `json:"variant_id,omitempty"`
+		VariantSKU string `json:"variant_sku,omitempty"`
+		Qty        string `json:"qty"`
+		UnitPrice  *int64 `json:"unit_price,omitempty"`
 	}
 	type fee struct {
 		Kind   string `json:"kind"`
@@ -203,7 +204,8 @@ func genericFromEvent(ev NormalizedEvent, raw []byte) ([]byte, error) {
 	}
 	for _, it := range ev.Items {
 		p.Items = append(p.Items, item{
-			SKU: it.SKU, ProductID: it.ProductID, VariantID: it.VariantID, Qty: it.Qty.String(), UnitPrice: it.UnitPrice,
+			SKU: it.SKU, ProductID: it.ProductID, VariantID: it.VariantID, VariantSKU: it.VariantSKU,
+			Qty: it.Qty.String(), UnitPrice: it.UnitPrice,
 		})
 	}
 	for _, f := range ev.Fees {

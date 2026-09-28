@@ -4,7 +4,7 @@ import { useSesi } from '@/bersama/hooks/use-sesi'
 import { GalatAPI } from '@/lib/api-client'
 import { antrekan } from '@/lib/offline/antrean'
 import { ingat, ingatan } from '@/lib/offline/ingatan'
-import { kurangiStokLokal, produkLokal, useKatalogLokal } from '@/lib/offline/katalog-lokal'
+import { kurangiStokLokal, produkLokal, useKatalogLokal, varianLokal } from '@/lib/offline/katalog-lokal'
 import { pratinjauBaris } from '@/bersama/util/uang'
 import type { ItemTransaksi, Shift, Transaksi } from '@/bersama/tipe/pos'
 import { kasirApi, type InputCheckout } from './api'
@@ -129,13 +129,17 @@ async function simpanKeAntrean(
   const untukHitung: BarisHitung[] = []
   for (const [i, it] of input.items.entries()) {
     const p = await produkLokal(it.product_id)
-    const hargaSatuan = p?.sell_price ?? 0
+    const v = it.variant_id ? await varianLokal(it.variant_id) : undefined
+    // Harga & nama mengikuti server: harga jual + selisih varian, "Kopi (Besar)".
+    const hargaSatuan = (p?.sell_price ?? 0) + (v?.price_delta ?? 0)
     const lineTotal = pratinjauBaris(hargaSatuan, it.qty, it.discount_amount ?? 0)
     untukHitung.push({ harga: hargaSatuan, qty: it.qty, diskon: it.discount_amount ?? 0 })
+    const nama = p?.name ?? 'Barang'
     items.push({
       id: `${idTransaksi}-${i}`,
       product_id: it.product_id,
-      product_name: p?.name ?? 'Barang',
+      ...(v ? { variant_id: v.id } : {}),
+      product_name: v ? `${nama} (${v.name})` : nama,
       unit_name: p?.unit_name ?? '',
       qty: it.qty,
       unit_price: hargaSatuan,

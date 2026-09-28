@@ -136,6 +136,9 @@ type gofoodWebhook struct {
 				Name       string      `json:"name"`
 				Quantity   json.Number `json:"quantity"`
 				Price      json.Number `json:"price"`
+				Variants   []struct {
+					ExternalID string `json:"external_id"`
+				} `json:"variants"`
 			} `json:"order_items"`
 			CancellationDetail struct {
 				Reason string `json:"reason"`
@@ -195,7 +198,14 @@ func (gofoodAdapter) Events(body []byte, cred ChannelCredentials) ([]NormalizedE
 			if sku == "" {
 				sku = strings.TrimSpace(it.Name)
 			}
-			ev.Items = append(ev.Items, NormalizedItem{SKU: sku, Qty: qty, UnitPrice: &h})
+			ni := NormalizedItem{SKU: sku, Qty: qty, UnitPrice: &h}
+			for _, v := range it.Variants {
+				if id := strings.TrimSpace(v.ExternalID); id != "" {
+					ni.VariantSKU = id // pilihan varian dari menu yang dikirim POS
+					break
+				}
+			}
+			ev.Items = append(ev.Items, ni)
 		}
 		return ev, nil
 	}
@@ -449,6 +459,7 @@ func (gofoodAdapter) PublishMenu(ctx context.Context, cred ChannelCredentials, m
 		return err
 	}
 	menus := make([]map[string]any, 0, len(menu.Kategori))
+	pilihan := []any{}
 	for _, k := range menu.Kategori {
 		items := make([]map[string]any, 0, len(k.Item))
 		for _, it := range k.Item {
@@ -462,13 +473,28 @@ func (gofoodAdapter) PublishMenu(ctx context.Context, cred ChannelCredentials, m
 			if it.Deskripsi != "" {
 				m["description"] = potong(it.Deskripsi, 250)
 			}
+			if len(it.Varian) > 0 {
+				// Satu kategori varian per item: wajib pilih satu.
+				idKat := potong("VC-"+it.ID, 200)
+				varian := make([]map[string]any, 0, len(it.Varian))
+				for _, v := range it.Varian {
+					varian = append(varian, map[string]any{
+						"external_id": potong(v.ID, 200), "name": potong(v.Nama, 150), "price": v.Tambahan, "in_stock": v.Tersedia,
+					})
+				}
+				pilihan = append(pilihan, map[string]any{
+					"external_id": idKat, "internal_name": potong(it.Nama+" · pilihan", 150), "name": "Pilihan",
+					"rules": map[string]any{"selection": map[string]int{"min_quantity": 1, "max_quantity": 1}}, "variants": varian,
+				})
+				m["variant_category_external_ids"] = []string{idKat}
+			}
 			items = append(items, m)
 		}
 		menus = append(menus, map[string]any{"name": potong(k.Nama, 150), "menu_items": items})
 	}
 	jalur := "/integrations/gofood/outlets/" + url.PathEscape(strings.TrimSpace(cred["outlet_id"])) + "/v1/catalog"
 	kode, raw, err := gobizPanggil(ctx, cred, token, http.MethodPut, jalur,
-		map[string]any{"request_id": acakHex(16), "menus": menus, "variant_categories": []any{}})
+		map[string]any{"request_id": acakHex(16), "menus": menus, "variant_categories": pilihan})
 	if err != nil {
 		return err
 	}

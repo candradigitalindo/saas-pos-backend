@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { db, teksCari, type ProdukLokal } from './db'
-import { produkDariBarcode } from './katalog-lokal'
+import { db, teksCari, type ProdukLokal, type VarianLokal } from './db'
+import { produkDariBarcode, produkLokal, varianDariBarcode } from './katalog-lokal'
 
 function produk(p: Partial<ProdukLokal> & { id: string; name: string }): ProdukLokal {
   const dasar: ProdukLokal = {
@@ -69,5 +69,55 @@ describe('produkDariBarcode', () => {
 
   it('kode tak dikenal mengembalikan undefined, bukan melempar', async () => {
     await expect(produkDariBarcode('9999999999999')).resolves.toBeUndefined()
+  })
+})
+
+describe('varian di katalog lokal', () => {
+  const varian = (id: string, isi: Partial<VarianLokal> = {}): VarianLokal => ({
+    id,
+    product_id: 'P1',
+    name: id,
+    sku: null,
+    barcode: null,
+    price_delta: 0,
+    is_active: true,
+    sync_version: 1,
+    ...isi,
+  })
+
+  beforeEach(async () => {
+    await db.produk.clear()
+    await db.varian.clear()
+    await db.satuan.put({ id: 'U1', name: 'pcs', sync_version: 1 })
+    await db.produk.put(produk({ id: 'P1', name: 'Kopi', sell_price: 15000 }))
+  })
+
+  it('barang membawa varian AKTIF, termurah dulu', async () => {
+    await db.varian.bulkPut([
+      varian('Besar', { price_delta: 5000 }),
+      varian('Kecil', { price_delta: -2000 }),
+      varian('Jumbo', { price_delta: 9000, is_active: false }),
+    ])
+    const p = await produkLokal('P1')
+    expect(p?.varian?.map((v) => v.name)).toEqual(['Kecil', 'Besar'])
+  })
+
+  it('barcode/SKU varian langsung menunjuk variannya', async () => {
+    await db.varian.bulkPut([
+      varian('Besar', { barcode: '899100', price_delta: 5000 }),
+      varian('Kecil', { sku: 'KOPI-S' }),
+      varian('Lama', { sku: 'KOPI-X', is_active: false }),
+    ])
+    expect((await varianDariBarcode(' 899100 '))?.varian.name).toBe('Besar')
+    const s = await varianDariBarcode('KOPI-S')
+    expect(s?.produk.id).toBe('P1')
+    expect(s?.varian.name).toBe('Kecil')
+    expect(await varianDariBarcode('KOPI-X')).toBeUndefined()
+  })
+
+  it('varian dari barang nonaktif tidak terpindai', async () => {
+    await db.produk.put(produk({ id: 'P1', name: 'Kopi', is_active: false }))
+    await db.varian.put(varian('Besar', { sku: 'KOPI-L' }))
+    expect(await varianDariBarcode('KOPI-L')).toBeUndefined()
   })
 })

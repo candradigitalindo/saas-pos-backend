@@ -323,6 +323,10 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	prod.DELETE("/:id", middlewares.Require("product.delete"), controllers.DeleteProduct)
 	prod.POST("/:id/image", middlewares.Require("product.edit"), controllers.UploadProductImage)
 	prod.DELETE("/:id/image", middlewares.Require("product.edit"), controllers.DeleteProductImage)
+	prod.GET("/:id/variants", middlewares.Require("product.view"), controllers.ListProductVariants)
+	prod.POST("/:id/variants", middlewares.Require("product.edit"), controllers.CreateProductVariant)
+	prod.PUT("/:id/variants/:vid", middlewares.Require("product.edit"), controllers.UpdateProductVariant)
+	prod.DELETE("/:id/variants/:vid", middlewares.Require("product.edit"), controllers.DeleteProductVariant)
 
 	// Pelanggan.
 	cust := t.Group("/customers")

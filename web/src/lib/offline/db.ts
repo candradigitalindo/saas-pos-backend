@@ -29,6 +29,18 @@ export interface ProdukLokal {
   cari: string
 }
 
+/** Varian barang hasil pull (model mentah; sku/barcode bisa null). */
+export interface VarianLokal {
+  id: string
+  product_id: string
+  name: string
+  sku: string | null
+  barcode: string | null
+  price_delta: number
+  is_active: boolean
+  sync_version: number
+}
+
 export interface KategoriLokal {
   id: string
   name: string
@@ -85,6 +97,7 @@ export interface Meta {
 
 class DBOffline extends Dexie {
   produk!: EntityTable<ProdukLokal, 'id'>
+  varian!: EntityTable<VarianLokal, 'id'>
   kategori!: EntityTable<KategoriLokal, 'id'>
   satuan!: EntityTable<SatuanLokal, 'id'>
   pelanggan!: EntityTable<PelangganLokal, 'id'>
@@ -120,6 +133,23 @@ class DBOffline extends Dexie {
       antrean: 'id, status, dibuatPada',
       meta: 'kunci',
     })
+
+    // v3 menambah varian barang (pilihan harga di kasir; dicari juga lewat
+    // barcode/SKU-nya). Tabel lain tidak berubah. Kursor dibuang supaya tarikan
+    // berikutnya mengambil ulang semuanya — varian yang sudah ada di server
+    // sebelum perangkat ini diperbarui ikut terbawa.
+    this.version(3)
+      .stores({
+        produk: 'id, name, cari, category_id, is_active, barcode, sku',
+        varian: 'id, product_id, barcode, sku',
+        kategori: 'id, name',
+        satuan: 'id, name',
+        pelanggan: 'id, name, phone',
+        stok: 'kunci, product_id, outlet_id',
+        antrean: 'id, status, dibuatPada',
+        meta: 'kunci',
+      })
+      .upgrade((tx) => tx.table('meta').delete('kursor-sync'))
   }
 }
 
@@ -153,6 +183,7 @@ export async function idPerangkat(): Promise<string> {
 export async function kosongkanDB(): Promise<void> {
   await Promise.all([
     db.produk.clear(),
+    db.varian.clear(),
     db.kategori.clear(),
     db.satuan.clear(),
     db.pelanggan.clear(),

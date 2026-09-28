@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import type { Produk } from '@/bersama/tipe/katalog'
-import { db, type ProdukLokal } from './db'
+import type { Produk, VarianProduk } from '@/bersama/tipe/katalog'
+import { db, type ProdukLokal, type VarianLokal } from './db'
 import { petaWarnaKategori } from '@/bersama/util/warna-kategori'
 
 /**
@@ -34,11 +34,13 @@ export function useKatalogLokal(
   kategoriId?: string,
 ): HasilKatalogLokal {
   const hasil = useLiveQuery(async () => {
-    const [semuaProduk, satuan, stok] = await Promise.all([
+    const [semuaProduk, satuan, stok, semuaVarian] = await Promise.all([
       db.produk.filter((p) => p.is_active).toArray(),
       db.satuan.toArray(),
       outletId ? db.stok.where('outlet_id').equals(outletId).toArray() : [],
+      db.varian.filter((v) => v.is_active).toArray(),
     ])
+    const varianPer = kelompokkanVarian(semuaVarian)
 
     const namaSatuan = new Map(satuan.map((s) => [s.id, s.name]))
     const kunci = cari.trim().toLowerCase()
@@ -48,7 +50,7 @@ export function useKatalogLokal(
 
     const produk = cocok
       .sort((a, b) => a.name.localeCompare(b.name, 'id'))
-      .map((p) => keProduk(p, namaSatuan.get(p.unit_id)))
+      .map((p) => keProduk(p, namaSatuan.get(p.unit_id), varianPer.get(p.id)))
 
     const petaStok = new Map<string, string>()
     for (const s of stok) petaStok.set(s.product_id, s.qty)
@@ -103,12 +105,62 @@ export async function produkDariBarcode(kode: string): Promise<Produk | undefine
   return keProduk(cocok, satuan?.name)
 }
 
-/** Satu produk dari cache, untuk membangun struk offline. */
+/**
+ * Cari varian dari barcode/SKU-nya — satu pindaian langsung masuk sebagai
+ * "Kopi (Besar)" tanpa dialog pilih varian. Varian nonaktif atau barang
+ * induk yang nonaktif dianggap tidak ketemu.
+ */
+export async function varianDariBarcode(
+  kode: string,
+): Promise<{ produk: Produk; varian: VarianProduk } | undefined> {
+  const bersih = kode.trim()
+  if (!bersih) return undefined
+  const v =
+    (await db.varian.where('barcode').equals(bersih).first()) ?? (await db.varian.where('sku').equals(bersih).first())
+  if (!v || !v.is_active) return undefined
+  const produk = await produkLokal(v.product_id)
+  if (!produk || !produk.is_active) return undefined
+  return { produk, varian: keVarian(v) }
+}
+
+/** Satu produk (beserta varian aktifnya) dari cache, untuk struk offline. */
 export async function produkLokal(id: string): Promise<Produk | undefined> {
   const p = await db.produk.get(id)
   if (!p) return undefined
-  const s = await db.satuan.get(p.unit_id)
-  return keProduk(p, s?.name)
+  const [s, varian] = await Promise.all([
+    db.satuan.get(p.unit_id),
+    db.varian.where('product_id').equals(id).toArray(),
+  ])
+  return keProduk(p, s?.name, kelompokkanVarian(varian.filter((v) => v.is_active)).get(id))
+}
+
+/**
+ * Satu varian dari cache, APA PUN statusnya — untuk struk offline, supaya
+ * varian yang baru dinonaktifkan di tengah transaksi tetap tercetak benar.
+ */
+export async function varianLokal(id: string): Promise<VarianProduk | undefined> {
+  const v = await db.varian.get(id)
+  return v ? keVarian(v) : undefined
+}
+
+/** Varian aktif per barang, termurah dulu (urutan yang sama dengan menu antar). */
+function kelompokkanVarian(daftar: VarianLokal[]): Map<string, VarianProduk[]> {
+  const peta = new Map<string, VarianProduk[]>()
+  for (const v of daftar) peta.set(v.product_id, [...(peta.get(v.product_id) ?? []), keVarian(v)])
+  for (const vs of peta.values()) vs.sort((a, b) => a.price_delta - b.price_delta || a.name.localeCompare(b.name, 'id'))
+  return peta
+}
+
+function keVarian(v: VarianLokal): VarianProduk {
+  return {
+    id: v.id,
+    product_id: v.product_id,
+    name: v.name,
+    price_delta: v.price_delta,
+    sku: v.sku ?? undefined,
+    barcode: v.barcode ?? undefined,
+    is_active: v.is_active,
+  }
 }
 
 /**
@@ -134,7 +186,7 @@ export async function kurangiStokLokal(
   })
 }
 
-function keProduk(p: ProdukLokal, unitName?: string): Produk {
+function keProduk(p: ProdukLokal, unitName?: string, varian?: VarianProduk[]): Produk {
   return {
     id: p.id,
     name: p.name,
@@ -149,6 +201,7 @@ function keProduk(p: ProdukLokal, unitName?: string): Produk {
     min_stock: p.min_stock,
     is_active: p.is_active,
     image_url: p.image_url,
+    varian: varian?.length ? varian : undefined,
     created_at: '',
     updated_at: '',
   }

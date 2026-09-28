@@ -10,7 +10,7 @@ import { Kerangka } from '@/bersama/komponen/kerangka'
 import { StatusKoneksi } from '@/bersama/komponen/status-koneksi'
 import { PemindaiBarcode } from '@/bersama/komponen/pemindai-barcode'
 import { bisaMemindai } from '@/bersama/hooks/use-pemindai'
-import { produkDariBarcode } from '@/lib/offline/katalog-lokal'
+import { produkDariBarcode, varianDariBarcode } from '@/lib/offline/katalog-lokal'
 import { useSinkron } from '@/lib/offline/mesin'
 import { useSesi } from '@/bersama/hooks/use-sesi'
 import { useToast } from '@/bersama/komponen/toast'
@@ -19,12 +19,14 @@ import { formatRupiah } from '@/bersama/util/uang'
 import { formatJam } from '@/bersama/util/tanggal'
 import { cn } from '@/bersama/util/cn'
 import type { MetodeBayar, Transaksi } from '@/bersama/tipe/pos'
+import type { Produk } from '@/bersama/tipe/katalog'
 import { KartuProduk } from '../komponen/kartu-produk'
 import { PanelKeranjang } from '../komponen/panel-keranjang'
+import { DialogPilihVarian } from '../komponen/dialog-pilih-varian'
 import { SegmenPilihan } from '@/bersama/ui/segmen'
 import { LayarBayar } from '../komponen/layar-bayar'
 import { Struk } from '../komponen/struk'
-import { itemUntukCheckout, useKeranjang } from '../keranjang'
+import { itemUntukCheckout, kunciBaris, namaBaris, useKeranjang } from '../keranjang'
 import { kunciBaru, useCheckout, useKatalogKasir, useShiftAktif } from '../hooks'
 import { HalamanBukaShift } from './halaman-buka-shift'
 import { kelasPetak } from '@/bersama/util/warna-kategori'
@@ -51,6 +53,7 @@ export function HalamanKasir() {
   const keranjang = useKeranjang(rincianToko)
 
   const [bukaPindai, setBukaPindai] = useState(false)
+  const [pilihVarian, setPilihVarian] = useState<Produk | null>(null)
   const [bukaBayar, setBukaBayar] = useState(false)
   const [bukaKeranjangHP, setBukaKeranjangHP] = useState(false)
   const [struk, setStruk] = useState<{ transaksi: Transaksi; diantre: boolean } | null>(null)
@@ -235,7 +238,8 @@ export function HalamanKasir() {
                       // beserta tombol bayar di baliknya. Bandingkan dengan
                       // jalur pindai di bawah: di sana dialog kamera menutupi
                       // layar, jadi toast memang satu-satunya umpan balik.
-                      keranjang.tambah(x)
+                      if (x.varian?.length) setPilihVarian(x)
+                      else keranjang.tambah(x)
                     }}
                   />
                 ))}
@@ -303,8 +307,22 @@ export function HalamanKasir() {
           // Sengaja TIDAK menutup dialog setelah berhasil: kasir biasanya
           // memindai beberapa barang berturut-turut, dan menutup-buka kamera
           // tiap barang membuat alurnya jauh lebih lambat.
+          // Barcode/SKU varian langsung jadi barisnya ("Kopi (Besar)").
+          const kenaVarian = await varianDariBarcode(kode)
+          if (kenaVarian) {
+            keranjang.tambah(kenaVarian.produk, '1', kenaVarian.varian)
+            toast.tampilkan(`${namaBaris(kenaVarian)} ditambahkan`, 'berhasil')
+            return true
+          }
           const p = await produkDariBarcode(kode)
           if (!p) return false
+          if (p.varian?.length) {
+            // Barcode barang induk tidak menyebut variannya: kamera ditutup
+            // dan kasir memilih dulu.
+            setBukaPindai(false)
+            setPilihVarian(p)
+            return true
+          }
           keranjang.tambah(p)
           // Dipertahankan: dialog kamera sedang menutupi keranjang & lencana,
           // jadi tanpa ini pemindaian tidak terjawab sama sekali (ui/01 §5).
@@ -312,6 +330,20 @@ export function HalamanKasir() {
           return true
         }}
       />
+
+      {pilihVarian && (
+        <DialogPilihVarian
+          produk={pilihVarian}
+          qtyPerVarian={(vid) =>
+            keranjang.baris.find((b) => b.kunci === kunciBaris(pilihVarian.id, vid))?.qty ?? '0'
+          }
+          onPilih={(v) => {
+            keranjang.tambah(pilihVarian, '1', v)
+            setPilihVarian(null)
+          }}
+          onTutup={() => setPilihVarian(null)}
+        />
+      )}
 
       <LayarBayar
         terbuka={bukaBayar}

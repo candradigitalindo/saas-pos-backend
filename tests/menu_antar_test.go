@@ -40,6 +40,10 @@ func TestMenuGoFoodDariPOS(t *testing.T) {
 		t.Fatalf("deskripsi barang: %v", d["description"])
 	}
 	call(t, "PUT", "/api/v1/products/"+f.prodB, f.token, map[string]any{"track_stock": false}).mustOK(t, "B tanpa stok")
+	call(t, "POST", "/api/v1/products/"+f.prodA+"/variants", f.token, map[string]any{"name": "Besar", "price_delta": 5000, "sku": "MN-A-L"}).
+		mustCode(t, "varian besar", 201)
+	vKecil := call(t, "POST", "/api/v1/products/"+f.prodA+"/variants", f.token, map[string]any{"name": "Kecil", "price_delta": -2000}).
+		mustCode(t, "varian kecil", 201).data(t)
 	ch := makeChannel(t, f, "GoFood", "0.20")
 
 	var mu sync.Mutex
@@ -117,14 +121,25 @@ func TestMenuGoFoodDariPOS(t *testing.T) {
 		}
 	}
 	idB := "P-" + f.prodB
-	if len(item) != 2 || item["MN-A"]["in_stock"] != true || item[idB] == nil || item["MN-A"]["price"] != float64(15000) {
+	// Harga dasar = varian termurah (15.000 − 2.000); pilihan menambah dari situ.
+	if len(item) != 2 || item["MN-A"]["in_stock"] != true || item[idB] == nil || item["MN-A"]["price"] != float64(13000) {
 		t.Fatalf("katalog GoFood: %v", katalog)
 	}
 	if d, _ := item["MN-A"]["description"].(string); len([]rune(d)) != 250 || item[idB]["description"] != nil {
 		t.Fatalf("deskripsi GoFood (dipotong 250, kosong tidak dikirim): %q / %v", d, item[idB]["description"])
 	}
-	if _, ada := katalog["variant_categories"]; !ada {
-		t.Fatal("variant_categories wajib ada (boleh kosong)")
+	vc, _ := katalog["variant_categories"].([]any)
+	if len(vc) != 1 {
+		t.Fatalf("variant_categories: %v", katalog["variant_categories"])
+	}
+	kat := vc[0].(map[string]any)
+	pilihan := map[string]float64{}
+	for _, v := range kat["variants"].([]any) {
+		pilihan[v.(map[string]any)["external_id"].(string)] = v.(map[string]any)["price"].(float64)
+	}
+	if kat["external_id"] != "VC-MN-A" || pilihan["MN-A-L"] != 7000 || pilihan["V-"+vKecil["id"].(string)] != 0 ||
+		item["MN-A"]["variant_category_external_ids"].([]any)[0] != "VC-MN-A" {
+		t.Fatalf("pilihan varian GoFood: %v / %v", kat, item["MN-A"])
 	}
 
 	// Sesudah kirim menu tidak ada kiriman stok ulang; stok A habis → habis di
@@ -153,12 +168,29 @@ func TestMenuGoFoodDariPOS(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("webhook: %d %s", rec.Code, rec.Body.String())
 	}
+	// Pesanan dengan pilihan varian (SKU varian) → "(Besar)".
+	bodyVar := `{"header":{"event_name":"gofood.order.merchant_accepted","event_id":"e-menu-v","version":1,"timestamp":"2026-09-28T10:15:22+07:00"},
+		"body":{"customer":{"name":"Pembeli Varian"},"service_type":"gofood","outlet":{"id":"G1"},
+		"order":{"status":"X","order_number":"F-VAR","currency":"IDR","created_at":"2026-09-28T10:14:00+07:00",
+		"order_items":[{"quantity":1,"price":20000,"name":"A","external_id":"MN-A","variants":[{"id":"x","name":"Besar","external_id":"MN-A-L"}]}]}}}`
+	req = httptest.NewRequest("POST", webhook[strings.Index(webhook, "/webhooks/"):], strings.NewReader(bodyVar))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Go-Signature", tandaGoBiz("rahasia-notif", bodyVar))
+	req.RemoteAddr = "203.0.113.61:4431"
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
 	processChannelEvents(t, f.token)
 	var ketemu bool
 	for _, x := range call(t, "GET", "/api/v1/channel-orders?channel_id="+ch, f.token, nil).mustOK(t, "pesanan").data(t)["data"].([]any) {
-		if o := x.(map[string]any); o["external_order_id"] == "F-MENU" {
+		o := x.(map[string]any)
+		if o["external_order_id"] == "F-MENU" {
 			ketemu = true
 			assertI64(t, o, "gross_amount", 8000)
+		}
+		if o["external_order_id"] == "F-VAR" {
+			if n := o["items"].([]any)[0].(map[string]any)["product_name"].(string); !strings.HasSuffix(n, "(Besar)") {
+				t.Fatalf("pesanan varian GoFood: %q", n)
+			}
 		}
 	}
 	if !ketemu {
@@ -173,6 +205,10 @@ func TestMenuGrabDariPOS(t *testing.T) {
 	call(t, "PUT", "/api/v1/products/"+f.prodA, f.token, map[string]any{"sku": "GM-A", "category_id": kat,
 		"description": "Es kopi susu gula aren"}).mustOK(t, "sku A")
 	call(t, "PUT", "/api/v1/products/"+f.prodB, f.token, map[string]any{"sku": "GM-B", "track_stock": false}).mustOK(t, "B")
+	vDingin := call(t, "POST", "/api/v1/products/"+f.prodB+"/variants", f.token, map[string]any{"name": "Dingin", "price_delta": 2000}).
+		mustCode(t, "varian dingin", 201).data(t)
+	call(t, "POST", "/api/v1/products/"+f.prodB+"/variants", f.token, map[string]any{"name": "Panas", "price_delta": 0}).
+		mustCode(t, "varian panas", 201)
 	ch := makeChannel(t, f, "GrabFood", "0.25")
 
 	var mu sync.Mutex
@@ -289,8 +325,14 @@ func TestMenuGrabDariPOS(t *testing.T) {
 		a["description"] != "Es kopi susu gula aren" {
 		t.Fatalf("item A (stok dilacak): %v", item["GM-A"])
 	}
-	if b := item["GM-B"]; b == nil || b["availableStatus"] != "AVAILABLE" || b["maxStock"] != nil {
-		t.Fatalf("item B (tanpa pelacakan stok, tanpa maxStock): %v", item["GM-B"])
+	if b := item["GM-B"]; b == nil || b["availableStatus"] != "AVAILABLE" || b["maxStock"] != nil || b["price"] != float64(800000) {
+		t.Fatalf("item B (tanpa pelacakan stok, tanpa maxStock, harga dasar = varian termurah): %v", item["GM-B"])
+	}
+	grup := item["GM-B"]["modifierGroups"].([]any)[0].(map[string]any)
+	mods := grup["modifiers"].([]any)
+	if grup["selectionRangeMin"] != float64(1) || grup["selectionRangeMax"] != float64(1) || len(mods) != 2 ||
+		mods[0].(map[string]any)["id"] != "V-"+vDingin["id"].(string) || mods[0].(map[string]any)["price"] != float64(200000) {
+		t.Fatalf("modifier Grab: %v", grup)
 	}
 
 	stokJadi(t, f, f.prodA, "0")

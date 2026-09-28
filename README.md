@@ -26,6 +26,7 @@ Sebuah framework backend REST API berbasis Golang dan Gin, dengan struktur modul
 - **Pendaftaran usaha 1 transaksi** — `POST /api/v1/auth/register` membuat tenant + outlet + peran bawaan + user pemilik sekaligus
 - **Otorisasi granular** — 50 permission, peran per-tenant, middleware `Require(...)` per-endpoint
 - **Master data** — kategori, satuan, produk (+ pencarian trigram < 200 ms), supplier
+- **Varian barang** — pilihan dengan selisih harga (ukuran, es/panas, level pedas); stok tetap di tingkat barang; struk mencatat "Barang (Varian)"; SKU/barcode varian unik lintas barang & varian (dipindai kasir, dikenali pesanan kanal, dikirim sebagai pilihan wajib di menu GoFood/GrabFood)
 - **Impor produk CSV** — pratinjau (`dry_run`), impor sebagian, laporan baris gagal per baris
 - **Kasir** — checkout 1 transaksi (harga dari server, hitung & bulat per baris), idempoten via `Idempotency-Key`, penomoran struk terkunci, void & retur, kasbon → piutang
 - **Buku besar stok** — `stock_movements` sumber kebenaran, `stocks` cache; satu jalur `ApplyStockDeltas` (kunci urut `product_id`, saldo berjalan) dipakai penjualan/void/retur/opname/transfer/pembelian; rekonsiliasi cache dari buku besar
@@ -275,6 +276,7 @@ Semua endpoint bisnis di bawah prefiks `/api/v1`.
 | `GET  /api/v1/products?q=&category_id=&is_active=` | `product.view` | Cari produk (index trigram) |
 | `POST /api/v1/products` · `PUT /:id` | `product.edit` | Buat / ubah produk (termasuk `description` ≤500 karakter untuk menu aplikasi antar — GoFood menampilkan 250 pertama; migrasi 000043) |
 | `DELETE /api/v1/products/:id` | `product.delete` | Hapus produk |
+| `GET /api/v1/products/:id/variants` · `POST` · `PUT /:vid` · `DELETE /:vid` | `product.view` / `product.edit` | Varian barang: `{name, price_delta, sku, barcode, is_active}` (PUT mengganti utuh); nama unik per barang (409), harga jual + selisih tidak boleh minus (422), SKU/barcode tidak boleh dipakai barang atau varian lain (409 — arah sebaliknya juga dijaga di buat/ubah/impor barang); hapus = lunak, penjualan lama utuh. Checkout `items[].variant_id` → harga + selisih, nama "Barang (Varian)", stok berkurang di tingkat barang |
 | `POST /api/v1/products/import?dry_run=` | `product.import` | Impor CSV (pratinjau + laporan baris gagal) |
 | `GET/POST/PUT/DELETE /api/v1/customers[/:id]` | `customer.view` / `customer.edit` | CRUD pelanggan; daftar membawa `stats` (kedatangan, belanja bersih, terakhir datang; `receivable_outstanding` hanya untuk `receivable.manage`) |
 | `POST /api/v1/sales` (header `Idempotency-Key`) | `sale.create` | Checkout |

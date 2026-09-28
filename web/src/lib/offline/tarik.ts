@@ -10,6 +10,7 @@ import {
   type ProdukLokal,
   type SatuanLokal,
   type StokLokal,
+  type VarianLokal,
 } from './db'
 
 /**
@@ -45,6 +46,16 @@ export interface PerubahanTarik {
     min_stock: string
     is_active: boolean
     image_url: string
+    sync_version: number
+  }[]
+  product_variants: null | {
+    id: string
+    product_id: string
+    name: string
+    sku: string | null
+    barcode: string | null
+    price_delta: number
+    is_active: boolean
     sync_version: number
   }[]
   customers: null | {
@@ -94,6 +105,7 @@ export async function tarikMasterData(outletId: string): Promise<{ halaman: numb
       categories: mentah.categories ?? [],
       units: mentah.units ?? [],
       products: mentah.products ?? [],
+      variants: mentah.product_variants ?? [],
       customers: mentah.customers ?? [],
       stocks: mentah.stocks ?? [],
       deleted: mentah.deleted ?? {},
@@ -102,7 +114,7 @@ export async function tarikMasterData(outletId: string): Promise<{ halaman: numb
 
     await db.transaction(
       'rw',
-      [db.produk, db.kategori, db.satuan, db.pelanggan, db.stok, db.meta],
+      [db.produk, db.varian, db.kategori, db.satuan, db.pelanggan, db.stok, db.meta],
       async () => {
         if (p.categories.length) {
           await db.kategori.bulkPut(
@@ -128,6 +140,21 @@ export async function tarikMasterData(outletId: string): Promise<{ halaman: numb
         if (p.products.length) {
           await db.produk.bulkPut(
             p.products.map<ProdukLokal>((x) => ({ ...x, cari: teksCari(x) })),
+          )
+        }
+
+        if (p.variants.length) {
+          await db.varian.bulkPut(
+            p.variants.map<VarianLokal>((v) => ({
+              id: v.id,
+              product_id: v.product_id,
+              name: v.name,
+              sku: v.sku,
+              barcode: v.barcode,
+              price_delta: v.price_delta,
+              is_active: v.is_active,
+              sync_version: v.sync_version,
+            })),
           )
         }
 
@@ -180,8 +207,12 @@ async function terapkanPenghapusan(deleted: Record<string, string[]>): Promise<v
     switch (tabel) {
       case 'products':
         await db.produk.bulkDelete(ids)
-        // Saldo stok barang yang dihapus ikut dibuang supaya tidak jadi hantu.
+        // Saldo stok & varian barang yang dihapus ikut dibuang supaya tidak jadi hantu.
         await db.stok.where('product_id').anyOf(ids).delete()
+        await db.varian.where('product_id').anyOf(ids).delete()
+        break
+      case 'product_variants':
+        await db.varian.bulkDelete(ids)
         break
       case 'categories':
         await db.kategori.bulkDelete(ids)
@@ -193,7 +224,7 @@ async function terapkanPenghapusan(deleted: Record<string, string[]>): Promise<v
         await db.pelanggan.bulkDelete(ids)
         break
       default:
-        // Tabel yang belum dipakai layar mana pun (varian, daftar harga)
+        // Tabel yang belum dipakai layar mana pun (daftar harga)
         // sengaja diabaikan, bukan dianggap galat.
         break
     }

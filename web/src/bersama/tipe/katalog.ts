@@ -27,8 +27,27 @@ export interface Produk {
   image_url?: string
   /** Untuk menu aplikasi antar (GoFood/GrabFood). */
   description?: string
+  /** Varian AKTIF (kasir: dari data lokal) — pilihan dengan selisih harga. */
+  varian?: VarianProduk[]
   created_at: string
   updated_at: string
+}
+
+/**
+ * Varian barang = pilihan dengan selisih harga (ukuran, es/panas, level
+ * pedas). Stok tetap dihitung di tingkat barang.
+ */
+export interface VarianProduk {
+  id: string
+  product_id: string
+  name: string
+  /** Selisih terhadap harga jual barang; boleh negatif. */
+  price_delta: number
+  /** Harga jual barang + selisih (dari API). */
+  price?: number
+  sku?: string
+  barcode?: string
+  is_active: boolean
 }
 
 export interface Kategori {

@@ -292,12 +292,15 @@ func priceCheckout(in CheckoutInput, outlet models.Outlet, products map[string]m
 		}
 
 		unitPrice := p.SellPrice
+		nama := p.Name
 		if it.VariantID != "" {
 			v, ok := variants[it.VariantID]
 			if !ok || v.ProductID != it.ProductID {
 				return nil, t, fmt.Errorf("%w: varian %s tidak cocok dengan produk", helpers.ErrValidation, it.VariantID)
 			}
 			unitPrice += v.PriceDelta
+			// Snapshot nama di isi penjualan → struk & riwayat menyebut variannya.
+			nama = namaBervarian(p.Name, v.Name)
 		}
 
 		lineGross := helpers.LineAmount(it.Qty, unitPrice)
@@ -320,7 +323,7 @@ func priceCheckout(in CheckoutInput, outlet models.Outlet, products map[string]m
 		}
 
 		out = append(out, pricedItem{
-			in: it, productName: p.Name, unitName: unitName,
+			in: it, productName: nama, unitName: unitName,
 			unitPrice: unitPrice, unitCost: p.CostPrice,
 			lineGross: lineGross, lineTax: lineTax, lineTotal: lineTotal, lineCost: lineCost,
 			trackStock: p.TrackStock,
@@ -490,9 +493,11 @@ func stockDeltasForSale(priced []pricedItem, recipes map[string]repositories.Rec
 
 	for _, p := range priced {
 		if p.trackStock {
+			// Stok barang bervarian dihitung di tingkat BARANG (varian =
+			// pilihan harga) — layar stok belum mengenal stok per varian.
 			deltas = append(deltas, repositories.StockDelta{
-				ProductID: p.in.ProductID, VariantID: p.in.VariantID,
-				Delta: p.in.Qty.Neg(), UnitCost: p.unitCost, Kind: "sale",
+				ProductID: p.in.ProductID,
+				Delta:     p.in.Qty.Neg(), UnitCost: p.unitCost, Kind: "sale",
 			})
 		}
 
@@ -553,6 +558,14 @@ func sortedUniqueProductIDs(items []CheckoutItem) []string {
 	}
 	sort.Strings(ids)
 	return ids
+}
+
+// namaBervarian: "Kopi Susu (Besar)".
+func namaBervarian(barang, varian string) string {
+	if varian = strings.TrimSpace(varian); varian == "" {
+		return barang
+	}
+	return barang + " (" + varian + ")"
 }
 
 func variantIDs(items []CheckoutItem) []string {

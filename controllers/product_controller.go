@@ -1,6 +1,8 @@
 package controllers
 
 import (
+	"context"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -19,6 +21,27 @@ import (
 
 // importMaxBytes membatasi ukuran berkas impor yang dibaca ke memori.
 const importMaxBytes = 8 << 20 // 8 MB
+
+// errKodeDipakaiVarian: SKU/barcode barang sudah dipakai varian. Diperiksa
+// manual karena keunikan lintas tabel tidak bisa dijaga indeks — padahal
+// pemindai kasir & pesanan kanal mencari barang DAN varian dari kode yang sama.
+var errKodeDipakaiVarian = errors.New("kode dipakai varian")
+
+func cekKodeVarian(ctx context.Context, tx *gorm.DB, kode ...*string) error {
+	for _, k := range kode {
+		if k == nil || *k == "" {
+			continue
+		}
+		dipakai, err := repositories.VariantCodeTaken(ctx, tx, *k, "")
+		if err != nil {
+			return err
+		}
+		if dipakai {
+			return errKodeDipakaiVarian
+		}
+	}
+	return nil
+}
 
 // validateProductRefs memastikan unit_id ada dan category_id (bila diisi) ada,
 // keduanya milik tenant. Mengembalikan Unit & Category yang termuat (untuk
@@ -130,9 +153,12 @@ func CreateProduct(c *gin.Context) {
 		if err := services.EnsureQuota(ctx, tx, services.KuotaBarang, 1); err != nil {
 			return err
 		}
+		if err := cekKodeVarian(ctx, tx, row.SKU, row.Barcode); err != nil {
+			return err
+		}
 		return repositories.CreateProduct(ctx, tx, &row)
 	}); err != nil {
-		if helpers.IsDuplicateEntryError(err) {
+		if helpers.IsDuplicateEntryError(err) || errors.Is(err, errKodeDipakaiVarian) {
 			conflict(c, "sku", "SKU atau barcode sudah dipakai")
 			return
 		}
@@ -227,9 +253,19 @@ func UpdateProduct(c *gin.Context) {
 	}
 
 	if err := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
+		var kode []*string
+		if req.SKU != nil {
+			kode = append(kode, row.SKU)
+		}
+		if req.Barcode != nil {
+			kode = append(kode, row.Barcode)
+		}
+		if err := cekKodeVarian(ctx, tx, kode...); err != nil {
+			return err
+		}
 		return repositories.UpdateProduct(ctx, tx, &row)
 	}); err != nil {
-		if helpers.IsDuplicateEntryError(err) {
+		if helpers.IsDuplicateEntryError(err) || errors.Is(err, errKodeDipakaiVarian) {
 			conflict(c, "sku", "SKU atau barcode sudah dipakai")
 			return
 		}

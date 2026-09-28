@@ -15,6 +15,7 @@ import { galatKolom } from '@/lib/galat-kolom'
 import { PemindaiBarcode } from '@/bersama/komponen/pemindai-barcode'
 import { bisaMemindai } from '@/bersama/hooks/use-pemindai'
 import { produkApi } from '../api'
+import { BagianVarian } from '../komponen/bagian-varian'
 import { formatRupiah } from '@/bersama/util/uang'
 import { cn } from '@/bersama/util/cn'
 
@@ -389,8 +390,17 @@ export function HalamanFormBarang() {
           >
             {sedangUbah ? 'Simpan Perubahan' : 'Simpan Barang'}
           </Tombol>
+          {!sedangUbah && (
+            <p className="-mt-2 text-center text-keterangan text-teks-redup">
+              Punya ukuran atau level pedas? Varian bisa ditambahkan setelah barang disimpan.
+            </p>
+          )}
         </form>
       </Kartu>
+
+      {/* Harga varian dihitung dari harga jual yang TERSIMPAN, bukan yang
+          sedang diketik — selisihnya disimpan terhadap angka itu. */}
+      {sedangUbah && detail.data && <BagianVarian produkId={id!} hargaJual={detail.data.sell_price} />}
 
       <PemindaiBarcode
         terbuka={bukaPindai}

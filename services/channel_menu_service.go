@@ -37,6 +37,26 @@ type ItemMenu struct {
 	Harga          int64 // rupiah
 	Tersedia       bool
 	Stok           *int64 // nil = stok tidak dilacak (mis. masakan dibuat saat dipesan)
+	// Varian: pilihan WAJIB satu (ukuran, es/panas, …). Harga item = varian
+	// termurah; Tambahan tiap varian dihitung dari situ — aplikasi antar tidak
+	// menerima pilihan berharga negatif.
+	Varian []VarianMenu
+}
+
+// VarianMenu: satu pilihan varian di menu.
+type VarianMenu struct {
+	ID, Nama string // ID = SKU varian, atau "V-<id>"
+	Tambahan int64  // rupiah di atas harga item
+	Tersedia bool
+}
+
+// idVarianMenu: SKU varian bila ada (juga dikenali saat pesanan masuk), selain
+// itu "V-<id>".
+func idVarianMenu(v models.ProductVariant) string {
+	if v.SKU != nil && strings.TrimSpace(*v.SKU) != "" {
+		return strings.TrimSpace(*v.SKU)
+	}
+	return "V-" + v.ID
 }
 
 type KategoriMenu struct {
@@ -109,6 +129,10 @@ func bangunMenu(ctx context.Context, ch models.Channel) (MenuKanal, error) {
 	if err != nil {
 		return menu, err
 	}
+	varian, err := repositories.VariantsForProducts(ctx, nil, ids)
+	if err != nil {
+		return menu, err
+	}
 	grup := map[string]*KategoriMenu{}
 	for _, cp := range cps {
 		p, ada := prods[cp.ProductID]
@@ -119,6 +143,7 @@ func bangunMenu(ctx context.Context, ch models.Channel) (MenuKanal, error) {
 		if cp.ChannelPrice != nil {
 			item.Harga = *cp.ChannelPrice
 		}
+		isiVarianMenu(&item, varian[p.ID])
 		if p.TrackStock {
 			vid := ""
 			if cp.VariantID != nil {
@@ -154,6 +179,30 @@ func bangunMenu(ctx context.Context, ch models.Channel) (MenuKanal, error) {
 		return a.Nama < b.Nama
 	})
 	return menu, nil
+}
+
+// isiVarianMenu memasang varian aktif: harga item turun ke varian termurah,
+// tiap varian membawa selisih di atasnya.
+func isiVarianMenu(item *ItemMenu, vs []models.ProductVariant) {
+	var aktif []models.ProductVariant
+	for _, v := range vs {
+		if v.IsActive {
+			aktif = append(aktif, v)
+		}
+	}
+	if len(aktif) == 0 {
+		return
+	}
+	dasar := item.Harga + aktif[0].PriceDelta
+	for _, v := range aktif[1:] {
+		dasar = min(dasar, item.Harga+v.PriceDelta)
+	}
+	for _, v := range aktif {
+		item.Varian = append(item.Varian, VarianMenu{
+			ID: idVarianMenu(v), Nama: v.Name, Tambahan: item.Harga + v.PriceDelta - dasar, Tersedia: true,
+		})
+	}
+	item.Harga = dasar
 }
 
 func menuDidukung(ch models.Channel) bool {

@@ -128,6 +128,26 @@ type ProductResponse struct {
 	UpdatedAt    string `json:"updated_at"`
 }
 
+// ProductVariantRequest: satu varian (PUT = ganti utuh).
+type ProductVariantRequest struct {
+	Name       string `json:"name" binding:"required,min=1,max=60"`
+	PriceDelta int64  `json:"price_delta"` // selisih terhadap harga jual barang; boleh negatif
+	SKU        string `json:"sku" binding:"omitempty,max=60"`
+	Barcode    string `json:"barcode" binding:"omitempty,max=60"`
+	IsActive   *bool  `json:"is_active"`
+}
+
+type ProductVariantResponse struct {
+	ID         string `json:"id"`
+	ProductID  string `json:"product_id"`
+	Name       string `json:"name"`
+	PriceDelta int64  `json:"price_delta"`
+	Price      int64  `json:"price"` // harga jual barang + selisih
+	SKU        string `json:"sku,omitempty"`
+	Barcode    string `json:"barcode,omitempty"`
+	IsActive   bool   `json:"is_active"`
+}
+
 // ── Impor produk ────────────────────────────────────────────────────────────
 
 // ProductImportRowError menjelaskan satu baris CSV yang gagal divalidasi.

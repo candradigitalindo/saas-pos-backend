@@ -87,8 +87,11 @@ type NormalizedItem struct {
 	SKU       string
 	ProductID string
 	VariantID string
-	Qty       decimal.Decimal
-	UnitPrice *int64 // override harga; nil → harga kanal/master
+	// VariantSKU: kode varian dari penyedia (pilihan menu aplikasi antar:
+	// "V-<id>" atau SKU/barcode varian) — dipetakan pekerja ke VariantID.
+	VariantSKU string
+	Qty        decimal.Decimal
+	UnitPrice  *int64 // override harga; nil → harga kanal/master
 }
 
 // NormalizedFee adalah satu komponen potongan kanal (komisi, layanan, ongkir,
@@ -123,11 +126,12 @@ type genericPayload struct {
 	IgnoreIfMissing bool   `json:"ignore_if_missing"`
 	NeedsFetch      bool   `json:"_fetch"`
 	Items           []struct {
-		SKU       string `json:"sku"`
-		ProductID string `json:"product_id"`
-		VariantID string `json:"variant_id"`
-		Qty       string `json:"qty"`
-		UnitPrice *int64 `json:"unit_price"`
+		SKU        string `json:"sku"`
+		ProductID  string `json:"product_id"`
+		VariantID  string `json:"variant_id"`
+		VariantSKU string `json:"variant_sku"`
+		Qty        string `json:"qty"`
+		UnitPrice  *int64 `json:"unit_price"`
 	} `json:"items"`
 	Fees []struct {
 		Kind   string `json:"kind"`
@@ -169,11 +173,12 @@ func (genericAdapter) Normalize(raw []byte) (NormalizedEvent, error) {
 			qty = q
 		}
 		ev.Items = append(ev.Items, NormalizedItem{
-			SKU:       strings.TrimSpace(it.SKU),
-			ProductID: strings.TrimSpace(it.ProductID),
-			VariantID: strings.TrimSpace(it.VariantID),
-			Qty:       qty,
-			UnitPrice: it.UnitPrice,
+			SKU:        strings.TrimSpace(it.SKU),
+			ProductID:  strings.TrimSpace(it.ProductID),
+			VariantID:  strings.TrimSpace(it.VariantID),
+			VariantSKU: strings.TrimSpace(it.VariantSKU),
+			Qty:        qty,
+			UnitPrice:  it.UnitPrice,
 		})
 	}
 	for _, f := range p.Fees {
@@ -416,6 +421,13 @@ func applyOrderCreated(ctx context.Context, ch models.Channel, norm NormalizedEv
 		}
 		if pid == "" {
 			return fmt.Errorf("%w: item tanpa product_id maupun sku", helpers.ErrValidation)
+		}
+		if vid == "" && it.VariantSKU != "" {
+			v, err := resolveVarianKanal(ctx, pid, it.VariantSKU)
+			if err != nil {
+				return err
+			}
+			vid = v
 		}
 		in.Items = append(in.Items, ChannelOrderItemInput{
 			ProductID: pid, VariantID: vid, Qty: it.Qty, UnitPrice: it.UnitPrice,

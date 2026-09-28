@@ -193,6 +193,22 @@ func ExistingProductCodes(ctx context.Context, skus, barcodes []string) (existSK
 			existBarcode[b] = true
 		}
 	}
+	// Kode varian ikut dihitung terpakai: pemindai kasir & pesanan kanal
+	// mencari barang DAN varian dari kode yang sama.
+	if semua := append(append([]string{}, skus...), barcodes...); len(semua) > 0 {
+		var vs []models.ProductVariant
+		if err = scopeTenant(ctx, tenantDB(ctx, nil).Model(&models.ProductVariant{})).
+			Where("sku IN ? OR barcode IN ?", semua, semua).Select("sku", "barcode").Find(&vs).Error; err != nil {
+			return nil, nil, err
+		}
+		for _, v := range vs {
+			for _, k := range []*string{v.SKU, v.Barcode} {
+				if k != nil {
+					existSKU[*k], existBarcode[*k] = true, true
+				}
+			}
+		}
+	}
 	return existSKU, existBarcode, nil
 }
 

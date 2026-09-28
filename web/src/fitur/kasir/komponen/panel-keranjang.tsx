@@ -2,7 +2,7 @@ import { Trash2 } from 'lucide-react'
 import { Tombol } from '@/bersama/ui/tombol'
 import { StepperJumlah } from '@/bersama/ui/stepper-jumlah'
 import { formatRupiah, pratinjauBaris } from '@/bersama/util/uang'
-import type { Keranjang } from '../keranjang'
+import { hargaBaris, namaBaris, type Keranjang } from '../keranjang'
 
 /**
  * Keranjang. SELALU TERLIHAT di layar kasir — tidak pernah bersembunyi di balik
@@ -49,32 +49,32 @@ export function PanelKeranjang({
         ) : (
           <ul className="divide-y divide-garis">
             {baris.map((b) => (
-              <li key={b.produk.id} className="flex flex-col gap-2 p-4">
+              <li key={b.kunci} className="flex flex-col gap-2 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="font-semibold text-teks-utama">{b.produk.name}</p>
+                    <p className="font-semibold text-teks-utama">{namaBaris(b)}</p>
                     <p className="text-keterangan tabular-nums text-teks-redup">
-                      {formatRupiah(b.produk.sell_price)} × {b.qty}
+                      {formatRupiah(hargaBaris(b))} × {b.qty}
                       {b.diskon > 0 && ` − ${formatRupiah(b.diskon)}`}
                     </p>
                   </div>
                   <p className="shrink-0 font-bold tabular-nums text-teks-utama">
-                    {formatRupiah(pratinjauBaris(b.produk.sell_price, b.qty, b.diskon))}
+                    {formatRupiah(pratinjauBaris(hargaBaris(b), b.qty, b.diskon))}
                   </p>
                 </div>
 
                 <div className="flex items-center justify-between gap-2">
                   <StepperJumlah
                     nilai={b.qty}
-                    onNilai={(q) => ubahQty(b.produk.id, q)}
+                    onNilai={(q) => ubahQty(b.kunci, q)}
                     satuan={b.produk.unit_name}
-                    label={`Jumlah ${b.produk.name}`}
+                    label={`Jumlah ${namaBaris(b)}`}
                   />
                   {/* Tombol hapus sengaja berjarak dari tombol +/−. */}
                   <button
                     type="button"
-                    onClick={() => hapus(b.produk.id)}
-                    aria-label={`Hapus ${b.produk.name} dari keranjang`}
+                    onClick={() => hapus(b.kunci)}
+                    aria-label={`Hapus ${namaBaris(b)} dari keranjang`}
                     className="ml-2 flex h-12 w-12 shrink-0 items-center justify-center rounded-kontrol text-bahaya-teks hover:bg-bahaya-teks/10"
                   >
                     <Trash2 className="h-5 w-5" aria-hidden />

@@ -15,6 +15,9 @@ import { cn } from '@/bersama/util/cn'
  * dibaca berulang-ulang sepanjang hari, bukan namanya — nama dipakai untuk
  * menemukan, harga untuk memastikan. Karena itu harga diberi ukuran lebih besar
  * daripada nama, bukan sebaliknya.
+ *
+ * Barang bervarian menampilkan harga termurahnya dengan awalan "mulai" dan
+ * jumlah pilihannya; ketukan membuka dialog pilih varian.
  */
 export function KartuProduk({
   produk,
@@ -32,13 +35,20 @@ export function KartuProduk({
 }) {
   const habis = produk.track_stock && stok !== undefined && Number.parseFloat(stok) <= 0
   const adaDiKeranjang = Number.parseFloat(diKeranjang) > 0
+  const varian = produk.varian ?? []
+  const selisih = varian.map((v) => v.price_delta)
+  const harga = produk.sell_price + (varian.length ? Math.min(...selisih) : 0)
+  // "mulai" hanya bila harganya memang berbeda-beda.
+  const mulai = varian.length > 0 && Math.min(...selisih) !== Math.max(...selisih)
 
   return (
     <button
       type="button"
       disabled={habis}
       onClick={() => onPilih(produk)}
-      aria-label={`${produk.name}, ${formatRupiah(produk.sell_price)}${habis ? ', habis' : ''}`}
+      aria-label={`${produk.name}, ${mulai ? 'mulai ' : ''}${formatRupiah(harga)}${
+        varian.length ? `, ${varian.length} pilihan` : ''
+      }${habis ? ', habis' : ''}`}
       className={cn(
         'group relative flex min-h-30 flex-col justify-between gap-2 rounded-kartu border p-3 text-left',
         'transition-[background-color,border-color,box-shadow,transform] duration-150 ease-out',
@@ -86,7 +96,8 @@ export function KartuProduk({
             habis ? 'text-teks-redup' : 'text-teks-utama',
           )}
         >
-          {formatRupiah(produk.sell_price)}
+          {mulai && <span className="mr-1 text-keterangan font-semibold text-teks-redup">mulai</span>}
+          {formatRupiah(harga)}
         </span>
 
         {/* Warna saja tidak cukup: keadaan habis ditulis dengan kata, dan
@@ -97,10 +108,14 @@ export function KartuProduk({
             Habis
           </span>
         ) : (
-          produk.track_stock &&
-          stok !== undefined && (
+          (varian.length > 0 || (produk.track_stock && stok !== undefined)) && (
             <span className="text-keterangan text-teks-redup">
-              {formatSisaStok(stok, produk.unit_name)}
+              {[
+                varian.length > 0 ? `${varian.length} pilihan` : null,
+                produk.track_stock && stok !== undefined ? formatSisaStok(stok, produk.unit_name) : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
             </span>
           )
         )}

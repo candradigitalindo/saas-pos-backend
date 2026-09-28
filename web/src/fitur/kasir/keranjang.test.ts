@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { itemUntukCheckout, stokCukup, useKeranjang } from './keranjang'
-import type { Produk } from '@/bersama/tipe/katalog'
+import { itemUntukCheckout, namaBaris, stokCukup, useKeranjang } from './keranjang'
+import type { Produk, VarianProduk } from '@/bersama/tipe/katalog'
 
 function produk(id: string, harga: number, nama = id): Produk {
   return {
@@ -63,8 +63,8 @@ describe('keranjang', () => {
 
   it('item checkout TIDAK menyertakan harga — server yang menentukannya', () => {
     const baris = [
-      { produk: produk('P1', 18000), qty: '2', diskon: 0 },
-      { produk: produk('P2', 8000), qty: '1', diskon: 500 },
+      { kunci: 'P1', produk: produk('P1', 18000), qty: '2', diskon: 0 },
+      { kunci: 'P2', produk: produk('P2', 8000), qty: '1', diskon: 500 },
     ]
     const item = itemUntukCheckout(baris)
 
@@ -77,6 +77,32 @@ describe('keranjang', () => {
       expect(i).not.toHaveProperty('sell_price')
       expect(i).not.toHaveProperty('line_total')
     }
+  })
+
+  it('varian: baris sendiri per varian, harga + selisih, variant_id ikut terkirim', () => {
+    const { result } = renderHook(() => useKeranjang())
+    const kopi = produk('P1', 15000, 'Kopi')
+    const besar: VarianProduk = { id: 'V1', product_id: 'P1', name: 'Besar', price_delta: 5000, is_active: true }
+    const kecil: VarianProduk = { id: 'V2', product_id: 'P1', name: 'Kecil', price_delta: -2000, is_active: true }
+
+    act(() => result.current.tambah(kopi, '1', besar))
+    act(() => result.current.tambah(kopi, '1', besar))
+    act(() => result.current.tambah(kopi, '1', kecil))
+
+    expect(result.current.baris).toHaveLength(2)
+    expect(namaBaris(result.current.baris[0]!)).toBe('Kopi (Besar)')
+    // Stok dihitung per barang: lencana kartu menjumlah semua variannya.
+    expect(result.current.qtyDari('P1')).toBe('3')
+    // 2 × 20.000 + 13.000
+    expect(result.current.pratinjauTotal).toBe(53000)
+    expect(itemUntukCheckout(result.current.baris)).toEqual([
+      { product_id: 'P1', variant_id: 'V1', qty: '2' },
+      { product_id: 'P1', variant_id: 'V2', qty: '1' },
+    ])
+
+    act(() => result.current.ubahQty(result.current.baris[1]!.kunci, '0'))
+    expect(result.current.baris).toHaveLength(1)
+    expect(result.current.qtyDari('P1')).toBe('2')
   })
 
   it('mengosongkan keranjang setelah transaksi selesai', () => {

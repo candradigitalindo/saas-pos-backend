@@ -517,12 +517,14 @@ func RecordChannelOrder(ctx context.Context, in ChannelOrderInput) (structs.Chan
 			if v, cp := channelPrices[it.ProductID]; cp {
 				unitPrice = v
 			}
+			nama := p.Name
 			if it.VariantID != "" {
 				vr, vok := variants[it.VariantID]
 				if !vok || vr.ProductID != it.ProductID {
 					return fmt.Errorf("%w: varian tidak cocok", helpers.ErrValidation)
 				}
 				unitPrice += vr.PriceDelta
+				nama = namaBervarian(p.Name, vr.Name)
 			}
 			if it.UnitPrice != nil {
 				unitPrice = *it.UnitPrice
@@ -538,7 +540,7 @@ func RecordChannelOrder(ctx context.Context, in ChannelOrderInput) (structs.Chan
 				unitName = p.Unit.Name
 			}
 			si := models.SaleItem{
-				ProductID: it.ProductID, ProductName: p.Name, UnitName: unitName,
+				ProductID: it.ProductID, ProductName: nama, UnitName: unitName,
 				Qty: it.Qty, UnitPrice: unitPrice, UnitCost: p.CostPrice, LineTotal: lineGross,
 			}
 			if it.VariantID != "" {
@@ -548,9 +550,10 @@ func RecordChannelOrder(ctx context.Context, in ChannelOrderInput) (structs.Chan
 			saleItems = append(saleItems, si)
 
 			if p.TrackStock {
+				// Stok tingkat barang — sama dengan kasir (varian = pilihan harga).
 				deltas = append(deltas, repositories.StockDelta{
-					ProductID: it.ProductID, VariantID: it.VariantID,
-					Delta: it.Qty.Neg(), UnitCost: p.CostPrice, Kind: "sale",
+					ProductID: it.ProductID,
+					Delta:     it.Qty.Neg(), UnitCost: p.CostPrice, Kind: "sale",
 				})
 			}
 			if rec, has := recipes[it.ProductID]; has && len(rec.Items) > 0 {
@@ -668,6 +671,22 @@ func resolveChannelSKU(ctx context.Context, channelID, sku string) (string, stri
 		return cp.ProductID, vid, nil
 	}
 	pid, err := repositories.FindProductIDByCode(ctx, nil, sku)
+	if err == nil && pid == "" {
+		// SKU/barcode varian (mis. listing marketplace per ukuran), atau
+		// "V-<id>" — ID varian yang dikirim bersama menu aplikasi antar.
+		if strings.HasPrefix(sku, "V-") {
+			if vs, err := repositories.ProductVariantsByIDs(ctx, nil, []string{strings.TrimPrefix(sku, "V-")}); err == nil {
+				for _, v := range vs {
+					return v.ProductID, v.ID, nil
+				}
+			}
+		}
+		if v, ada, err := repositories.FindVariantByCode(ctx, nil, sku); err != nil {
+			return "", "", err
+		} else if ada {
+			return v.ProductID, v.ID, nil
+		}
+	}
 	if errors.Is(err, repositories.ErrAmbiguousProductCode) {
 		return "", "", fmt.Errorf("%w: SKU %q dipakai lebih dari satu barang", helpers.ErrValidation, sku)
 	}
@@ -678,6 +697,28 @@ func resolveChannelSKU(ctx context.Context, channelID, sku string) (string, stri
 		return "", "", fmt.Errorf("%w: SKU %q tidak dikenal — samakan dengan SKU/barcode barang di toko", helpers.ErrValidation, sku)
 	}
 	return pid, "", nil
+}
+
+// resolveVarianKanal: kode varian dari penyedia ("V-<id>" dari menu yang
+// dikirim POS, atau SKU/barcode varian) → ID varian milik barang itu.
+func resolveVarianKanal(ctx context.Context, productID, kode string) (string, error) {
+	if id, ok := strings.CutPrefix(kode, "V-"); ok {
+		vs, err := repositories.ProductVariantsByIDs(ctx, nil, []string{id})
+		if err != nil {
+			return "", err
+		}
+		if v, ada := vs[id]; ada && v.ProductID == productID {
+			return v.ID, nil
+		}
+	}
+	v, ada, err := repositories.FindVariantByCode(ctx, nil, kode)
+	if err != nil {
+		return "", err
+	}
+	if !ada || v.ProductID != productID {
+		return "", fmt.Errorf("%w: varian %q tidak dikenal untuk barang ini", helpers.ErrValidation, kode)
+	}
+	return v.ID, nil
 }
 
 // UpdateChannelOrderStatus memutakhirkan status & jejak logistik pesanan kanal.

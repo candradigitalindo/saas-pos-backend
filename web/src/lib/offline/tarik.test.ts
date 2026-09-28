@@ -11,6 +11,7 @@ const KOSONG: PerubahanTarik = {
   categories: [],
   units: [],
   products: [],
+  product_variants: [],
   customers: [],
   stocks: [],
   deleted: {},
@@ -24,6 +25,7 @@ describe('tarik master data', () => {
   beforeEach(async () => {
     await Promise.all([
       db.produk.clear(),
+      db.varian.clear(),
       db.satuan.clear(),
       db.kategori.clear(),
       db.stok.clear(),
@@ -186,13 +188,42 @@ describe('tarik master data', () => {
     expect(await db.stok.count()).toBe(0)
   })
 
+  it('varian tersimpan, terhapus sendiri, dan ikut terhapus bersama barangnya', async () => {
+    const varian = (id: string, product_id: string) => ({
+      id,
+      product_id,
+      name: id,
+      sku: null,
+      barcode: null,
+      price_delta: 5000,
+      is_active: true,
+      sync_version: 1,
+    })
+    const get = vi.spyOn(api, 'get')
+    get.mockResolvedValueOnce(
+      halaman({
+        cursor: 1,
+        safety_lag: 0,
+        product_variants: [varian('V1', 'P1'), varian('V2', 'P1'), varian('V3', 'P2')],
+      }),
+    )
+    await tarikMasterData('O1')
+    expect(await db.varian.count()).toBe(3)
+
+    get.mockResolvedValueOnce(
+      halaman({ cursor: 2, safety_lag: 0, deleted: { product_variants: ['V3'], products: ['P1'] } }),
+    )
+    await tarikMasterData('O1')
+    expect(await db.varian.count()).toBe(0)
+  })
+
   it('tabel yang belum dipakai layar mana pun diabaikan, bukan dianggap galat', async () => {
     vi.spyOn(api, 'get').mockResolvedValue(
       halaman({
         cursor: 1,
         has_more: false,
         safety_lag: 0,
-        deleted: { price_lists: ['X1'], product_variants: ['V1'] },
+        deleted: { price_lists: ['X1'] },
       }),
     )
     await expect(tarikMasterData('O1')).resolves.toBeDefined()

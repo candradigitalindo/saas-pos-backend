@@ -1,5 +1,5 @@
 import { api, type Halaman } from '@/lib/api-client'
-import type { Kategori, Pemasok, Produk, Satuan } from '@/bersama/tipe/katalog'
+import type { Kategori, Pemasok, Produk, Satuan, VarianProduk } from '@/bersama/tipe/katalog'
 
 export interface InputProduk {
   name: string
@@ -14,6 +14,16 @@ export interface InputProduk {
   is_active?: boolean
   /** Untuk menu aplikasi antar; string kosong = dihapus. */
   description?: string
+}
+
+/** Isi varian. PUT mengganti utuh, jadi semua kolom selalu dikirim. */
+export interface InputVarian {
+  name: string
+  /** Selisih terhadap harga jual barang (boleh negatif). */
+  price_delta: number
+  sku?: string
+  barcode?: string
+  is_active?: boolean
 }
 
 /** Satu baris CSV yang ditolak, lengkap dengan nomor barisnya. */
@@ -51,6 +61,13 @@ export const produkApi = {
   hapusFoto: (id: string) => api.hapus<{ image_url: string }>(`/products/${id}/image`),
 
   hapus: (id: string) => api.hapus<null>(`/products/${id}`),
+
+  // ── Varian ───────────────────────────────────────────────────────────────
+  varian: (id: string) => api.get<VarianProduk[]>(`/products/${id}/variants`),
+  buatVarian: (id: string, input: InputVarian) => api.post<VarianProduk>(`/products/${id}/variants`, input),
+  ubahVarian: (id: string, vid: string, input: InputVarian) =>
+    api.put<VarianProduk>(`/products/${id}/variants/${vid}`, input),
+  hapusVarian: (id: string, vid: string) => api.hapus<null>(`/products/${id}/variants/${vid}`),
 
   /**
    * Impor CSV. `dryRun` WAJIB dijalankan lebih dulu di UI: pemilik harus

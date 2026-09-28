@@ -200,6 +200,9 @@ type grabWebhook struct {
 		GrabItemID string      `json:"grabItemID"`
 		Quantity   json.Number `json:"quantity"`
 		Price      json.Number `json:"price"`
+		Modifiers  []struct {
+			ID string `json:"id"`
+		} `json:"modifiers"`
 	} `json:"items"`
 	Receiver *struct {
 		Name    string `json:"name"`
@@ -276,7 +279,16 @@ func (grabfoodAdapter) Events(body []byte, cred ChannelCredentials) ([]Normalize
 		if sku == "" {
 			sku, _, _ = strings.Cut(strings.TrimSpace(it.GrabItemID), "#")
 		}
-		ev.Items = append(ev.Items, NormalizedItem{SKU: sku, Qty: qty, UnitPrice: &h})
+		// Harga item sudah termasuk modifier; modifier = pilihan varian yang
+		// dikirim bersama menu dari POS.
+		ni := NormalizedItem{SKU: sku, Qty: qty, UnitPrice: &h}
+		for _, m := range it.Modifiers {
+			if id := strings.TrimSpace(m.ID); id != "" {
+				ni.VariantSKU = id
+				break
+			}
+		}
+		ev.Items = append(ev.Items, ni)
 	}
 	return []NormalizedEvent{ev}, nil
 }
@@ -436,6 +448,22 @@ func (grabfoodAdapter) ServeMenu(q url.Values, cred ChannelCredentials, menu Men
 			}
 			if it.Deskripsi != "" {
 				m["description"] = it.Deskripsi
+			}
+			if len(it.Varian) > 0 {
+				mods := make([]map[string]any, 0, len(it.Varian))
+				for n, v := range it.Varian {
+					status := "AVAILABLE"
+					if !v.Tersedia {
+						status = "UNAVAILABLE"
+					}
+					mods = append(mods, map[string]any{
+						"id": v.ID, "name": v.Nama, "availableStatus": status, "price": v.Tambahan * 100, "sequence": n + 1,
+					})
+				}
+				m["modifierGroups"] = []any{map[string]any{
+					"id": "MG-" + it.ID, "name": "Pilihan", "availableStatus": "AVAILABLE",
+					"selectionRangeMin": 1, "selectionRangeMax": 1, "sequence": 1, "modifiers": mods,
+				}}
 			}
 			items = append(items, m)
 		}
