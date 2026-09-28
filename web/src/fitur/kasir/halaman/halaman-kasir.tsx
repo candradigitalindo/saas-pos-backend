@@ -10,7 +10,7 @@ import { Kerangka } from '@/bersama/komponen/kerangka'
 import { StatusKoneksi } from '@/bersama/komponen/status-koneksi'
 import { PemindaiBarcode } from '@/bersama/komponen/pemindai-barcode'
 import { bisaMemindai } from '@/bersama/hooks/use-pemindai'
-import { produkDariBarcode, varianDariBarcode } from '@/lib/offline/katalog-lokal'
+import { kemasanDariBarcode, produkDariBarcode, varianDariBarcode } from '@/lib/offline/katalog-lokal'
 import { useSinkron } from '@/lib/offline/mesin'
 import { useSesi } from '@/bersama/hooks/use-sesi'
 import { useToast } from '@/bersama/komponen/toast'
@@ -399,6 +399,13 @@ export function HalamanKasir() {
           // Sengaja TIDAK menutup dialog setelah berhasil: kasir biasanya
           // memindai beberapa barang berturut-turut, dan menutup-buka kamera
           // tiap barang membuat alurnya jauh lebih lambat.
+          // Barcode dus langsung jadi baris kemasannya ("1 dus").
+          const kenaKemasan = await kemasanDariBarcode(kode)
+          if (kenaKemasan) {
+            keranjang.tambah(kenaKemasan.produk, '1', undefined, kenaKemasan.kemasan)
+            toast.tampilkan(`${kenaKemasan.produk.name} — 1 ${kenaKemasan.kemasan.unit_name} ditambahkan`, 'berhasil')
+            return true
+          }
           // Barcode/SKU varian langsung jadi barisnya ("Kopi (Besar)").
           const kenaVarian = await varianDariBarcode(kode)
           if (kenaVarian) {

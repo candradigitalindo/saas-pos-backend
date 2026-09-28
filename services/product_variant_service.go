@@ -97,6 +97,11 @@ func SaveProductVariant(ctx context.Context, productID, variantID string, in str
 			} else if dipakai {
 				return fmt.Errorf("%w: kode %q sudah dipakai varian lain", helpers.ErrConflict, kode)
 			}
+			if dipakai, err := repositories.PackagingCodeTaken(ctx, tx, kode, "", ""); err != nil {
+				return err
+			} else if dipakai {
+				return fmt.Errorf("%w: kode %q sudah dipakai kemasan barang", helpers.ErrConflict, kode)
+			}
 		}
 		v := models.ProductVariant{
 			ProductID: productID, Name: nama, PriceDelta: in.PriceDelta,

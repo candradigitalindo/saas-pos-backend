@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db, teksCari, type ProdukLokal, type VarianLokal } from './db'
-import { produkDariBarcode, produkLokal, varianDariBarcode } from './katalog-lokal'
+import { kemasanDariBarcode, produkDariBarcode, produkLokal, varianDariBarcode } from './katalog-lokal'
 
 function produk(p: Partial<ProdukLokal> & { id: string; name: string }): ProdukLokal {
   const dasar: ProdukLokal = {
@@ -136,6 +136,22 @@ describe('varian di katalog lokal', () => {
     ])
     await db.daftarHarga.clear()
     await db.hargaProduk.clear()
+  })
+
+  it('kemasan: nama satuan & harga berlaku, dan barcode dus menunjuk kemasannya', async () => {
+    await db.satuan.put({ id: 'U-DUS', name: 'dus', sync_version: 1 })
+    await db.kemasan.bulkPut([
+      { id: 'K1', product_id: 'P1', unit_id: 'U-DUS', conversion: '10', sell_price: null, barcode: 'DUS-1', sync_version: 1 },
+    ])
+    const p = await produkLokal('P1')
+    // Harga otomatis = isi × harga jual (15.000 × 10).
+    expect(p?.packagings).toEqual([
+      expect.objectContaining({ id: 'K1', unit_name: 'dus', conversion: '10', price: 150000 }),
+    ])
+    const k = await kemasanDariBarcode(' DUS-1 ')
+    expect(k?.produk.id).toBe('P1')
+    expect(k?.kemasan.id).toBe('K1')
+    await db.kemasan.clear()
   })
 
   it('varian dari barang nonaktif tidak terpindai', async () => {

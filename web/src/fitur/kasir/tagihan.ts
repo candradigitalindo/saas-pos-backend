@@ -192,6 +192,7 @@ export function barisKeItemTagihan(baris: BarisKeranjang[]): ItemTagihan[] {
   return baris.map((b) => ({
     product_id: b.produk.id,
     ...(b.varian ? { variant_id: b.varian.id } : {}),
+    ...(b.kemasan ? { product_unit_id: b.kemasan.id } : {}),
     qty: b.qty,
     ...(b.diskonPersen !== undefined && b.diskonPersen > 0
       ? { discount_percent: b.diskonPersen }
@@ -223,11 +224,12 @@ export async function itemTagihanKeBaris(items: ItemTagihan[]): Promise<{ baris:
   for (const it of items) {
     const produk = await produkLokal(it.product_id)
     const varian = it.variant_id ? await varianLokal(it.variant_id) : undefined
-    if (!produk || (it.variant_id && !varian)) {
+    const kemasan = it.product_unit_id ? produk?.packagings?.find((k) => k.id === it.product_unit_id) : undefined
+    if (!produk || (it.variant_id && !varian) || (it.product_unit_id && !kemasan)) {
       hilang++
       continue
     }
-    const kunci = kunciBaris(produk.id, varian?.id)
+    const kunci = kunciBaris(produk.id, varian?.id, kemasan?.id)
     const ada = baris.find((b) => b.kunci === kunci)
     if (ada) {
       // Baris ganda (seharusnya tidak terjadi dari keranjang) digabung.
@@ -238,6 +240,7 @@ export async function itemTagihanKeBaris(items: ItemTagihan[]): Promise<{ baris:
       kunci,
       produk,
       varian,
+      kemasan,
       qty: it.qty,
       diskon: it.discount_amount ?? 0,
       diskonPersen: it.discount_percent,

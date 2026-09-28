@@ -10,7 +10,7 @@ import type { ItemTransaksi, Shift, Transaksi } from '@/bersama/tipe/pos'
 import { kasirApi, type InputCheckout } from './api'
 import { hitungTotal, type AturanHarga, type BarisHitung } from '@/bersama/util/total'
 import { tambahQty } from '@/bersama/util/desimal'
-import { hargaGrosir, hargaKhusus } from './keranjang'
+import { hargaBaris, qtyDasar } from './keranjang'
 import { pelangganKeranjang } from './tagihan'
 
 /**
@@ -136,8 +136,13 @@ async function simpanKeAntrean(
   const items: ItemTransaksi[] = []
   const untukHitung: BarisHitung[] = []
   // Harga grosir memakai total jumlah per barang, sama dengan server.
+  // Stok lokal berkurang dalam SATUAN DASAR (2 dus isi 40 = 80).
+  const stokKeluar: { productId: string; qty: string }[] = []
+  // Harga grosir & khusus dihitung dari baris SATUAN DASAR saja (kemasan berharga sendiri).
   const totalQty = new Map<string, string>()
-  for (const it of input.items) totalQty.set(it.product_id, tambahQty(totalQty.get(it.product_id) ?? '0', it.qty))
+  for (const it of input.items) {
+    if (!it.product_unit_id) totalQty.set(it.product_id, tambahQty(totalQty.get(it.product_id) ?? '0', it.qty))
+  }
   // Daftar harga khusus pembeli (member/reseller), dari data lokal.
   const daftarHarga = (await pelangganKeranjang(input.customer_id))?.price_list_id ?? undefined
   for (const [i, it] of input.items.entries()) {
@@ -145,8 +150,11 @@ async function simpanKeAntrean(
     const v = it.variant_id ? await varianLokal(it.variant_id) : undefined
     // Harga & nama mengikuti server: harga khusus pelanggan bila ada, selain
     // itu harga dasar (grosir bila memenuhi) — + selisih varian, "Kopi (Besar)".
-    const q = totalQty.get(it.product_id) ?? it.qty
-    const hargaSatuan = (p ? (hargaKhusus(p, q, daftarHarga) ?? hargaGrosir(p, q)) : 0) + (v?.price_delta ?? 0)
+    const kemasan = it.product_unit_id ? p?.packagings?.find((k) => k.id === it.product_unit_id) : undefined
+    stokKeluar.push({ productId: it.product_id, qty: qtyDasar({ qty: it.qty, kemasan }) })
+    const hargaSatuan = p
+      ? hargaBaris({ produk: p, varian: v, kemasan, qty: it.qty, daftarHarga }, totalQty.get(it.product_id))
+      : 0
     const lineTotal = pratinjauBaris(hargaSatuan, it.qty, it.discount_amount ?? 0)
     untukHitung.push({ harga: hargaSatuan, qty: it.qty, diskon: it.discount_amount ?? 0 })
     const nama = p?.name ?? 'Barang'
@@ -155,10 +163,10 @@ async function simpanKeAntrean(
       product_id: it.product_id,
       ...(v ? { variant_id: v.id } : {}),
       product_name: v ? `${nama} (${v.name})` : nama,
-      unit_name: p?.unit_name ?? '',
+      unit_name: kemasan?.unit_name ?? p?.unit_name ?? '',
       qty: it.qty,
       unit_price: hargaSatuan,
-      unit_cost: p?.cost_price ?? 0,
+      unit_cost: kemasan ? Math.round(Number(kemasan.conversion) * (p?.cost_price ?? 0)) : (p?.cost_price ?? 0),
       discount_amount: it.discount_amount ?? 0,
       ...(it.note ? { note: it.note } : {}),
       tax_amount: 0,
@@ -183,10 +191,7 @@ async function simpanKeAntrean(
 
   // Stok lokal ikut turun supaya kasir tidak melihat angka yang jelas basi
   // setelah ia sendiri baru saja menjualnya.
-  await kurangiStokLokal(input.outlet_id, input.items.map((i) => ({
-    productId: i.product_id,
-    qty: i.qty,
-  })))
+  await kurangiStokLokal(input.outlet_id, stokKeluar)
 
   return {
     id: idTransaksi,

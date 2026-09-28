@@ -4,7 +4,9 @@ import { Tombol } from '@/bersama/ui/tombol'
 import { StepperJumlah } from '@/bersama/ui/stepper-jumlah'
 import { useIzin } from '@/bersama/hooks/use-sesi'
 import { formatRupiah, pratinjauBaris } from '@/bersama/util/uang'
-import { diskonBaris, hargaBaris, hargaGrosir, hargaKhusus, namaBaris, type Keranjang } from '../keranjang'
+import { diskonBaris, hargaBaris, hargaGrosir, hargaKhusus, namaBaris, qtyPerProduk, type Keranjang } from '../keranjang'
+import { SegmenPilihan } from '@/bersama/ui/segmen'
+import { formatQty } from '@/bersama/util/desimal'
 import { DialogPilihPelanggan } from './dialog-pilih-pelanggan'
 import { DialogAturBaris } from './dialog-atur-baris'
 import { DialogDiskonTransaksi } from './dialog-diskon-transaksi'
@@ -37,6 +39,7 @@ export function PanelKeranjang({
   const [aturDiskon, setAturDiskon] = useState(false)
   const [pilihPelanggan, setPilihPelanggan] = useState(false)
   const barisAtur = baris.find((b) => b.kunci === kunciAtur)
+  const qtyGrosir = qtyPerProduk(baris)
   // Pajak eksklusif MENAMBAH total (total = subtotal − diskon + pajak +
   // layanan); pajak inklusif sudah ada di dalam harga dan hanya disebutkan.
   const pajakEksklusif =
@@ -103,12 +106,13 @@ export function PanelKeranjang({
         ) : (
           <ul className="divide-y divide-garis">
             {baris.map((b) => {
-              // Harga grosir dipilih dari total barang ini (semua varian).
-              const q = keranjang.qtyDari(b.produk.id)
+              // Harga grosir dipilih dari total barang ini di baris satuan
+              // dasar (semua varian); baris kemasan berharga sendiri.
+              const q = qtyGrosir.get(b.produk.id)
               const harga = hargaBaris(b, q)
               const diskon = diskonBaris(b, q)
-              const khusus = hargaKhusus(b.produk, q, b.daftarHarga) !== undefined
-              const grosir = !khusus && hargaGrosir(b.produk, q) !== b.produk.sell_price
+              const khusus = !b.kemasan && hargaKhusus(b.produk, q ?? b.qty, b.daftarHarga) !== undefined
+              const grosir = !b.kemasan && !khusus && hargaGrosir(b.produk, q ?? b.qty) !== b.produk.sell_price
               return (
               <li key={b.kunci} className="flex flex-col gap-2 p-4">
                 <div className="flex items-start justify-between gap-3">
@@ -132,11 +136,24 @@ export function PanelKeranjang({
                   </p>
                 </div>
 
+                {/* Satuan jual: hanya untuk barang berkemasan (dus isi 40). */}
+                {b.produk.packagings?.length ? (
+                  <SegmenPilihan
+                    label={`Satuan jual ${namaBaris(b)}`}
+                    nilai={b.kemasan?.id ?? 'dasar'}
+                    onPilih={(v) => keranjang.ubahKemasan(b.kunci, b.produk.packagings!.find((k) => k.id === v))}
+                    pilihan={[
+                      ['dasar', b.produk.unit_name ?? 'satuan'] as const,
+                      ...b.produk.packagings.map((k) => [k.id, `${k.unit_name} isi ${formatQty(k.conversion)}`] as const),
+                    ]}
+                  />
+                ) : null}
+
                 <div className="flex items-center justify-between gap-2">
                   <StepperJumlah
                     nilai={b.qty}
                     onNilai={(q) => ubahQty(b.kunci, q)}
-                    satuan={b.produk.unit_name}
+                    satuan={b.kemasan?.unit_name ?? b.produk.unit_name}
                     label={`Jumlah ${namaBaris(b)}`}
                   />
                   <button
@@ -230,7 +247,7 @@ export function PanelKeranjang({
       {barisAtur && (
         <DialogAturBaris
           baris={barisAtur}
-          qtyProduk={keranjang.qtyDari(barisAtur.produk.id)}
+          qtyProduk={qtyGrosir.get(barisAtur.produk.id)}
           bolehDiskon={bolehDiskon}
           onSimpan={(isi) => {
             keranjang.aturBaris(barisAtur.kunci, isi)

@@ -5,8 +5,10 @@ package structs
 type PurchaseItemRequest struct {
 	ProductID string `json:"product_id" binding:"required,ulid"`
 	VariantID string `json:"variant_id" binding:"omitempty,ulid"`
-	Qty       string `json:"qty" binding:"required"`
-	UnitCost  int64  `json:"unit_cost" binding:"required,gte=0"`
+	// ProductUnitID: kemasan yang dibeli (dus); qty & unit_cost per kemasan.
+	ProductUnitID string `json:"product_unit_id" binding:"omitempty,ulid"`
+	Qty           string `json:"qty" binding:"required"`
+	UnitCost      int64  `json:"unit_cost" binding:"required,gte=0"`
 }
 
 type PurchaseRequest struct {
@@ -27,6 +29,9 @@ type PurchaseItemResponse struct {
 	Qty       string `json:"qty"`
 	UnitCost  int64  `json:"unit_cost"`
 	LineTotal int64  `json:"line_total"`
+	// Kemasan: qty & unit_cost per kemasan; stok masuk qty × unit_conversion.
+	UnitName       string `json:"unit_name,omitempty"`
+	UnitConversion string `json:"unit_conversion,omitempty"`
 }
 
 type PurchaseResponse struct {

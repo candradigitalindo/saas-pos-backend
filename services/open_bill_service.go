@@ -210,7 +210,7 @@ func normalOpenBillItems(in []structs.OpenBillItemRequest) (json.RawMessage, err
 			return nil, fmt.Errorf("%w: jumlah %q tidak valid", helpers.ErrValidation, it.Qty)
 		}
 		items = append(items, models.OpenBillItem{
-			ProductID: it.ProductID, VariantID: it.VariantID, Qty: q.String(),
+			ProductID: it.ProductID, VariantID: it.VariantID, ProductUnitID: it.ProductUnitID, Qty: q.String(),
 			DiscountAmount: it.DiscountAmount, DiscountPercent: it.DiscountPercent,
 			Note: strings.TrimSpace(it.Note),
 		})

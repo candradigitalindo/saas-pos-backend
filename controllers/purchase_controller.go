@@ -50,7 +50,7 @@ func ReceivePurchase(c *gin.Context) {
 			return
 		}
 		in.Items = append(in.Items, services.PurchaseItemInput{
-			ProductID: it.ProductID, VariantID: it.VariantID, Qty: q, UnitCost: it.UnitCost,
+			ProductID: it.ProductID, VariantID: it.VariantID, ProductUnitID: it.ProductUnitID, Qty: q, UnitCost: it.UnitCost,
 		})
 	}
 

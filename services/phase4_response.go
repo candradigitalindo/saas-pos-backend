@@ -28,6 +28,7 @@ func PurchaseToResponse(p *models.Purchase) structs.PurchaseResponse {
 		r.Items = append(r.Items, structs.PurchaseItemResponse{
 			ID: it.ID, ProductID: it.ProductID, VariantID: ptrStr(it.VariantID),
 			Qty: it.Qty.String(), UnitCost: it.UnitCost, LineTotal: it.LineTotal,
+			UnitName: it.UnitName, UnitConversion: it.UnitConversion.String(),
 		})
 	}
 	return r

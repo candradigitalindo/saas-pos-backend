@@ -51,6 +51,17 @@ export interface TagihanLokal extends TagihanTerbuka {
   tertunda?: boolean
 }
 
+/** Kemasan barang hasil pull (product_units). */
+export interface KemasanLokal {
+  id: string
+  product_id: string
+  unit_id: string
+  conversion: string
+  sell_price: number | null
+  barcode: string | null
+  sync_version: number
+}
+
 /** Daftar harga (price_lists). Yang is_default memuat harga grosir per jumlah. */
 export interface DaftarHargaLokal {
   id: string
@@ -133,6 +144,7 @@ class DBOffline extends Dexie {
   tagihan!: EntityTable<TagihanLokal, 'id'>
   daftarHarga!: EntityTable<DaftarHargaLokal, 'id'>
   hargaProduk!: EntityTable<HargaProdukLokal, 'id'>
+  kemasan!: EntityTable<KemasanLokal, 'id'>
   kategori!: EntityTable<KategoriLokal, 'id'>
   satuan!: EntityTable<SatuanLokal, 'id'>
   pelanggan!: EntityTable<PelangganLokal, 'id'>
@@ -236,6 +248,24 @@ class DBOffline extends Dexie {
         meta: 'kunci',
       })
       .upgrade((tx) => tx.table('meta').delete('kursor-sync'))
+
+    // v7: kemasan barang (dus isi 40) — dijual & dipindai kasir offline.
+    this.version(7)
+      .stores({
+        produk: 'id, name, cari, category_id, is_active, barcode, sku',
+        varian: 'id, product_id, barcode, sku',
+        kemasan: 'id, product_id, barcode',
+        tagihan: 'id, outlet_id',
+        daftarHarga: 'id',
+        hargaProduk: 'id, product_id, price_list_id',
+        kategori: 'id, name',
+        satuan: 'id, name',
+        pelanggan: 'id, name, phone',
+        stok: 'kunci, product_id, outlet_id',
+        antrean: 'id, status, dibuatPada',
+        meta: 'kunci',
+      })
+      .upgrade((tx) => tx.table('meta').delete('kursor-sync'))
   }
 }
 
@@ -273,6 +303,7 @@ export async function kosongkanDB(): Promise<void> {
     db.tagihan.clear(),
     db.daftarHarga.clear(),
     db.hargaProduk.clear(),
+    db.kemasan.clear(),
     db.kategori.clear(),
     db.satuan.clear(),
     db.pelanggan.clear(),

@@ -36,6 +36,12 @@ func cekKodeVarian(ctx context.Context, tx *gorm.DB, kode ...*string) error {
 		if err != nil {
 			return err
 		}
+		if !dipakai {
+			// Barcode dus (kemasan) juga dicari pemindai dari kode yang sama.
+			if dipakai, err = repositories.PackagingCodeTaken(ctx, tx, *k, "", ""); err != nil {
+				return err
+			}
+		}
 		if dipakai {
 			return errKodeDipakaiVarian
 		}
@@ -117,6 +123,10 @@ func GetProduct(c *gin.Context) {
 		respondServiceError(c, err)
 		return
 	}
+	if res.Packagings, err = services.PackagingsResponse(c.Request.Context(), row); err != nil {
+		respondServiceError(c, err)
+		return
+	}
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.ProductResponse]{
 		Success: true, Message: "Berhasil mengambil data produk", Data: res,
 	})
@@ -180,6 +190,11 @@ func CreateProduct(c *gin.Context) {
 				return err
 			}
 		}
+		if len(req.Packagings) > 0 {
+			if err := services.SavePackagings(ctx, tx, row, req.Packagings); err != nil {
+				return err
+			}
+		}
 		if len(grosir) == 0 {
 			return nil
 		}
@@ -199,6 +214,12 @@ func CreateProduct(c *gin.Context) {
 	res.WholesalePrices = wholesaleToResponse(grosir)
 	for _, s := range req.SpecialPrices {
 		res.SpecialPrices = append(res.SpecialPrices, structs.SpecialPriceResponse{PriceListID: s.PriceListID, Price: s.Price})
+	}
+	if len(req.Packagings) > 0 {
+		if res.Packagings, err = services.PackagingsResponse(ctx, row); err != nil {
+			respondServiceError(c, err)
+			return
+		}
 	}
 	c.JSON(http.StatusCreated, structs.SuccessResponse[structs.ProductResponse]{
 		Success: true, Message: "Produk berhasil dibuat", Data: res,
@@ -311,6 +332,11 @@ func UpdateProduct(c *gin.Context) {
 				return err
 			}
 		}
+		if req.Packagings != nil {
+			if err := services.SavePackagings(ctx, tx, row, *req.Packagings); err != nil {
+				return err
+			}
+		}
 		if req.WholesalePrices == nil {
 			return nil
 		}
@@ -331,6 +357,10 @@ func UpdateProduct(c *gin.Context) {
 	}
 	res.WholesalePrices = tiers
 	if res.SpecialPrices, err = services.SpecialPricesResponse(ctx, row.ID); err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	if res.Packagings, err = services.PackagingsResponse(ctx, row); err != nil {
 		respondServiceError(c, err)
 		return
 	}

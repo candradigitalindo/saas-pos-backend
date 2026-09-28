@@ -407,7 +407,7 @@ func SalesByProduct(ctx context.Context, outletID, from, to string) ([]ProductSa
 		si.product_id                                                   AS key,
 		p.name                                                          AS label,
 		COALESCE(u.name, '')                                            AS unit,
-		COALESCE(SUM(` + tanda + ` * si.qty), 0)                          AS qty,
+		COALESCE(SUM(` + tanda + ` * si.qty * si.unit_conversion), 0)    AS qty, -- satuan dasar (kemasan dikali isinya)
 		COUNT(DISTINCT s.id) FILTER (WHERE s.status = 'completed')      AS sales_count,
 		COALESCE(SUM(` + tanda + ` * ROUND(si.qty * si.unit_price)), 0)::bigint AS gross_amount,
 		COALESCE(SUM(si.discount_amount), 0)                            AS discount_amount,

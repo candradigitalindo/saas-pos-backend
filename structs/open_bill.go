@@ -18,6 +18,7 @@ type OpenBillUpsertRequest struct {
 type OpenBillItemRequest struct {
 	ProductID       string `json:"product_id" binding:"required,ulid"`
 	VariantID       string `json:"variant_id" binding:"omitempty,ulid"`
+	ProductUnitID   string `json:"product_unit_id" binding:"omitempty,ulid"`
 	Qty             string `json:"qty" binding:"required"`
 	DiscountAmount  int64  `json:"discount_amount" binding:"omitempty,gte=0"`
 	DiscountPercent *int   `json:"discount_percent" binding:"omitempty,gte=1,lte=100"`

@@ -21,10 +21,13 @@
  *     keranjang (semua varian dijumlah) — aturan yang sama dengan server.
  *     Karena itu fungsi harga menerima `qtyProduk`; tanpa itu dipakai qty
  *     barisnya sendiri.
+ *   - Kemasan (dus isi 40) adalah baris sendiri berharga kemasan. Stok &
+ *     lencana kartu memakai jumlah SATUAN DASAR (qtyDari: 2 dus = 80); harga
+ *     grosir dihitung dari baris satuan dasar saja (qtyPerProduk).
  */
 import { useCallback, useMemo, useRef, useState } from 'react'
 import Decimal from 'decimal.js'
-import type { Produk, VarianProduk } from '@/bersama/tipe/katalog'
+import type { Kemasan, Produk, VarianProduk } from '@/bersama/tipe/katalog'
 import { bandingQty, kurangQty, qtyKosong, tambahQty } from '@/bersama/util/desimal'
 import { hitungTotal, type AturanHarga, type RincianTotal } from '@/bersama/util/total'
 
@@ -33,6 +36,8 @@ export interface BarisKeranjang {
   kunci: string
   produk: Produk
   varian?: VarianProduk
+  /** Kemasan yang dijual (dus); qty dalam kemasan ini. Kosong = satuan dasar. */
+  kemasan?: Kemasan
   qty: string
   /** Diskon per baris dalam rupiah bulat. Butuh izin sale.discount. */
   diskon: number
@@ -76,7 +81,9 @@ export interface Keranjang {
   pratinjauTotal: number
   /** Rincian di balik total: subtotal, diskon, pajak, biaya layanan. */
   rincian: RincianTotal
-  tambah: (p: Produk, qty?: string, varian?: VarianProduk) => void
+  tambah: (p: Produk, qty?: string, varian?: VarianProduk, kemasan?: Kemasan) => void
+  /** Mengganti satuan jual satu baris (satuan dasar ↔ kemasan). */
+  ubahKemasan: (kunci: string, kemasan: Kemasan | undefined) => void
   ubahQty: (kunci: string, qty: string) => void
   ubahDiskon: (kunci: string, diskon: number) => void
   /** Mengganti catatan & diskon satu baris sekaligus (dialog atur baris). */
@@ -87,7 +94,7 @@ export interface Keranjang {
   diskonTransaksiNominal: number
   hapus: (kunci: string) => void
   kosongkan: () => void
-  /** Total qty satu barang di keranjang, semua variannya dijumlah. */
+  /** Total qty satu barang di keranjang dalam SATUAN DASAR (varian & kemasan dijumlah). */
   qtyDari: (produkId: string) => string
   /** Tagihan terbuka yang sedang dimuat — null untuk keranjang biasa. */
   tagihan: { id: string; version: number; label: string } | null
@@ -110,7 +117,7 @@ function bulat(d: Decimal): number {
 
 /** Nilai kotor baris = bulat(qty × harga), sama dengan server. */
 export function kotorBaris(
-  b: Pick<BarisKeranjang, 'produk' | 'varian' | 'qty' | 'daftarHarga'>,
+  b: Pick<BarisKeranjang, 'produk' | 'varian' | 'qty' | 'daftarHarga' | 'kemasan'>,
   qtyProduk?: string,
 ): number {
   try {
@@ -122,7 +129,7 @@ export function kotorBaris(
 
 /** Diskon baris yang berlaku (rupiah), sudah dijepit 0..nilai baris. */
 export function diskonBaris(
-  b: Pick<BarisKeranjang, 'produk' | 'varian' | 'qty' | 'diskon' | 'diskonPersen' | 'daftarHarga'>,
+  b: Pick<BarisKeranjang, 'produk' | 'varian' | 'qty' | 'diskon' | 'diskonPersen' | 'daftarHarga' | 'kemasan'>,
   qtyProduk?: string,
 ): number {
   const kotor = kotorBaris(b, qtyProduk)
@@ -131,8 +138,19 @@ export function diskonBaris(
   return Math.min(Math.max(0, mentah), kotor)
 }
 
-export function kunciBaris(produkId: string, varianId?: string): string {
+export function kunciBaris(produkId: string, varianId?: string, kemasanId?: string): string {
+  if (kemasanId) return `${produkId}|${varianId ?? ''}|${kemasanId}`
   return varianId ? `${produkId}|${varianId}` : produkId
+}
+
+/** Isi baris dalam satuan dasar: qty × isi kemasan. */
+export function qtyDasar(b: Pick<BarisKeranjang, 'qty' | 'kemasan'>): string {
+  if (!b.kemasan) return b.qty
+  try {
+    return new Decimal(b.qty || '0').mul(b.kemasan.conversion).toString()
+  } catch {
+    return b.qty
+  }
 }
 
 /**
@@ -175,17 +193,28 @@ export function hargaKhusus(
  * dasar (grosir bila memenuhi) — lalu + selisih varian. Sama dengan server.
  */
 export function hargaBaris(
-  b: Pick<BarisKeranjang, 'produk' | 'varian' | 'qty' | 'daftarHarga'>,
+  b: Pick<BarisKeranjang, 'produk' | 'varian' | 'qty' | 'daftarHarga' | 'kemasan'>,
   qtyProduk?: string,
 ): number {
+  if (b.kemasan) {
+    // Kemasan: harganya sendiri; selisih varian berlaku per satuan dasar,
+    // jadi dikali isinya (sama dengan server).
+    const selisih = b.varian ? bulat(new Decimal(b.kemasan.conversion).mul(b.varian.price_delta)) : 0
+    return b.kemasan.price + selisih
+  }
   const q = qtyProduk ?? b.qty
   return (hargaKhusus(b.produk, q, b.daftarHarga) ?? hargaGrosir(b.produk, q)) + (b.varian?.price_delta ?? 0)
 }
 
-/** Total qty per barang di keranjang (semua varian dijumlah) — dasar harga grosir. */
-export function qtyPerProduk(baris: Pick<BarisKeranjang, 'produk' | 'qty'>[]): Map<string, string> {
+/**
+ * Total qty per barang dari baris SATUAN DASAR (semua varian dijumlah) — dasar
+ * harga grosir & harga khusus. Baris kemasan tidak ikut: harganya sendiri.
+ */
+export function qtyPerProduk(baris: Pick<BarisKeranjang, 'produk' | 'qty' | 'kemasan'>[]): Map<string, string> {
   const peta = new Map<string, string>()
-  for (const b of baris) peta.set(b.produk.id, tambahQty(peta.get(b.produk.id) ?? '0', b.qty))
+  for (const b of baris) {
+    if (!b.kemasan) peta.set(b.produk.id, tambahQty(peta.get(b.produk.id) ?? '0', b.qty))
+  }
   return peta
 }
 
@@ -222,14 +251,31 @@ export function useKeranjang(aturan?: AturanHarga): Keranjang {
     setPelanggan(p ?? null)
   }, [])
 
-  const tambah = useCallback((p: Produk, qty = '1', varian?: VarianProduk) => {
-    const kunci = kunciBaris(p.id, varian?.id)
+  const tambah = useCallback((p: Produk, qty = '1', varian?: VarianProduk, kemasan?: Kemasan) => {
+    const kunci = kunciBaris(p.id, varian?.id, kemasan?.id)
     setBaris((lama) => {
       const ada = lama.find((b) => b.kunci === kunci)
-      if (!ada) return [...lama, { kunci, produk: p, varian, qty, diskon: 0, daftarHarga: daftarAktif.current }]
+      if (!ada) return [...lama, { kunci, produk: p, varian, kemasan, qty, diskon: 0, daftarHarga: daftarAktif.current }]
       return lama.map((b) =>
         b.kunci === kunci ? { ...b, qty: tambahQty(b.qty, qty) } : b,
       )
+    })
+  }, [])
+
+  const ubahKemasan = useCallback((kunci: string, kemasan: Kemasan | undefined) => {
+    setBaris((lama) => {
+      const b = lama.find((x) => x.kunci === kunci)
+      if (!b) return lama
+      const baru = kunciBaris(b.produk.id, b.varian?.id, kemasan?.id)
+      if (baru === kunci) return lama
+      const tujuan = lama.find((x) => x.kunci === baru)
+      // Sudah ada baris bersatuan itu → digabung, bukan dua baris kembar.
+      if (tujuan) {
+        return lama
+          .filter((x) => x.kunci !== kunci)
+          .map((x) => (x.kunci === baru ? { ...x, qty: tambahQty(x.qty, b.qty) } : x))
+      }
+      return lama.map((x) => (x.kunci === kunci ? { ...x, kunci: baru, kemasan } : x))
     })
   }, [])
 
@@ -276,7 +322,7 @@ export function useKeranjang(aturan?: AturanHarga): Keranjang {
 
   const qtyDari = useCallback(
     (produkId: string) =>
-      baris.filter((b) => b.produk.id === produkId).reduce((t, b) => tambahQty(t, b.qty), '0'),
+      baris.filter((b) => b.produk.id === produkId).reduce((t, b) => tambahQty(t, qtyDasar(b)), '0'),
     [baris],
   )
 
@@ -292,6 +338,7 @@ export function useKeranjang(aturan?: AturanHarga): Keranjang {
     pratinjauTotal: rincian.total,
     rincian,
     tambah,
+    ubahKemasan,
     ubahQty,
     ubahDiskon,
     aturBaris,
@@ -338,6 +385,7 @@ export function itemUntukCheckout(baris: BarisKeranjang[]) {
     return {
       product_id: b.produk.id,
       ...(b.varian ? { variant_id: b.varian.id } : {}),
+      ...(b.kemasan ? { product_unit_id: b.kemasan.id } : {}),
       qty: b.qty,
       ...(diskon > 0 ? { discount_amount: diskon } : {}),
       ...(b.catatan?.trim() ? { note: b.catatan.trim() } : {}),

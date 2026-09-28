@@ -13,13 +13,18 @@ import { useSesi } from '@/bersama/hooks/use-sesi'
 import { usePemasok } from '@/bersama/hooks/use-katalog'
 import { GalatAPI } from '@/lib/api-client'
 import { formatRupiah, pratinjauBaris } from '@/bersama/util/uang'
-import type { Produk } from '@/bersama/tipe/katalog'
+import type { Kemasan, Produk } from '@/bersama/tipe/katalog'
+import { SegmenPilihan } from '@/bersama/ui/segmen'
+import { formatQty } from '@/bersama/util/desimal'
 import { PemilihBarang } from '../komponen/pemilih-barang'
 import { stokApi } from '../api'
 
 interface BarisMasuk {
   produk: Produk
+  /** Kemasan yang dibeli (dus); kosong = satuan dasar. */
+  kemasan?: Kemasan
   qty: string
+  /** Harga beli per satuan baris (per dus bila kemasan). */
   hargaBeli: number
 }
 
@@ -58,6 +63,7 @@ export function HalamanBarangMasuk() {
           invoice_no: noNota.trim() || undefined,
           items: baris.map((b) => ({
             product_id: b.produk.id,
+            ...(b.kemasan ? { product_unit_id: b.kemasan.id } : {}),
             qty: b.qty,
             unit_cost: b.hargaBeli,
           })),
@@ -71,7 +77,7 @@ export function HalamanBarangMasuk() {
       qc.invalidateQueries({ queryKey: ['produk'] })
 
       const ringkas = baris
-        .map((b) => `${b.qty} ${b.produk.unit_name ?? ''} ${b.produk.name}`.trim())
+        .map((b) => `${b.qty} ${b.kemasan?.unit_name ?? b.produk.unit_name ?? ''} ${b.produk.name}`.trim())
         .join(', ')
       toast.berhasil(`${ringkas} masuk. Harga modal diperbarui otomatis.`)
       navigate('/stok')
@@ -86,6 +92,27 @@ export function HalamanBarangMasuk() {
       lama.some((b) => b.produk.id === p.id)
         ? lama
         : [...lama, { produk: p, qty: '1', hargaBeli: p.cost_price }],
+    )
+    // Daftar barang tidak memuat kemasan; diambil terpisah supaya baris bisa
+    // dicatat per dus. Gagal diambil → tetap bisa dicatat per satuan dasar.
+    void stokApi
+      .barang(p.id)
+      .then((lengkap) => {
+        if (!lengkap.packagings?.length) return
+        setBaris((l) => l.map((b) => (b.produk.id === p.id ? { ...b, produk: { ...b.produk, packagings: lengkap.packagings } } : b)))
+      })
+      .catch(() => {})
+  }
+
+  /** Ganti satuan beli satu baris; harga beli disesuaikan ke satuan barunya. */
+  function gantiSatuan(i: number, kemasan: Kemasan | undefined) {
+    setBaris((l) =>
+      l.map((b, j) => {
+        if (j !== i) return b
+        const isiLama = Number(b.kemasan?.conversion ?? 1)
+        const isiBaru = Number(kemasan?.conversion ?? 1)
+        return { ...b, kemasan, hargaBeli: Math.round((b.hargaBeli / isiLama) * isiBaru) }
+      }),
     )
   }
 
@@ -154,6 +181,22 @@ export function HalamanBarangMasuk() {
                     </button>
                   </div>
 
+                  {/* Barang berkemasan: dicatat per dus atau per satuan dasar.
+                      Stok selalu masuk dalam satuan dasar. */}
+                  {b.produk.packagings?.length ? (
+                    <SegmenPilihan
+                      label={`Satuan beli ${b.produk.name}`}
+                      nilai={b.kemasan?.id ?? 'dasar'}
+                      onPilih={(v) => gantiSatuan(i, b.produk.packagings!.find((k) => k.id === v))}
+                      pilihan={[
+                        ['dasar', b.produk.unit_name ?? 'satuan'] as const,
+                        ...b.produk.packagings.map(
+                          (k) => [k.id, `${k.unit_name} isi ${formatQty(k.conversion)}`] as const,
+                        ),
+                      ]}
+                    />
+                  ) : null}
+
                   <div className="grid gap-3 sm:grid-cols-2 sm:items-start">
                     {/* Label tampak supaya sejajar dengan kolom harga di
                         sebelahnya; nama aksesibelnya tetap dari `label`. */}
@@ -166,19 +209,23 @@ export function HalamanBarangMasuk() {
                         onNilai={(q) =>
                           setBaris((l) => l.map((x, j) => (j === i ? { ...x, qty: q } : x)))
                         }
-                        satuan={b.produk.unit_name}
+                        satuan={b.kemasan?.unit_name ?? b.produk.unit_name}
                         minimal="1"
                         label={`Jumlah ${b.produk.name}`}
                       />
                     </div>
 
                     <KolomUang
-                      label="Harga beli satuan"
+                      label={b.kemasan ? `Harga beli per ${b.kemasan.unit_name}` : 'Harga beli satuan'}
                       nilai={b.hargaBeli}
                       onNilai={(n) =>
                         setBaris((l) => l.map((x, j) => (j === i ? { ...x, hargaBeli: n } : x)))
                       }
-                      bantuan="Modal per satuan dari pemasok."
+                      bantuan={
+                        b.kemasan
+                          ? `Stok masuk ${formatQty(String(Number(b.qty) * Number(b.kemasan.conversion)))} ${b.produk.unit_name ?? ''} · modal ${formatRupiah(Math.round(b.hargaBeli / Number(b.kemasan.conversion)))} per ${b.produk.unit_name ?? 'satuan'}.`
+                          : 'Modal per satuan dari pemasok.'
+                      }
                     />
                   </div>
 

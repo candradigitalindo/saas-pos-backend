@@ -18,6 +18,7 @@ import { produkApi } from '../api'
 import { BagianVarian } from '../komponen/bagian-varian'
 import { IsianGrosir, siapkanGrosir } from '../komponen/isian-grosir'
 import { IsianHargaKhusus } from '../komponen/isian-harga-khusus'
+import { IsianKemasan, siapkanKemasan, type BarisKemasan } from '../komponen/isian-kemasan'
 import type { TingkatGrosir } from '@/bersama/tipe/katalog'
 import { formatRupiah } from '@/bersama/util/uang'
 import { cn } from '@/bersama/util/cn'
@@ -69,6 +70,7 @@ export function HalamanFormBarang() {
   })
   const [grosir, setGrosir] = useState<TingkatGrosir[]>([])
   const [khusus, setKhusus] = useState<Record<string, number>>({})
+  const [kemasan, setKemasan] = useState<BarisKemasan[]>([])
   const daftarHarga = useDaftarHarga()
   const [bukaDetail, setBukaDetail] = useState(false)
   const [bukaPindai, setBukaPindai] = useState(false)
@@ -93,6 +95,14 @@ export function HalamanFormBarang() {
     })
     setGrosir(p.wholesale_prices ?? [])
     setKhusus(Object.fromEntries((p.special_prices ?? []).map((s) => [s.price_list_id, s.price])))
+    setKemasan(
+      (p.packagings ?? []).map((k) => ({
+        unit_id: k.unit_id,
+        conversion: k.conversion,
+        sell_price: k.sell_price ?? 0,
+        barcode: k.barcode ?? '',
+      })),
+    )
     setFotoURL(p.image_url || null)
   }, [detail.data])
 
@@ -107,8 +117,11 @@ export function HalamanFormBarang() {
     mutationFn: () => {
       const g = siapkanGrosir(grosir)
       if ('galat' in g) return Promise.reject(new GalatAPI(400, g.galat))
+      const km = siapkanKemasan(kemasan)
+      if ('galat' in km) return Promise.reject(new GalatAPI(400, km.galat))
       const isi = {
         wholesale_prices: g.tingkat,
+        packagings: km.kemasan,
         // Hanya daftar yang masih ada; yang dikosongkan tidak dikirim (= dihapus).
         // Selama daftar harga belum termuat kolom ini TIDAK dikirim — "[]"
         // akan menghapus harga khusus yang sudah ada.
@@ -268,6 +281,17 @@ export function HalamanFormBarang() {
             hargaJual={form.sell_price}
             hargaBeli={form.cost_price}
             satuan={satuan.data?.data.find((s) => s.id === form.unit_id)?.name}
+          />
+
+          <IsianKemasan
+            nilai={kemasan}
+            onNilai={(v) => {
+              setKemasan(v)
+              setGalat(null)
+            }}
+            satuan={satuan.data?.data ?? []}
+            satuanDasar={form.unit_id}
+            hargaJual={form.sell_price}
           />
 
           <IsianHargaKhusus

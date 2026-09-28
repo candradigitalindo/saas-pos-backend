@@ -43,6 +43,7 @@ func BuildCheckoutInput(req structs.CheckoutRequest, idempotencyKey, requestHash
 		in.Items = append(in.Items, CheckoutItem{
 			ProductID:      it.ProductID,
 			VariantID:      it.VariantID,
+			ProductUnitID:  it.ProductUnitID,
 			Qty:            qty,
 			DiscountAmount: it.DiscountAmount,
 			Note:           it.Note,

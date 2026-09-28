@@ -208,6 +208,15 @@ func ExistingProductCodes(ctx context.Context, skus, barcodes []string) (existSK
 				}
 			}
 		}
+		// Barcode kemasan (dus) juga.
+		var kodeKemasan []string
+		if err = scopeTenant(ctx, tenantDB(ctx, nil).Model(&models.ProductUnit{})).
+			Where("barcode IN ?", semua).Pluck("barcode", &kodeKemasan).Error; err != nil {
+			return nil, nil, err
+		}
+		for _, k := range kodeKemasan {
+			existSKU[k], existBarcode[k] = true, true
+		}
 	}
 	return existSKU, existBarcode, nil
 }

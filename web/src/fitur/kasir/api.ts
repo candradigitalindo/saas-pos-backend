@@ -13,6 +13,8 @@ import type { Produk, SaldoStok } from '@/bersama/tipe/katalog'
 export interface ItemCheckout {
   product_id: string
   variant_id?: string
+  /** Kemasan yang dijual (dus); qty dalam kemasan itu. */
+  product_unit_id?: string
   qty: string
   discount_amount?: number
   note?: string

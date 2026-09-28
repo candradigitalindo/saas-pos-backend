@@ -5,8 +5,10 @@ package structs
 // CheckoutItemRequest: klien mengirim product_id + qty (+ opsi). HARGA TIDAK
 // dikirim klien — server memakai harga dari master produk (§13.1).
 type CheckoutItemRequest struct {
-	ProductID      string `json:"product_id" binding:"required,ulid"`
-	VariantID      string `json:"variant_id" binding:"omitempty,ulid"`
+	ProductID string `json:"product_id" binding:"required,ulid"`
+	VariantID string `json:"variant_id" binding:"omitempty,ulid"`
+	// ProductUnitID: kemasan yang dijual (dus); qty dalam kemasan itu.
+	ProductUnitID  string `json:"product_unit_id" binding:"omitempty,ulid"`
 	Qty            string `json:"qty" binding:"required"` // desimal string ("2", "0.25")
 	DiscountAmount int64  `json:"discount_amount" binding:"omitempty,gte=0"`
 	Note           string `json:"note" binding:"omitempty,max=200"`
@@ -62,6 +64,9 @@ type SaleItemResponse struct {
 	TaxAmount      int64  `json:"tax_amount"`
 	LineTotal      int64  `json:"line_total"`
 	Note           string `json:"note,omitempty"`
+	// Kemasan: qty dalam kemasan; stok bergerak qty × unit_conversion.
+	ProductUnitID  string `json:"product_unit_id,omitempty"`
+	UnitConversion string `json:"unit_conversion,omitempty"`
 }
 
 type SalePaymentResponse struct {

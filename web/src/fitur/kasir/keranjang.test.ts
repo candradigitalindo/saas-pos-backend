@@ -203,6 +203,34 @@ describe('keranjang', () => {
     expect(result.current.pratinjauTotal).toBe(15000)
   })
 
+  it('kemasan: harga dus, stok dalam satuan dasar, grosir hanya dari baris pcs, ganti satuan menggabung', () => {
+    const { result } = renderHook(() => useKeranjang())
+    const dus = { id: 'D1', unit_id: 'U-DUS', unit_name: 'dus', conversion: '10', price: 140000 }
+    const mie: Produk = {
+      ...produk('M1', 15000, 'Mie'),
+      packagings: [dus],
+      wholesale_prices: [{ min_qty: '12', price: 13000 }],
+    }
+    act(() => result.current.tambah(mie, '2', undefined, dus))
+    act(() => result.current.tambah(mie, '3'))
+    // 2 dus × 140.000 + 3 pcs × 15.000 — 20 pcs di dus TIDAK memicu grosir ≥12.
+    expect(result.current.pratinjauTotal).toBe(280000 + 45000)
+    // Lencana kartu & stok: satuan dasar.
+    expect(result.current.qtyDari('M1')).toBe('23')
+    expect(itemUntukCheckout(result.current.baris)).toEqual([
+      { product_id: 'M1', product_unit_id: 'D1', qty: '2' },
+      { product_id: 'M1', qty: '3' },
+    ])
+
+    // Baris pcs diganti ke dus → digabung dengan baris dus yang ada.
+    act(() => result.current.ubahKemasan('M1', dus))
+    expect(result.current.baris).toHaveLength(1)
+    expect(result.current.baris[0]?.qty).toBe('5')
+    // Kembali ke pcs.
+    act(() => result.current.ubahKemasan(result.current.baris[0]!.kunci, undefined))
+    expect(result.current.baris[0]?.kunci).toBe('M1')
+  })
+
   it('mengosongkan keranjang setelah transaksi selesai', () => {
     const { result } = renderHook(() => useKeranjang())
     act(() => result.current.tambah(produk('P1', 18000)))

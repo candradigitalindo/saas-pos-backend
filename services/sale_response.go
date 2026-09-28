@@ -63,6 +63,10 @@ func SaleToResponse(s *models.Sale) structs.SaleResponse {
 		if it.VariantID != nil {
 			ir.VariantID = *it.VariantID
 		}
+		if it.ProductUnitID != nil {
+			ir.ProductUnitID = *it.ProductUnitID
+			ir.UnitConversion = it.UnitConversion.String()
+		}
 		r.Items = append(r.Items, ir)
 	}
 	for _, p := range s.Payments {

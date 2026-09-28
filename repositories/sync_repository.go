@@ -26,6 +26,7 @@ type PullChanges struct {
 	Units         []models.Unit           `json:"units"`
 	Products      []models.Product        `json:"products"`
 	Variants      []models.ProductVariant `json:"product_variants"`
+	ProductUnits  []models.ProductUnit    `json:"product_units"`
 	PriceLists    []models.PriceList      `json:"price_lists"`
 	ProductPrices []models.ProductPrice   `json:"product_prices"`
 	Customers     []models.Customer       `json:"customers"`
@@ -183,6 +184,13 @@ func GetPullChanges(ctx context.Context, outletID string, since int64, limit int
 	}
 	track(sv, full, "customers", del)
 
+	if out.ProductUnits, sv, full, del, err = pullPage(ctx, since, limit, func(u models.ProductUnit) (int64, bool, string) {
+		return u.SyncVersion, u.DeletedAt.Valid, u.ID
+	}); err != nil {
+		return out, err
+	}
+	track(sv, full, "product_units", del)
+
 	// Batu nisan hard-delete.
 	tombs, tsv, tfull, err := pullTombstones(ctx, since, limit)
 	if err != nil {
@@ -232,6 +240,9 @@ func nonNil(p *PullChanges) {
 	}
 	if p.Variants == nil {
 		p.Variants = []models.ProductVariant{}
+	}
+	if p.ProductUnits == nil {
+		p.ProductUnits = []models.ProductUnit{}
 	}
 	if p.PriceLists == nil {
 		p.PriceLists = []models.PriceList{}

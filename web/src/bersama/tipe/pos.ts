@@ -151,6 +151,8 @@ export interface Pelanggan {
 export interface ItemTagihan {
   product_id: string
   variant_id?: string
+  /** Kemasan (dus); qty dalam kemasan itu. */
+  product_unit_id?: string
   qty: string
   discount_amount?: number
   /** Diskon persen 1–100; bila diisi, discount_amount diabaikan. */

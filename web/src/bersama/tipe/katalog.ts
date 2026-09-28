@@ -39,8 +39,27 @@ export interface Produk {
    * daftar; di kasir: dari data lokal (min_qty ikut, bawaannya 1).
    */
   special_prices?: HargaKhusus[]
+  /** Kemasan jual/beli (dus isi 40). Dari API: GET satu barang; kasir: data lokal. */
+  packagings?: Kemasan[]
   created_at: string
   updated_at: string
+}
+
+/**
+ * Kemasan barang: "dus isi 40". Stok & laporan tetap dalam satuan dasar
+ * barang; kemasan punya harga sendiri (sell_price) atau isi × harga jual.
+ */
+export interface Kemasan {
+  id: string
+  unit_id: string
+  unit_name: string
+  /** Isi dalam satuan dasar (desimal string, > 1). */
+  conversion: string
+  /** Harga tersendiri; kosong = isi × harga jual. */
+  sell_price?: number | null
+  /** Harga kemasan yang berlaku. */
+  price: number
+  barcode?: string
 }
 
 /** Harga barang pada satu daftar harga khusus. */

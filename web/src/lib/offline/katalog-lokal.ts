@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import type { HargaKhusus, Produk, TingkatGrosir, VarianProduk } from '@/bersama/tipe/katalog'
-import { db, type HargaProdukLokal, type ProdukLokal, type VarianLokal } from './db'
+import type { HargaKhusus, Kemasan, Produk, TingkatGrosir, VarianProduk } from '@/bersama/tipe/katalog'
+import { db, type HargaProdukLokal, type KemasanLokal, type ProdukLokal, type VarianLokal } from './db'
+import Decimal from 'decimal.js'
 import { bandingQty } from '@/bersama/util/desimal'
 import { petaWarnaKategori } from '@/bersama/util/warna-kategori'
 
@@ -43,6 +44,7 @@ export function useKatalogLokal(
     ])
     const varianPer = kelompokkanVarian(semuaVarian)
     const { grosir: grosirPer, khusus: khususPer } = await hargaPerProduk()
+    const kemasanPer = kelompokkanKemasan(await db.kemasan.toArray())
 
     const namaSatuan = new Map(satuan.map((s) => [s.id, s.name]))
     const kunci = cari.trim().toLowerCase()
@@ -53,7 +55,10 @@ export function useKatalogLokal(
     const produk = cocok
       .sort((a, b) => a.name.localeCompare(b.name, 'id'))
       .map((p) =>
-        keProduk(p, namaSatuan.get(p.unit_id), varianPer.get(p.id), grosirPer.get(p.id), khususPer.get(p.id)),
+        keProduk(p, namaSatuan.get(p.unit_id), varianPer.get(p.id), grosirPer.get(p.id), khususPer.get(p.id), {
+          baris: kemasanPer.get(p.id),
+          namaSatuan,
+        }),
       )
 
     const petaStok = new Map<string, string>()
@@ -131,10 +136,12 @@ export async function varianDariBarcode(
 export async function produkLokal(id: string): Promise<Produk | undefined> {
   const p = await db.produk.get(id)
   if (!p) return undefined
-  const [s, varian, harga] = await Promise.all([
+  const [s, varian, harga, kemasan, satuan] = await Promise.all([
     db.satuan.get(p.unit_id),
     db.varian.where('product_id').equals(id).toArray(),
     hargaPerProduk(id),
+    db.kemasan.where('product_id').equals(id).toArray(),
+    db.satuan.toArray(),
   ])
   return keProduk(
     p,
@@ -142,7 +149,45 @@ export async function produkLokal(id: string): Promise<Produk | undefined> {
     kelompokkanVarian(varian.filter((v) => v.is_active)).get(id),
     harga.grosir.get(id),
     harga.khusus.get(id),
+    { baris: kemasan, namaSatuan: new Map(satuan.map((x) => [x.id, x.name])) },
   )
+}
+
+/**
+ * Cari kemasan dari barcodenya (barcode dus) — satu pindaian langsung masuk
+ * sebagai "1 dus". Barang induk yang nonaktif dianggap tidak ketemu.
+ */
+export async function kemasanDariBarcode(kode: string): Promise<{ produk: Produk; kemasan: Kemasan } | undefined> {
+  const bersih = kode.trim()
+  if (!bersih) return undefined
+  const k = await db.kemasan.where('barcode').equals(bersih).first()
+  if (!k) return undefined
+  const produk = await produkLokal(k.product_id)
+  const kemasan = produk?.packagings?.find((x) => x.id === k.id)
+  if (!produk || !produk.is_active || !kemasan) return undefined
+  return { produk, kemasan }
+}
+
+function kelompokkanKemasan(daftar: KemasanLokal[]): Map<string, KemasanLokal[]> {
+  const peta = new Map<string, KemasanLokal[]>()
+  for (const k of daftar) peta.set(k.product_id, [...(peta.get(k.product_id) ?? []), k])
+  return peta
+}
+
+/** Kemasan lokal → bentuk katalog: nama satuan + harga berlaku, isi terkecil dulu. */
+function keKemasan(baris: KemasanLokal[] | undefined, hargaJual: number, namaSatuan: Map<string, string>): Kemasan[] {
+  return (baris ?? [])
+    .map((k) => ({
+      id: k.id,
+      unit_id: k.unit_id,
+      unit_name: namaSatuan.get(k.unit_id) ?? 'kemasan',
+      conversion: k.conversion,
+      sell_price: k.sell_price,
+      // Sama dengan server (ProductUnit.HargaKemasan): isi × harga jual, dibulatkan.
+      price: k.sell_price ?? new Decimal(k.conversion).mul(hargaJual).toDecimalPlaces(0, Decimal.ROUND_HALF_UP).toNumber(),
+      barcode: k.barcode ?? undefined,
+    }))
+    .sort((a, b) => new Decimal(a.conversion).cmp(b.conversion))
 }
 
 /**
@@ -235,7 +280,9 @@ function keProduk(
   varian?: VarianProduk[],
   grosir?: TingkatGrosir[],
   khusus?: HargaKhusus[],
+  kemasan?: { baris?: KemasanLokal[]; namaSatuan: Map<string, string> },
 ): Produk {
+  const daftarKemasan = kemasan ? keKemasan(kemasan.baris, p.sell_price, kemasan.namaSatuan) : []
   return {
     id: p.id,
     name: p.name,
@@ -253,6 +300,7 @@ function keProduk(
     varian: varian?.length ? varian : undefined,
     wholesale_prices: grosir?.length ? grosir : undefined,
     special_prices: khusus?.length ? khusus : undefined,
+    packagings: daftarKemasan.length ? daftarKemasan : undefined,
     created_at: '',
     updated_at: '',
   }

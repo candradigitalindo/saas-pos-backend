@@ -53,6 +53,11 @@ type PurchaseItem struct {
 	Qty        decimal.Decimal `json:"qty" gorm:"type:numeric(14,3);not null"`
 	UnitCost   int64           `json:"unit_cost" gorm:"not null"`
 	LineTotal  int64           `json:"line_total" gorm:"not null"`
+	// Kemasan yang dibeli (000046): Qty & UnitCost per kemasan; stok masuk
+	// Qty × UnitConversion satuan dasar.
+	ProductUnitID  *string         `json:"product_unit_id" gorm:"type:char(26)"`
+	UnitConversion decimal.Decimal `json:"unit_conversion" gorm:"type:numeric(14,6);not null;default:1"`
+	UnitName       string          `json:"unit_name" gorm:"not null;default:''"`
 }
 
 func (i *PurchaseItem) BeforeCreate(tx *gorm.DB) (err error) {

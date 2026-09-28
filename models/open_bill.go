@@ -39,7 +39,8 @@ type OpenBill struct {
 type OpenBillItem struct {
 	ProductID      string `json:"product_id"`
 	VariantID      string `json:"variant_id,omitempty"`
-	Qty            string `json:"qty"` // desimal string, sama dengan checkout
+	ProductUnitID  string `json:"product_unit_id,omitempty"` // kemasan (qty dalam kemasan)
+	Qty            string `json:"qty"`                       // desimal string, sama dengan checkout
 	DiscountAmount int64  `json:"discount_amount,omitempty"`
 	// DiscountPercent: diskon persen (1–100) — disimpan sebagai persen supaya
 	// tetap persen saat qty diubah di perangkat lain. Bila diisi, DiscountAmount diabaikan.

@@ -180,6 +180,8 @@ func RefundSale(ctx context.Context, saleID, reason string) (*structs.SaleRespon
 				TaxAmount:      -it.TaxAmount,
 				LineTotal:      -it.LineTotal,
 				Note:           it.Note,
+				ProductUnitID:  it.ProductUnitID,
+				UnitConversion: it.UnitConversion,
 			})
 		}
 		if err := repositories.CreateSale(ctx, tx, &ret); err != nil {

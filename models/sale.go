@@ -85,6 +85,10 @@ type SaleItem struct {
 	TaxAmount      int64           `json:"tax_amount" gorm:"not null;default:0"`
 	LineTotal      int64           `json:"line_total" gorm:"not null"`
 	Note           string          `json:"note"`
+	// Kemasan yang dijual (000046): Qty dalam kemasan itu, stok bergerak
+	// Qty × UnitConversion satuan dasar. Tanpa kemasan: nil & 1.
+	ProductUnitID  *string         `json:"product_unit_id" gorm:"type:char(26)"`
+	UnitConversion decimal.Decimal `json:"unit_conversion" gorm:"type:numeric(14,6);not null;default:1"`
 	CreatedAt      time.Time       `json:"created_at"`
 }
 

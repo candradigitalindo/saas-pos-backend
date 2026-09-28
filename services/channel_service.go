@@ -542,6 +542,7 @@ func RecordChannelOrder(ctx context.Context, in ChannelOrderInput) (structs.Chan
 			si := models.SaleItem{
 				ProductID: it.ProductID, ProductName: nama, UnitName: unitName,
 				Qty: it.Qty, UnitPrice: unitPrice, UnitCost: p.CostPrice, LineTotal: lineGross,
+				UnitConversion: decimal.NewFromInt(1),
 			}
 			if it.VariantID != "" {
 				vid := it.VariantID

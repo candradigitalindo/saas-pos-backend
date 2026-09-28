@@ -95,6 +95,28 @@ type ProductCreateRequest struct {
 	WholesalePrices []WholesalePriceRequest `json:"wholesale_prices" binding:"omitempty,max=5,dive"`
 	// SpecialPrices: harga khusus per daftar harga (member, reseller).
 	SpecialPrices []SpecialPriceRequest `json:"special_prices" binding:"omitempty,dive"`
+	// Packagings: kemasan jual/beli (dus isi 40, pak isi 10).
+	Packagings []PackagingRequest `json:"packagings" binding:"omitempty,max=5,dive"`
+}
+
+// PackagingRequest: satu kemasan barang. Conversion = isinya dalam satuan
+// dasar barang (> 1). SellPrice kosong = isi × harga jual.
+type PackagingRequest struct {
+	UnitID     string `json:"unit_id" binding:"required,ulid"`
+	Conversion string `json:"conversion" binding:"required"`
+	SellPrice  *int64 `json:"sell_price" binding:"omitempty,gt=0"`
+	Barcode    string `json:"barcode" binding:"omitempty,max=60"`
+}
+
+type PackagingResponse struct {
+	ID         string `json:"id"`
+	UnitID     string `json:"unit_id"`
+	UnitName   string `json:"unit_name"`
+	Conversion string `json:"conversion"`
+	SellPrice  *int64 `json:"sell_price,omitempty"`
+	// Price: harga jual kemasan yang berlaku (tersendiri, atau isi × harga jual).
+	Price   int64  `json:"price"`
+	Barcode string `json:"barcode,omitempty"`
 }
 
 // WholesalePriceRequest: satu tingkat harga grosir — beli minimal MinQty
@@ -126,6 +148,8 @@ type ProductUpdateRequest struct {
 	WholesalePrices *[]WholesalePriceRequest `json:"wholesale_prices" binding:"omitempty,dive"`
 	// SpecialPrices: nil = tidak diubah; [] = semua harga khusus dihapus.
 	SpecialPrices *[]SpecialPriceRequest `json:"special_prices" binding:"omitempty,dive"`
+	// Packagings: nil = tidak diubah; [] = semua kemasan dihapus.
+	Packagings *[]PackagingRequest `json:"packagings" binding:"omitempty,dive"`
 }
 
 type ProductResponse struct {
@@ -147,6 +171,7 @@ type ProductResponse struct {
 	// WholesalePrices hanya di GET satu barang & balasan buat/ubah.
 	WholesalePrices []WholesalePriceResponse `json:"wholesale_prices,omitempty"`
 	SpecialPrices   []SpecialPriceResponse   `json:"special_prices,omitempty"`
+	Packagings      []PackagingResponse      `json:"packagings,omitempty"`
 	CreatedAt       string                   `json:"created_at"`
 	UpdatedAt       string                   `json:"updated_at"`
 }

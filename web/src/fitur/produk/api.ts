@@ -18,6 +18,8 @@ export interface InputProduk {
   wholesale_prices?: TingkatGrosir[]
   /** Harga khusus per daftar harga (member/reseller); [] = dihapus semua. */
   special_prices?: { price_list_id: string; price: number }[]
+  /** Kemasan (dus isi 40); [] = dihapus semua. */
+  packagings?: { unit_id: string; conversion: string; sell_price?: number; barcode?: string }[]
 }
 
 /** Isi varian. PUT mengganti utuh, jadi semua kolom selalu dikirim. */

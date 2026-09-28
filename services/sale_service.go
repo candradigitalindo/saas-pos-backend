@@ -40,6 +40,7 @@ func idempotencyTTL() time.Duration {
 type CheckoutItem struct {
 	ProductID      string
 	VariantID      string // "" = tanpa varian
+	ProductUnitID  string // "" = satuan dasar; selain itu kemasan (qty dalam kemasan)
 	Qty            decimal.Decimal
 	DiscountAmount int64
 	Note           string
@@ -170,6 +171,10 @@ func Checkout(ctx context.Context, in CheckoutInput) (int, []byte, bool, error) 
 		if err != nil {
 			return err
 		}
+		kemasan, err := repositories.ProductUnitsByIDs(ctx, tx, productUnitIDs(in.Items))
+		if err != nil {
+			return err
+		}
 		grosir, err := repositories.WholesaleTiers(ctx, tx, productIDs)
 		if err != nil {
 			return err
@@ -180,7 +185,7 @@ func Checkout(ctx context.Context, in CheckoutInput) (int, []byte, bool, error) 
 		}
 
 		// 4. Hitung per baris lalu jumlahkan.
-		priced, totals, err := priceCheckout(in, outlet, products, variants, grosir, khusus)
+		priced, totals, err := priceCheckout(in, outlet, products, variants, kemasan, grosir, khusus)
 		if err != nil {
 			return err
 		}
@@ -282,6 +287,8 @@ type pricedItem struct {
 	in          CheckoutItem
 	productName string
 	unitName    string
+	conversion  decimal.Decimal // isi kemasan dalam satuan dasar (1 = tanpa kemasan)
+	baseCost    int64           // modal per SATUAN DASAR (untuk gerakan stok)
 	unitPrice   int64
 	unitCost    int64
 	lineGross   int64 // round(qty * unit_price), sebelum diskon/pajak
@@ -298,7 +305,7 @@ type saleTotals struct {
 
 // priceCheckout membuat SNAPSHOT tiap baris dan menghitung total. Harga jual &
 // modal diambil dari master produk (+ price_delta varian), TIDAK dari klien.
-func priceCheckout(in CheckoutInput, outlet models.Outlet, products map[string]models.Product, variants map[string]models.ProductVariant, grosir, khusus map[string][]models.ProductPrice) ([]pricedItem, saleTotals, error) {
+func priceCheckout(in CheckoutInput, outlet models.Outlet, products map[string]models.Product, variants map[string]models.ProductVariant, kemasan map[string]models.ProductUnit, grosir, khusus map[string][]models.ProductPrice) ([]pricedItem, saleTotals, error) {
 	taxRate := outlet.TaxRate
 	taxOn := outlet.TaxEnabled && taxRate.GreaterThan(decimal.Zero)
 
@@ -307,9 +314,12 @@ func priceCheckout(in CheckoutInput, outlet models.Outlet, products map[string]m
 
 	// Harga grosir memakai TOTAL jumlah barang itu di transaksi ini — "Kopi
 	// (Besar) ×6 + Kopi (Kecil) ×6" = 12 kopi, sama dengan kasir menghitungnya.
+	// Hanya baris SATUAN DASAR yang dihitung: kemasan punya harganya sendiri.
 	totalQty := map[string]decimal.Decimal{}
 	for _, it := range in.Items {
-		totalQty[it.ProductID] = totalQty[it.ProductID].Add(it.Qty)
+		if it.ProductUnitID == "" {
+			totalQty[it.ProductID] = totalQty[it.ProductID].Add(it.Qty)
+		}
 	}
 
 	for _, it := range in.Items {
@@ -328,19 +338,37 @@ func priceCheckout(in CheckoutInput, outlet models.Outlet, products map[string]m
 		if h, ok := hargaDaftar(khusus[p.ID], totalQty[p.ID]); ok {
 			unitPrice = h
 		}
+		// Kemasan (dus): harganya sendiri, modal = isi × modal satuan dasar,
+		// nama satuan di struk = nama kemasan.
+		konversi := decimal.NewFromInt(1)
+		unitCost := p.CostPrice
+		if it.ProductUnitID != "" {
+			k, ok := kemasan[it.ProductUnitID]
+			if !ok || k.ProductID != it.ProductID {
+				return nil, t, fmt.Errorf("%w: kemasan %s tidak cocok dengan produk", helpers.ErrValidation, it.ProductUnitID)
+			}
+			konversi = k.Conversion
+			unitPrice = k.HargaKemasan(p.SellPrice)
+			unitCost = helpers.LineAmount(konversi, p.CostPrice)
+			if k.Unit != nil {
+				unitName = k.Unit.Name
+			}
+		}
 		nama := p.Name
 		if it.VariantID != "" {
 			v, ok := variants[it.VariantID]
 			if !ok || v.ProductID != it.ProductID {
 				return nil, t, fmt.Errorf("%w: varian %s tidak cocok dengan produk", helpers.ErrValidation, it.VariantID)
 			}
-			unitPrice += v.PriceDelta
+			// Selisih varian berlaku per satuan dasar — satu dus berisi
+			// sekian satuan, jadi selisihnya ikut dikali isinya.
+			unitPrice += helpers.LineAmount(konversi, v.PriceDelta)
 			// Snapshot nama di isi penjualan → struk & riwayat menyebut variannya.
 			nama = namaBervarian(p.Name, v.Name)
 		}
 
 		lineGross := helpers.LineAmount(it.Qty, unitPrice)
-		lineCost := helpers.LineAmount(it.Qty, p.CostPrice)
+		lineCost := helpers.LineAmount(it.Qty, unitCost)
 		if it.DiscountAmount > lineGross {
 			return nil, t, fmt.Errorf("%w: diskon baris melebihi nilai baris", helpers.ErrValidation)
 		}
@@ -359,8 +387,8 @@ func priceCheckout(in CheckoutInput, outlet models.Outlet, products map[string]m
 		}
 
 		out = append(out, pricedItem{
-			in: it, productName: nama, unitName: unitName,
-			unitPrice: unitPrice, unitCost: p.CostPrice,
+			in: it, productName: nama, unitName: unitName, conversion: konversi, baseCost: p.CostPrice,
+			unitPrice: unitPrice, unitCost: unitCost,
 			lineGross: lineGross, lineTax: lineTax, lineTotal: lineTotal, lineCost: lineCost,
 			trackStock: p.TrackStock,
 		})
@@ -519,10 +547,15 @@ func buildSale(ctx context.Context, in CheckoutInput, shift models.Shift, bizDat
 			TaxAmount:      p.lineTax,
 			LineTotal:      p.lineTotal,
 			Note:           p.in.Note,
+			UnitConversion: p.conversion,
 		}
 		if p.in.VariantID != "" {
 			vid := p.in.VariantID
 			item.VariantID = &vid
+		}
+		if p.in.ProductUnitID != "" {
+			kid := p.in.ProductUnitID
+			item.ProductUnitID = &kid
 		}
 		sale.Items = append(sale.Items, item)
 	}
@@ -540,12 +573,19 @@ func stockDeltasForSale(priced []pricedItem, recipes map[string]repositories.Rec
 	var deltas []repositories.StockDelta
 
 	for _, p := range priced {
+		// Stok selalu dalam SATUAN DASAR: 2 dus isi 40 = 80.
+		konversi := p.conversion
+		if konversi.IsZero() {
+			konversi = decimal.NewFromInt(1)
+		}
+		qtyDasar := p.in.Qty.Mul(konversi)
 		if p.trackStock {
 			// Stok barang bervarian dihitung di tingkat BARANG (varian =
 			// pilihan harga) — layar stok belum mengenal stok per varian.
+			// Modal per satuan dasar supaya nilai persediaan tetap benar.
 			deltas = append(deltas, repositories.StockDelta{
 				ProductID: p.in.ProductID,
-				Delta:     p.in.Qty.Neg(), UnitCost: p.unitCost, Kind: "sale",
+				Delta:     qtyDasar.Neg(), UnitCost: p.baseCost, Kind: "sale",
 			})
 		}
 
@@ -557,7 +597,7 @@ func stockDeltasForSale(priced []pricedItem, recipes map[string]repositories.Rec
 		if yield.LessThanOrEqual(decimal.Zero) {
 			yield = decimal.NewFromInt(1)
 		}
-		factor := p.in.Qty.Div(yield) // porsi terjual relatif terhadap hasil resep
+		factor := qtyDasar.Div(yield) // porsi terjual relatif terhadap hasil resep
 		for _, ing := range rec.Items {
 			deltas = append(deltas, repositories.StockDelta{
 				ProductID: ing.IngredientProductID,

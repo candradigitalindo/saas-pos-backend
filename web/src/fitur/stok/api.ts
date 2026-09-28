@@ -1,5 +1,5 @@
 import { api, type Halaman } from '@/lib/api-client'
-import type { SaldoStok } from '@/bersama/tipe/katalog'
+import type { Produk, SaldoStok } from '@/bersama/tipe/katalog'
 
 export interface GerakanStok {
   id: string
@@ -142,13 +142,17 @@ export const stokApi = {
   ) => api.post<GerakanStok>('/stock-adjustments', input, { idempotencyKey: kunci }),
 
   /** Barang masuk. Wajib Idempotency-Key: ini menciptakan stok DAN utang. */
+  /** Satu barang lengkap dengan kemasannya — daftar barang tidak memuat kemasan. */
+  barang: (id: string) => api.get<Produk>(`/products/${id}`),
+
   barangMasuk: (
     input: {
       outlet_id: string
       supplier_id?: string
       invoice_no?: string
       paid_amount?: number
-      items: { product_id: string; qty: string; unit_cost: number }[]
+      /** product_unit_id: kemasan yang dibeli (dus); qty & unit_cost per kemasan. */
+      items: { product_id: string; product_unit_id?: string; qty: string; unit_cost: number }[]
     },
     kunci: string,
   ) => api.post<Pembelian>('/purchases', input, { idempotencyKey: kunci }),

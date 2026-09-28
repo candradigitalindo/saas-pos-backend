@@ -22,10 +22,11 @@ const idempotencyScopePurchase = "purchase.create"
 
 // PurchaseItemInput satu baris penerimaan.
 type PurchaseItemInput struct {
-	ProductID string
-	VariantID string
-	Qty       decimal.Decimal
-	UnitCost  int64
+	ProductID     string
+	VariantID     string
+	ProductUnitID string // "" = satuan dasar; selain itu kemasan (qty & harga per kemasan)
+	Qty           decimal.Decimal
+	UnitCost      int64
 }
 
 // PurchaseInput masukan penerimaan barang.
@@ -98,6 +99,16 @@ func ReceivePurchase(ctx context.Context, in PurchaseInput) (int, []byte, error)
 				return fmt.Errorf("%w: produk %s tidak ditemukan", helpers.ErrValidation, id)
 			}
 		}
+		var idKemasan []string
+		for _, it := range in.Items {
+			if it.ProductUnitID != "" {
+				idKemasan = append(idKemasan, it.ProductUnitID)
+			}
+		}
+		kemasan, err := repositories.ProductUnitsByIDs(ctx, tx, idKemasan)
+		if err != nil {
+			return err
+		}
 		if in.SupplierID != "" {
 			var sup models.Supplier
 			if err := repositories.FindSupplierInTenant(ctx, tx, in.SupplierID, &sup); err != nil {
@@ -123,21 +134,45 @@ func ReceivePurchase(ctx context.Context, in PurchaseInput) (int, []byte, error)
 		}
 
 		deltas := make([]repositories.StockDelta, 0, len(in.Items))
+		modalDasar := map[string]int64{} // harga beli terakhir per SATUAN DASAR
 		for _, it := range in.Items {
 			lineTotal := helpers.LineAmount(it.Qty, it.UnitCost)
 			p.Subtotal += lineTotal
+			// Kemasan: "5 dus @ 120.000" → stok +5×isi satuan dasar, modal
+			// per satuan dasar = harga dus ÷ isi (dibulatkan ke rupiah).
+			konversi, namaSatuan := decimal.NewFromInt(1), ""
+			if pr := products[it.ProductID]; pr.Unit != nil {
+				namaSatuan = pr.Unit.Name
+			}
+			if it.ProductUnitID != "" {
+				k, ok := kemasan[it.ProductUnitID]
+				if !ok || k.ProductID != it.ProductID {
+					return fmt.Errorf("%w: kemasan %s tidak cocok dengan produk", helpers.ErrValidation, it.ProductUnitID)
+				}
+				konversi = k.Conversion
+				if k.Unit != nil {
+					namaSatuan = k.Unit.Name
+				}
+			}
+			biayaDasar := decimal.NewFromInt(it.UnitCost).Div(konversi).Round(0).IntPart()
 			item := models.PurchaseItem{
 				ProductID: it.ProductID, Qty: it.Qty, UnitCost: it.UnitCost, LineTotal: lineTotal,
+				UnitConversion: konversi, UnitName: namaSatuan,
 			}
 			if it.VariantID != "" {
 				vid := it.VariantID
 				item.VariantID = &vid
 			}
+			if it.ProductUnitID != "" {
+				kid := it.ProductUnitID
+				item.ProductUnitID = &kid
+			}
 			p.Items = append(p.Items, item)
 			deltas = append(deltas, repositories.StockDelta{
 				ProductID: it.ProductID, VariantID: it.VariantID,
-				Delta: it.Qty, UnitCost: it.UnitCost,
+				Delta: it.Qty.Mul(konversi), UnitCost: biayaDasar,
 			})
+			modalDasar[it.ProductID] = biayaDasar
 		}
 		p.Total = p.Subtotal - p.DiscountAmount + p.TaxAmount
 
@@ -150,8 +185,8 @@ func ReceivePurchase(ctx context.Context, in PurchaseInput) (int, []byte, error)
 			return err
 		}
 		// Harga modal produk = harga beli terakhir (last-cost).
-		for _, it := range in.Items {
-			if err := repositories.SetProductLastCost(ctx, tx, it.ProductID, it.UnitCost); err != nil {
+		for id, biaya := range modalDasar {
+			if err := repositories.SetProductLastCost(ctx, tx, id, biaya); err != nil {
 				return err
 			}
 		}
