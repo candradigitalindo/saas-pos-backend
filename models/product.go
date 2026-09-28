@@ -31,6 +31,8 @@ type Product struct {
 	MinStock   decimal.Decimal `json:"min_stock" gorm:"type:numeric(14,3);not null;default:0"`
 	IsActive   bool            `json:"is_active" gorm:"not null"`
 	ImageURL   string          `json:"image_url"`
+	// Description: keterangan singkat untuk menu aplikasi antar.
+	Description string `json:"description" gorm:"not null;default:''"`
 
 	// Diisi lewat Joins pada query list/detail; kosong pada operasi tulis.
 	Unit     *Unit     `json:"unit,omitempty" gorm:"foreignKey:UnitID;references:ID"`

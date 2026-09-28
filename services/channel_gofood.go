@@ -459,6 +459,9 @@ func (gofoodAdapter) PublishMenu(ctx context.Context, cred ChannelCredentials, m
 			if it.Foto != "" {
 				m["image"] = it.Foto
 			}
+			if it.Deskripsi != "" {
+				m["description"] = potong(it.Deskripsi, 250)
+			}
 			items = append(items, m)
 		}
 		menus = append(menus, map[string]any{"name": potong(k.Nama, 150), "menu_items": items})

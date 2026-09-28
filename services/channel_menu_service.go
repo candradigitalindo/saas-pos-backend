@@ -33,6 +33,7 @@ import (
 // ItemMenu: satu item menu yang dikirim.
 type ItemMenu struct {
 	ID, Nama, Foto string
+	Deskripsi      string
 	Harga          int64 // rupiah
 	Tersedia       bool
 	Stok           *int64 // nil = stok tidak dilacak (mis. masakan dibuat saat dipesan)
@@ -114,7 +115,7 @@ func bangunMenu(ctx context.Context, ch models.Channel) (MenuKanal, error) {
 		if !ada || !p.IsActive {
 			continue
 		}
-		item := ItemMenu{ID: cp.ExternalSKU, Nama: p.Name, Harga: p.SellPrice, Foto: fotoPublik(p.ImageURL)}
+		item := ItemMenu{ID: cp.ExternalSKU, Nama: p.Name, Harga: p.SellPrice, Foto: fotoPublik(p.ImageURL), Deskripsi: p.Description}
 		if cp.ChannelPrice != nil {
 			item.Harga = *cp.ChannelPrice
 		}

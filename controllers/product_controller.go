@@ -112,18 +112,19 @@ func CreateProduct(c *gin.Context) {
 
 	ctx := c.Request.Context()
 	row := models.Product{
-		TenantID:   reqctx.TenantID(ctx),
-		CategoryID: nilIfEmpty(req.CategoryID),
-		UnitID:     req.UnitID,
-		Name:       req.Name,
-		SKU:        nilIfEmpty(req.SKU),
-		Barcode:    nilIfEmpty(req.Barcode),
-		SellPrice:  req.SellPrice,
-		CostPrice:  req.CostPrice,
-		TrackStock: boolOr(req.TrackStock, true),
-		MinStock:   minStock,
-		IsActive:   boolOr(req.IsActive, true),
-		ImageURL:   req.ImageURL,
+		TenantID:    reqctx.TenantID(ctx),
+		CategoryID:  nilIfEmpty(req.CategoryID),
+		UnitID:      req.UnitID,
+		Name:        req.Name,
+		SKU:         nilIfEmpty(req.SKU),
+		Barcode:     nilIfEmpty(req.Barcode),
+		SellPrice:   req.SellPrice,
+		CostPrice:   req.CostPrice,
+		TrackStock:  boolOr(req.TrackStock, true),
+		MinStock:    minStock,
+		IsActive:    boolOr(req.IsActive, true),
+		ImageURL:    req.ImageURL,
+		Description: strings.TrimSpace(req.Description),
 	}
 	if err := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
 		if err := services.EnsureQuota(ctx, tx, services.KuotaBarang, 1); err != nil {
@@ -220,6 +221,9 @@ func UpdateProduct(c *gin.Context) {
 			return
 		}
 		row.MinStock = d
+	}
+	if req.Description != nil {
+		row.Description = strings.TrimSpace(*req.Description)
 	}
 
 	if err := repositories.WithTenant(ctx, func(tx *gorm.DB) error {

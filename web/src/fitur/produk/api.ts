@@ -12,6 +12,8 @@ export interface InputProduk {
   track_stock?: boolean
   min_stock?: string
   is_active?: boolean
+  /** Untuk menu aplikasi antar; string kosong = dihapus. */
+  description?: string
 }
 
 /** Satu baris CSV yang ditolak, lengkap dengan nomor barisnya. */

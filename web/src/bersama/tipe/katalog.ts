@@ -25,6 +25,8 @@ export interface Produk {
   min_stock: string
   is_active: boolean
   image_url?: string
+  /** Untuk menu aplikasi antar (GoFood/GrabFood). */
+  description?: string
   created_at: string
   updated_at: string
 }

@@ -16,6 +16,7 @@ import { PemindaiBarcode } from '@/bersama/komponen/pemindai-barcode'
 import { bisaMemindai } from '@/bersama/hooks/use-pemindai'
 import { produkApi } from '../api'
 import { formatRupiah } from '@/bersama/util/uang'
+import { cn } from '@/bersama/util/cn'
 
 /**
  * Tambah / ubah barang.
@@ -60,6 +61,7 @@ export function HalamanFormBarang() {
     barcode: '',
     min_stock: '',
     track_stock: true,
+    description: '',
   })
   const [bukaDetail, setBukaDetail] = useState(false)
   const [bukaPindai, setBukaPindai] = useState(false)
@@ -80,6 +82,7 @@ export function HalamanFormBarang() {
       barcode: p.barcode ?? '',
       min_stock: p.min_stock === '0' ? '' : p.min_stock,
       track_stock: p.track_stock,
+      description: p.description ?? '',
     })
     setFotoURL(p.image_url || null)
   }, [detail.data])
@@ -103,6 +106,7 @@ export function HalamanFormBarang() {
         barcode: form.barcode.trim() || undefined,
         min_stock: form.min_stock.trim() || undefined,
         track_stock: form.track_stock,
+        description: form.description.trim(),
       }
       return sedangUbah ? produkApi.ubah(id!, isi) : produkApi.buat(isi)
     },
@@ -331,10 +335,43 @@ export function HalamanFormBarang() {
                 <span className="text-label text-teks-utama">
                   Hitung stoknya
                   <span className="block text-keterangan text-teks-redup">
-                    Matikan untuk jasa atau barang yang tidak perlu dihitung.
+                    Matikan untuk jasa, atau masakan yang dibuat saat dipesan — di aplikasi antar
+                    barang seperti ini selalu tampil tersedia.
                   </span>
                 </span>
               </label>
+
+              {/* Hanya untuk menu aplikasi antar; GoFood memotong di 250
+                  karakter, jadi batas itulah yang ditunjukkan. */}
+              <div className="flex flex-col gap-1.5 sm:col-span-2">
+                <div className="flex items-baseline justify-between gap-3">
+                  <label htmlFor="deskripsi-barang" className="text-label font-medium text-teks-sekunder">
+                    Deskripsi
+                  </label>
+                  <span
+                    className={cn(
+                      'text-keterangan tabular-nums',
+                      form.description.length > 250 ? 'text-jingga-700' : 'text-teks-redup',
+                    )}
+                  >
+                    {form.description.length}/250
+                  </span>
+                </div>
+                <textarea
+                  id="deskripsi-barang"
+                  rows={3}
+                  maxLength={500}
+                  value={form.description}
+                  onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                  placeholder="mis. Nasi goreng dengan telur mata sapi, ayam suwir, dan kerupuk"
+                  aria-describedby="deskripsi-barang-bantuan"
+                  className="rounded-kontrol border border-garis bg-permukaan px-3 py-2.5 text-isi text-teks-utama placeholder:text-teks-redup focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-utama"
+                />
+                <p id="deskripsi-barang-bantuan" className="text-keterangan text-teks-redup">
+                  Boleh dikosongkan. Tampil di menu GoFood/GrabFood bila menu dikirim dari POS
+                  {form.description.length > 250 ? ' — GoFood hanya menampilkan 250 karakter pertama.' : '.'}
+                </p>
+              </div>
             </div>
           )}
 

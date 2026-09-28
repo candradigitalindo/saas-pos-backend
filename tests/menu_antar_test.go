@@ -34,7 +34,11 @@ func stokJadi(t *testing.T, f posFixture, productID, qty string) {
 func TestMenuGoFoodDariPOS(t *testing.T) {
 	requireDB(t)
 	f := setupPOS(t, "menu-gofood")
-	call(t, "PUT", "/api/v1/products/"+f.prodA, f.token, map[string]any{"sku": "MN-A"}).mustOK(t, "sku A")
+	panjang := strings.Repeat("Kopi susu gula aren dengan es. ", 10) // 310 karakter
+	if d := call(t, "PUT", "/api/v1/products/"+f.prodA, f.token, map[string]any{"sku": "MN-A", "description": panjang}).
+		mustOK(t, "sku A").data(t); d["description"] != strings.TrimSpace(panjang) {
+		t.Fatalf("deskripsi barang: %v", d["description"])
+	}
 	call(t, "PUT", "/api/v1/products/"+f.prodB, f.token, map[string]any{"track_stock": false}).mustOK(t, "B tanpa stok")
 	ch := makeChannel(t, f, "GoFood", "0.20")
 
@@ -116,6 +120,9 @@ func TestMenuGoFoodDariPOS(t *testing.T) {
 	if len(item) != 2 || item["MN-A"]["in_stock"] != true || item[idB] == nil || item["MN-A"]["price"] != float64(15000) {
 		t.Fatalf("katalog GoFood: %v", katalog)
 	}
+	if d, _ := item["MN-A"]["description"].(string); len([]rune(d)) != 250 || item[idB]["description"] != nil {
+		t.Fatalf("deskripsi GoFood (dipotong 250, kosong tidak dikirim): %q / %v", d, item[idB]["description"])
+	}
 	if _, ada := katalog["variant_categories"]; !ada {
 		t.Fatal("variant_categories wajib ada (boleh kosong)")
 	}
@@ -163,7 +170,8 @@ func TestMenuGrabDariPOS(t *testing.T) {
 	requireDB(t)
 	f := setupPOS(t, "menu-grab")
 	kat := call(t, "POST", "/api/v1/categories", f.token, map[string]any{"name": "Minuman"}).mustCode(t, "kategori", 201).data(t)["id"].(string)
-	call(t, "PUT", "/api/v1/products/"+f.prodA, f.token, map[string]any{"sku": "GM-A", "category_id": kat}).mustOK(t, "sku A")
+	call(t, "PUT", "/api/v1/products/"+f.prodA, f.token, map[string]any{"sku": "GM-A", "category_id": kat,
+		"description": "Es kopi susu gula aren"}).mustOK(t, "sku A")
 	call(t, "PUT", "/api/v1/products/"+f.prodB, f.token, map[string]any{"sku": "GM-B", "track_stock": false}).mustOK(t, "B")
 	ch := makeChannel(t, f, "GrabFood", "0.25")
 
@@ -277,7 +285,8 @@ func TestMenuGrabDariPOS(t *testing.T) {
 		len(menu.SellingTimes) != 1 || menu.Categories[0].SellingTimeID != menu.SellingTimes[0]["id"] {
 		t.Fatalf("kerangka menu Grab: %s", rec.Body.String())
 	}
-	if a := item["GM-A"]; a == nil || a["price"] != float64(1500000) || a["maxStock"] != float64(100) || a["availableStatus"] != "AVAILABLE" {
+	if a := item["GM-A"]; a == nil || a["price"] != float64(1500000) || a["maxStock"] != float64(100) || a["availableStatus"] != "AVAILABLE" ||
+		a["description"] != "Es kopi susu gula aren" {
 		t.Fatalf("item A (stok dilacak): %v", item["GM-A"])
 	}
 	if b := item["GM-B"]; b == nil || b["availableStatus"] != "AVAILABLE" || b["maxStock"] != nil {

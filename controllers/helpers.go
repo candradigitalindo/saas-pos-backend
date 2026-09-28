@@ -154,20 +154,21 @@ func supplierToResponse(s models.Supplier) structs.SupplierResponse {
 // productToResponse memetakan model Product (dengan Unit/Category opsional) ke DTO.
 func productToResponse(p models.Product) structs.ProductResponse {
 	r := structs.ProductResponse{
-		ID:         p.ID,
-		Name:       p.Name,
-		CategoryID: deref(p.CategoryID),
-		UnitID:     p.UnitID,
-		SKU:        deref(p.SKU),
-		Barcode:    deref(p.Barcode),
-		SellPrice:  p.SellPrice,
-		CostPrice:  p.CostPrice,
-		TrackStock: p.TrackStock,
-		MinStock:   p.MinStock.String(),
-		IsActive:   p.IsActive,
-		ImageURL:   p.ImageURL,
-		CreatedAt:  p.CreatedAt.UTC().Format(timeLayout),
-		UpdatedAt:  p.UpdatedAt.UTC().Format(timeLayout),
+		ID:          p.ID,
+		Name:        p.Name,
+		CategoryID:  deref(p.CategoryID),
+		UnitID:      p.UnitID,
+		SKU:         deref(p.SKU),
+		Barcode:     deref(p.Barcode),
+		SellPrice:   p.SellPrice,
+		CostPrice:   p.CostPrice,
+		TrackStock:  p.TrackStock,
+		MinStock:    p.MinStock.String(),
+		IsActive:    p.IsActive,
+		ImageURL:    p.ImageURL,
+		Description: p.Description,
+		CreatedAt:   p.CreatedAt.UTC().Format(timeLayout),
+		UpdatedAt:   p.UpdatedAt.UTC().Format(timeLayout),
 	}
 	if p.Unit != nil {
 		r.UnitName = p.Unit.Name

@@ -434,6 +434,9 @@ func (grabfoodAdapter) ServeMenu(q url.Values, cred ChannelCredentials, menu Men
 			if it.Foto != "" {
 				m["photos"] = []string{it.Foto}
 			}
+			if it.Deskripsi != "" {
+				m["description"] = it.Deskripsi
+			}
 			items = append(items, m)
 		}
 		kategori = append(kategori, map[string]any{

@@ -273,7 +273,7 @@ Semua endpoint bisnis di bawah prefiks `/api/v1`.
 | `GET/POST/PUT/DELETE /api/v1/units[/:id]` | `product.view` / `product.edit` | CRUD satuan |
 | `GET/POST/PUT/DELETE /api/v1/suppliers[/:id]` | `product.view` / `product.edit` | CRUD supplier |
 | `GET  /api/v1/products?q=&category_id=&is_active=` | `product.view` | Cari produk (index trigram) |
-| `POST /api/v1/products` · `PUT /:id` | `product.edit` | Buat / ubah produk |
+| `POST /api/v1/products` · `PUT /:id` | `product.edit` | Buat / ubah produk (termasuk `description` ≤500 karakter untuk menu aplikasi antar — GoFood menampilkan 250 pertama; migrasi 000043) |
 | `DELETE /api/v1/products/:id` | `product.delete` | Hapus produk |
 | `POST /api/v1/products/import?dry_run=` | `product.import` | Impor CSV (pratinjau + laporan baris gagal) |
 | `GET/POST/PUT/DELETE /api/v1/customers[/:id]` | `customer.view` / `customer.edit` | CRUD pelanggan; daftar membawa `stats` (kedatangan, belanja bersih, terakhir datang; `receivable_outstanding` hanya untuk `receivable.manage`) |

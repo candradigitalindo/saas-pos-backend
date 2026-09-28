@@ -145,7 +145,7 @@ func UpdateProduct(ctx context.Context, tx *gorm.DB, row *models.Product) error 
 		Select(
 			"category_id", "unit_id", "name", "sku", "barcode",
 			"sell_price", "cost_price", "track_stock", "min_stock",
-			"is_active", "image_url",
+			"is_active", "image_url", "description",
 		).
 		Updates(row)
 	if res.Error != nil {

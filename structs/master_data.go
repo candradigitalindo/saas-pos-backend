@@ -89,20 +89,23 @@ type ProductCreateRequest struct {
 	MinStock   string `json:"min_stock" binding:"omitempty"` // desimal string
 	IsActive   *bool  `json:"is_active" binding:"omitempty"`
 	ImageURL   string `json:"image_url" binding:"omitempty,max=500"`
+	// Description: untuk menu aplikasi antar (GoFood menampilkan 250 karakter).
+	Description string `json:"description" binding:"omitempty,max=500"`
 }
 
 type ProductUpdateRequest struct {
-	Name       *string `json:"name" binding:"omitempty,min=1,max=200"`
-	CategoryID *string `json:"category_id" binding:"omitempty"`
-	UnitID     *string `json:"unit_id" binding:"omitempty,ulid"`
-	SKU        *string `json:"sku" binding:"omitempty,max=60"`
-	Barcode    *string `json:"barcode" binding:"omitempty,max=60"`
-	SellPrice  *int64  `json:"sell_price" binding:"omitempty,gte=0"`
-	CostPrice  *int64  `json:"cost_price" binding:"omitempty,gte=0"`
-	TrackStock *bool   `json:"track_stock" binding:"omitempty"`
-	MinStock   *string `json:"min_stock" binding:"omitempty"`
-	IsActive   *bool   `json:"is_active" binding:"omitempty"`
-	ImageURL   *string `json:"image_url" binding:"omitempty,max=500"`
+	Name        *string `json:"name" binding:"omitempty,min=1,max=200"`
+	CategoryID  *string `json:"category_id" binding:"omitempty"`
+	UnitID      *string `json:"unit_id" binding:"omitempty,ulid"`
+	SKU         *string `json:"sku" binding:"omitempty,max=60"`
+	Barcode     *string `json:"barcode" binding:"omitempty,max=60"`
+	SellPrice   *int64  `json:"sell_price" binding:"omitempty,gte=0"`
+	CostPrice   *int64  `json:"cost_price" binding:"omitempty,gte=0"`
+	TrackStock  *bool   `json:"track_stock" binding:"omitempty"`
+	MinStock    *string `json:"min_stock" binding:"omitempty"`
+	IsActive    *bool   `json:"is_active" binding:"omitempty"`
+	ImageURL    *string `json:"image_url" binding:"omitempty,max=500"`
+	Description *string `json:"description" binding:"omitempty,max=500"`
 }
 
 type ProductResponse struct {
@@ -120,6 +123,7 @@ type ProductResponse struct {
 	MinStock     string `json:"min_stock"`
 	IsActive     bool   `json:"is_active"`
 	ImageURL     string `json:"image_url,omitempty"`
+	Description  string `json:"description,omitempty"`
 	CreatedAt    string `json:"created_at"`
 	UpdatedAt    string `json:"updated_at"`
 }
