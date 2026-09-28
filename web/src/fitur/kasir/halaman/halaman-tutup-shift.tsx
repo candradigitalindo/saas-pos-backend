@@ -1,18 +1,30 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Check, TriangleAlert } from 'lucide-react'
+import { Calculator, Check, CircleCheck, Plus } from 'lucide-react'
 import { Kartu } from '@/bersama/ui/kartu'
 import { Tombol } from '@/bersama/ui/tombol'
 import { Kolom } from '@/bersama/ui/kolom'
 import { KolomUang } from '@/bersama/ui/kolom-uang'
 import { KeadaanKosong } from '@/bersama/komponen/keadaan-kosong'
-import { KerangkaBaris } from '@/bersama/komponen/kerangka'
-import { useToast } from '@/bersama/komponen/toast'
+import { Kerangka, KerangkaKartuAngka } from '@/bersama/komponen/kerangka'
 import { GalatAPI } from '@/lib/api-client'
 import { formatRupiah } from '@/bersama/util/uang'
-import { formatJam, formatTanggal } from '@/bersama/util/tanggal'
-import { cn } from '@/bersama/util/cn'
+import { formatJam } from '@/bersama/util/tanggal'
+import type { Shift } from '@/bersama/tipe/pos'
 import { rincianShift, useShiftAktif, useTutupShift } from '../hooks'
+import { DialogPecahan, HITUNGAN_KOSONG, type HitunganPecahan } from '../komponen/penghitung-laci'
+import { DaftarCaraBayar } from '../komponen/daftar-cara-bayar'
+import {
+  BarisRingkas,
+  DialogRincianShift,
+  HasilHitung,
+  PeringatanBelumTerkirim,
+  RumusLaci,
+  TombolRincian,
+  layarLebar,
+  useJualanBelumTerkirim,
+  waktuMulai,
+} from '../komponen/bagian-shift'
 
 /**
  * Tutup shift — momen paling rawan salah.
@@ -21,19 +33,44 @@ import { rincianShift, useShiftAktif, useTutupShift } from '../hooks'
  * menuduh (merah, "SELISIH!"), kasir akan berhenti jujur dan mulai memaksakan
  * angka agar pas. Itu jauh lebih merugikan daripada selisih Rp 5.000
  * (ui/05-ALUR-UTAMA.md §3).
+ *
+ * SATU LAYAR, TANPA MENGGULIR — pola yang sama dengan Ganti Shift: yang
+ * dikerjakan hanya SATU angka (hasil hitung laci), pembandingnya di baris
+ * label, hitung per pecahan & rincian penjualan di dialog, catatan lewat
+ * "+ Catatan". Versi sebelumnya menumpuk rumus di kartu sendiri dan kotak
+ * selisih tiga baris, sehingga tombol Tutup Shift terdorong ke bawah layar HP.
+ *
+ * Penjualan offline yang belum terkirim MENAHAN penutupan: server menolak
+ * penjualan untuk shift yang sudah ditutup.
  */
 export function HalamanTutupShift() {
   const navigate = useNavigate()
-  const toast = useToast()
   const { shift, memuat } = useShiftAktif()
   const tutup = useTutupShift()
+  const belumTerkirim = useJualanBelumTerkirim()
 
   const [dihitung, setDihitung] = useState(0)
+  const [sudahIsi, setSudahIsi] = useState(false)
+  const [pecahan, setPecahan] = useState<HitunganPecahan>(HITUNGAN_KOSONG)
+  const [dialog, setDialog] = useState<'pecahan' | 'rincian' | null>(null)
+  const [bukaCatatan, setBukaCatatan] = useState(false)
   const [catatan, setCatatan] = useState('')
   const [galat, setGalat] = useState<string | null>(null)
-  const [sudahIsi, setSudahIsi] = useState(false)
+  const [hasil, setHasil] = useState<{ ditutup: Shift; sebelum: Shift } | null>(null)
 
-  if (memuat) return <KerangkaBaris jumlah={4} />
+  if (hasil) return <HasilTutupShift {...hasil} />
+
+  if (memuat) {
+    return (
+      <div className="flex w-full max-w-5xl flex-col gap-3">
+        <Kerangka className="h-8 w-48" />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <KerangkaKartuAngka />
+          <KerangkaKartuAngka />
+        </div>
+      </div>
+    )
+  }
 
   if (!shift) {
     return (
@@ -46,22 +83,29 @@ export function HalamanTutupShift() {
     )
   }
 
-  const { modalAwal, penjualanTunai, kasMasuk, kasKeluar, seharusnya } = rincianShift(shift)
+  const { seharusnya } = rincianShift(shift)
   const selisih = dihitung - seharusnya
-  const pas = selisih === 0
+  const kasir = shift.opened_by_name || 'Kasir'
+
+  const isiHitung = (n: number) => {
+    setDihitung(n)
+    setSudahIsi(true)
+  }
 
   async function kirim(e: React.FormEvent) {
     e.preventDefault()
-    if (!shift) return
+    // Enter di kolom juga mengirim formulir — penjagaannya di sini, bukan
+    // hanya pada tombol yang dinonaktifkan.
+    if (!shift || !sudahIsi || belumTerkirim > 0) return
     setGalat(null)
     try {
-      await tutup.mutateAsync({
+      const ditutup = await tutup.mutateAsync({
         id: shift.id,
         uangDihitung: dihitung,
         catatan: catatan.trim() || undefined,
       })
-      toast.berhasil('Shift ditutup. Terima kasih sudah jualan hari ini.')
-      navigate('/', { replace: true })
+      setHasil({ ditutup, sebelum: shift })
+      window.scrollTo({ top: 0 })
     } catch (e) {
       setGalat(
         e instanceof GalatAPI
@@ -74,123 +118,170 @@ export function HalamanTutupShift() {
   }
 
   return (
-    // Tanpa p-4 sendiri: LayoutToko sudah memberi jarak tepi — dulu judulnya
-    // menjorok dua kali lebih dalam dari halaman lain. Layar lebar: rumus uang
-    // di kiri, hitungan laci di kanan.
-    <div className="flex w-full max-w-lg flex-col gap-4 lg:grid lg:max-w-4xl lg:grid-cols-2 lg:items-start lg:gap-x-6">
-      <header className="lg:col-span-2">
-        <h1 className="text-judul font-bold text-teks-utama">Tutup Shift</h1>
+    <div className="flex w-full max-w-5xl flex-col gap-3 lg:gap-4">
+      {/* HP: siapa & sejak kapan jadi anak judul, bukan kartu sendiri. */}
+      <header className="flex flex-col gap-1">
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-judul font-bold text-teks-utama">Tutup Shift</h1>
+          <TombolRincian onKlik={() => setDialog('rincian')} className="lg:hidden" />
+        </div>
         <p className="text-label text-teks-sekunder">
-          Dibuka {formatJam(shift.opened_at)} · {formatTanggal(shift.business_date)}
+          <strong className="font-semibold text-teks-utama">{kasir}</strong> · sejak {waktuMulai(shift)}
+          {shift.sales && ` · ${shift.sales.sales_count} transaksi`}
         </p>
       </header>
 
-      {/* Rumusnya ditulis terbuka supaya kasir paham dari mana angkanya —
-          bukan disuruh percaya pada satu angka akhir. */}
-      <Kartu className="p-4">
-        <h2 className="mb-3 text-judul-kartu font-semibold text-teks-utama">
-          Uang yang seharusnya ada di laci
-        </h2>
-        <dl className="flex flex-col gap-1.5 text-label">
-          <Baris label="Modal awal" nilai={modalAwal} />
-          <Baris label="Penjualan tunai" nilai={penjualanTunai} />
-          {kasMasuk > 0 && <Baris label="Uang masuk lain" nilai={kasMasuk} />}
-          {kasKeluar > 0 && <Baris label="Uang keluar" nilai={-kasKeluar} />}
-          <div className="mt-1 flex items-baseline justify-between border-t border-garis pt-2">
-            <dt className="font-semibold text-teks-utama">Seharusnya</dt>
-            <dd className="text-judul-kartu font-bold tabular-nums text-teks-utama">
-              {formatRupiah(seharusnya)}
-            </dd>
-          </div>
-        </dl>
-      </Kartu>
-
-      <form onSubmit={kirim} className="flex flex-col gap-4">
-        <Kartu className="p-4">
-          <KolomUang
-            label="Hitung uang di laci sekarang, lalu isi"
-            nilai={dihitung}
-            onNilai={(n) => {
-              setDihitung(n)
-              setSudahIsi(true)
-            }}
-            bantuan="Isi apa adanya. Selisih kecil itu biasa dan tidak apa-apa."
-            autoFocus
-          />
-        </Kartu>
-
-        {sudahIsi && (
-          <Kartu
-            className={cn(
-              'p-4',
-              pas ? 'border-hijau-600 bg-hijau-700/10' : 'border-jingga-600 bg-permukaan-2',
-            )}
-          >
-            <p
-              className={cn(
-                'flex items-center gap-2 font-semibold',
-                pas ? 'text-hijau-800' : 'text-jingga-700',
-              )}
-            >
-              {pas ? (
-                <>
-                  <Check className="h-5 w-5" aria-hidden />
-                  Pas
-                </>
-              ) : (
-                <>
-                  <TriangleAlert className="h-5 w-5" aria-hidden />
-                  {selisih > 0 ? 'Lebih' : 'Kurang'} {formatRupiah(Math.abs(selisih))}
-                </>
-              )}
-            </p>
-
-            {!pas && (
-              <>
-                <p className="mt-1 text-label text-jingga-700">
-                  Tidak apa-apa — selisih kecil biasa terjadi. Beri catatan bila Anda
-                  tahu sebabnya.
-                </p>
-                <div className="mt-3">
-                  <Kolom
-                    label="Catatan"
-                    placeholder="Boleh dikosongkan"
-                    value={catatan}
-                    onChange={(e) => setCatatan(e.target.value)}
-                    maxLength={255}
-                  />
-                </div>
-              </>
-            )}
+      {/* Layar lebar: penjualan & rumus laci di kiri, formulirnya di kanan. */}
+      <div className="flex flex-col gap-3 lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:items-start lg:gap-6">
+        <div className="hidden flex-col gap-4 lg:flex">
+          {shift.sales && shift.sales.sales_count > 0 && (
+            <Kartu className="flex flex-col gap-3 p-5">
+              <div className="flex items-baseline justify-between gap-3">
+                <h2 className="text-judul-kartu font-semibold text-teks-utama">Penjualan shift ini</h2>
+                <span className="text-judul-kartu font-bold tabular-nums text-teks-utama">
+                  {formatRupiah(shift.sales.sales_total)}
+                </span>
+              </div>
+              <DaftarCaraBayar data={shift.sales.by_method} />
+            </Kartu>
+          )}
+          <Kartu className="flex flex-col gap-3 p-5">
+            <h2 className="text-judul-kartu font-semibold text-teks-utama">Uang yang seharusnya ada di laci</h2>
+            <RumusLaci shift={shift} />
           </Kartu>
-        )}
+        </div>
 
-        {galat && (
-          <p className="rounded-kontrol border border-bahaya bg-bahaya-teks/10 px-3 py-2 text-label text-bahaya-teks">
-            {galat}
-          </p>
-        )}
+        <form onSubmit={kirim}>
+          <Kartu className="flex flex-col gap-2.5 p-4 sm:gap-3 sm:p-5">
+            <KolomUang
+              label="Hasil hitung laci"
+              labelKanan={
+                <span className="text-label text-teks-sekunder lg:hidden">
+                  Seharusnya{' '}
+                  <strong className="font-bold tabular-nums text-teks-utama">{formatRupiah(seharusnya)}</strong>
+                </span>
+              }
+              nilai={dihitung}
+              onNilai={isiHitung}
+              // Hanya di layar lebar: di HP papan tik menutupi layar sebelum
+              // kasir sempat membaca angka pembandingnya.
+              autoFocus={layarLebar()}
+              bantuan={sudahIsi ? undefined : 'Hitung semua uang tunai di laci, lalu isi apa adanya.'}
+              sisipanAkhir={
+                <button type="button" onClick={() => setDialog('pecahan')} className="group -mr-1.5 flex h-11 shrink-0 items-center">
+                  <span className="flex h-9 items-center gap-1.5 rounded-full bg-sorot px-3 text-keterangan font-semibold text-hijau-800 group-hover:brightness-95">
+                    <Calculator className="h-4 w-4" aria-hidden />
+                    Per pecahan
+                  </span>
+                </button>
+              }
+            />
+            {sudahIsi && <HasilHitung selisih={selisih} />}
 
-        <Tombol
-          type="submit"
-          ukuran="kasir"
-          lebarPenuh
-          memuat={tutup.isPending}
-          labelMemuat="Menutup shift…"
-          disabled={!sudahIsi}
-        >
-          Tutup Shift
-        </Tombol>
-      </form>
+            {bukaCatatan ? (
+              <Kolom
+                label="Catatan"
+                value={catatan}
+                onChange={(e) => setCatatan(e.target.value)}
+                maxLength={255}
+                autoFocus
+                placeholder={sudahIsi && selisih !== 0 ? 'mis. kurang karena salah kembalian' : 'Boleh dikosongkan'}
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => setBukaCatatan(true)}
+                className="-mx-1 flex min-h-11 items-center gap-1 self-start px-1 text-label font-medium text-utama hover:underline"
+              >
+                <Plus className="h-4 w-4" aria-hidden />
+                Catatan
+              </button>
+            )}
+
+            {belumTerkirim > 0 && <PeringatanBelumTerkirim jumlah={belumTerkirim} />}
+
+            {galat && (
+              <p role="alert" className="rounded-kontrol border border-bahaya bg-bahaya-teks/10 px-3 py-2 text-label text-bahaya-teks">
+                {galat}
+              </p>
+            )}
+
+            <Tombol
+              type="submit"
+              ukuran="kasir"
+              lebarPenuh
+              memuat={tutup.isPending}
+              labelMemuat="Menutup shift…"
+              disabled={!sudahIsi || belumTerkirim > 0}
+            >
+              Tutup Shift
+            </Tombol>
+          </Kartu>
+        </form>
+      </div>
+
+      {dialog === 'pecahan' && (
+        <DialogPecahan
+          awal={pecahan}
+          onTutup={() => setDialog(null)}
+          onPakai={(total, h) => {
+            setPecahan(h)
+            isiHitung(total)
+            setDialog(null)
+          }}
+        />
+      )}
+      {dialog === 'rincian' && <DialogRincianShift shift={shift} kasirLama={kasir} onTutup={() => setDialog(null)} />}
     </div>
   )
 }
 
-function Baris({ label, nilai }: { label: string; nilai: number }) {
+/**
+ * Hasil tutup shift sebagai LAYAR, bukan toast dua detik: angka yang tercatat
+ * (terutama selisihnya) perlu dibaca, dan pemilik sering menanyakannya besok.
+ */
+function HasilTutupShift({ ditutup, sebelum }: { ditutup: Shift; sebelum: Shift }) {
+  const navigate = useNavigate()
+  const selisih = ditutup.difference ?? 0
+  const penjualan = sebelum.sales
   return (
-    <div className="flex items-baseline justify-between">
-      <dt className="text-teks-sekunder">{label}</dt>
-      <dd className="tabular-nums text-teks-utama">{formatRupiah(nilai)}</dd>
+    <div className="mx-auto flex w-full max-w-lg flex-col gap-4">
+      <Kartu className="flex flex-col items-center gap-2 p-6 text-center">
+        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-sorot text-hijau-800">
+          <CircleCheck className="h-8 w-8" aria-hidden />
+        </span>
+        <h1 className="text-judul font-bold text-teks-utama">Shift ditutup</h1>
+        <p className="text-label text-teks-sekunder">
+          Ditutup pukul {formatJam(ditutup.closed_at ?? new Date().toISOString())}. Terima kasih sudah jualan hari ini.
+        </p>
+      </Kartu>
+
+      <Kartu className="p-4 sm:p-5">
+        <dl className="flex flex-col gap-2 text-label">
+          {penjualan && (
+            <BarisRingkas
+              label={`Penjualan · ${penjualan.sales_count} transaksi`}
+              nilai={formatRupiah(penjualan.sales_total)}
+            />
+          )}
+          <BarisRingkas label="Uang di laci (dihitung)" nilai={formatRupiah(ditutup.counted_cash ?? 0)} />
+          <BarisRingkas label="Seharusnya" nilai={formatRupiah(ditutup.expected_cash ?? 0)} />
+          <BarisRingkas
+            label="Selisih"
+            nilai={selisih === 0 ? 'Pas' : `${selisih > 0 ? 'Lebih' : 'Kurang'} ${formatRupiah(Math.abs(selisih))}`}
+            nada={selisih === 0 ? 'pas' : 'selisih'}
+          />
+        </dl>
+      </Kartu>
+
+      <div className="flex flex-col gap-2 sm:flex-row-reverse">
+        <Tombol ukuran="kasir" lebarPenuh onClick={() => navigate('/', { replace: true })}>
+          Ke Beranda
+        </Tombol>
+        <Tombol jenis="kedua" ukuran="kasir" lebarPenuh onClick={() => navigate('/kasir/riwayat')}>
+          Lihat Riwayat
+        </Tombol>
+      </div>
     </div>
   )
 }

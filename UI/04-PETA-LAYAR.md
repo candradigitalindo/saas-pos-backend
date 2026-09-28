@@ -97,8 +97,8 @@ menu aktif selalu digulir ke dalam pandangan.
 | Batalkan transaksi | `POST /sales/:id/void` | `sale.void` |
 | Retur barang | `POST /sales/:id/refund` | `sale.refund` |
 | Uang masuk/keluar laci (masuk/keluar/seharusnya di laci, akibat pada laci sebelum dicatat, keterangan sekali ketuk, siapa pencatatnya; formulir muat satu layar) | `POST /cash-movements` · `GET /cash-movements` · `GET /shifts/:id` | `cash.movement` |
-| Tutup shift | `POST /shifts/:id/close` | `shift.close` |
-| Ganti Shift — satu layar tanpa digulir (≥360×640): siapa → siapa, hitung laci (total, atau per pecahan di dialog), tinggal semua/setor sebagian, catatan opsional; rincian penjualan & rumus laci di dialog "Rincian shift" (di layar lebar rumusnya tampil di kolom kiri); layar hasil; "Masuk sebagai kasir lain" kembali ke layar ini setelah masuk | `GET /shifts/:id` · `POST /shifts/:id/handover` | `shift.close` + `shift.open` |
+| Tutup Shift — satu layar tanpa digulir (≥320×568), pola sama dengan Ganti Shift: satu angka "Hasil hitung laci" dengan pembanding "Seharusnya" di baris label, per pecahan di dialog, selisih satu baris bernada menenangkan, "+ Catatan"; rincian penjualan & rumus laci di dialog "Rincian shift" (layar lebar: kolom kiri); layar hasil (penjualan, dihitung, seharusnya, selisih) alih-alih toast. Terkunci selama ada penjualan offline belum terkirim (+ tombol "Kirim Sekarang") — server menolak penjualan untuk shift yang sudah ditutup | `GET /shifts/:id` · `POST /shifts/:id/close` | `shift.close` |
+| Ganti Shift — satu layar tanpa digulir (≥360×640): siapa → siapa, hitung laci (total, atau per pecahan di dialog), tinggal semua/setor sebagian, catatan opsional; rincian penjualan & rumus laci di dialog "Rincian shift" (di layar lebar rumusnya tampil di kolom kiri); layar hasil; "Masuk sebagai kasir lain" kembali ke layar ini setelah masuk. Terkunci selama ada penjualan offline belum terkirim, sama seperti Tutup Shift | `GET /shifts/:id` · `POST /shifts/:id/handover` | `shift.close` + `shift.open` |
 | Daftar & detail shift | `GET /shifts` · `GET /shifts/:id` | `shift.open` / `shift.close` |
 
 ---
