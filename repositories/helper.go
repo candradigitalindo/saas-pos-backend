@@ -36,3 +36,10 @@ func onConflictDoNothing(cols ...string) clause.OnConflict {
 func lockForUpdate() clause.Locking {
 	return clause.Locking{Strength: "UPDATE"}
 }
+
+// lockNoKeyUpdate: FOR NO KEY UPDATE — tetap saling mengantre, tetapi TIDAK
+// menahan baris anak yang merujuknya lewat foreign key (KEY SHARE). Dipakai
+// saat baris dikunci lama sementara baris anak disisipkan dari koneksi lain.
+func lockNoKeyUpdate() clause.Locking {
+	return clause.Locking{Strength: "NO KEY UPDATE"}
+}

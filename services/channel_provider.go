@@ -53,6 +53,7 @@ var providerAdapters = map[string]ProviderAdapter{
 	"grabfood":  grabfoodAdapter{},
 	"shopee":    shopeeAdapter{},
 	"tokopedia": tokopediaAdapter{},
+	"lazada":    lazadaAdapter{},
 }
 
 // WebhookBalasan: balasan langsung untuk sub-jalur webhook yang ditangani
@@ -135,26 +136,12 @@ func ProviderCode(s string) string {
 	return providerAliases[strings.ToLower(strings.TrimSpace(s))]
 }
 
-// segera: penyedia yang adaptornya belum dibuat — tetap ditampilkan supaya
-// tenant tahu yang disiapkan & cara mendaftarnya, tanpa janji tanggal.
-func segera(code, name, kind, docs, catatan string) structs.ChannelProviderInfo {
-	return structs.ChannelProviderInfo{
-		Code: code, Name: name, Kind: kind, DocsURL: docs, Note: catatan,
-		Steps: []string{}, Fields: []structs.ChannelProviderField{}, Capabilities: []string{},
-	}
-}
-
 // ListChannelProviders: katalog penyedia untuk layar "Hubungkan API".
 func ListChannelProviders() []structs.ChannelProviderInfo {
-	out := []structs.ChannelProviderInfo{
+	return []structs.ChannelProviderInfo{
 		whatsappAdapter{}.Info(), gofoodAdapter{}.Info(), grabfoodAdapter{}.Info(), shopeeAdapter{}.Info(),
-		tokopediaAdapter{}.Info(),
+		tokopediaAdapter{}.Info(), lazadaAdapter{}.Info(),
 	}
-	out = append(out,
-		segera("lazada", "Lazada", "marketplace", "https://open.lazada.com/",
-			"Butuh aplikasi Lazada Open Platform (App Key & App Secret) milik toko."),
-	)
-	return out
 }
 
 // genericFromEvent menyimpan peristiwa penyedia dalam bentuk payload adaptor

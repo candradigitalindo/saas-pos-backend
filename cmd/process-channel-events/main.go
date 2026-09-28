@@ -76,13 +76,19 @@ func main() {
 
 // runOnce menjalankan satu putaran penuh: peristiwa + antrean sinkron stok.
 func runOnce(ctx context.Context) error {
+	// Cadangan push: kanal yang penyedianya mendukung ditarik tiap 15 menit
+	// (dilewati bila belum waktunya), lalu hasilnya diproses di putaran ini.
+	tarik, err := services.TarikPesananKanal(ctx, time.Now())
+	if err != nil {
+		return err
+	}
 	res, err := services.ProcessChannelEvents(ctx)
 	if err != nil {
 		return err
 	}
 	fmt.Printf(
-		"Pemrosesan kanal: peristiwa selesai=%d gagal=%d mati=%d; sinkron stok terkirim=%d gagal=%d.\n",
-		res.EventsDone, res.EventsFailed, res.EventsDead, res.StockSyncsSent, res.StockSyncsFail,
+		"Pemrosesan kanal: tarikan baru=%d; peristiwa selesai=%d gagal=%d mati=%d; sinkron stok terkirim=%d gagal=%d.\n",
+		tarik, res.EventsDone, res.EventsFailed, res.EventsDead, res.StockSyncsSent, res.StockSyncsFail,
 	)
 	return nil
 }

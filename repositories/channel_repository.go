@@ -391,6 +391,16 @@ func FindChannelByWebhookToken(ctx context.Context, token string) (models.Channe
 	return c, err
 }
 
+// ChannelsForPull: kanal aktif LINTAS tenant yang tersambung ke penyedia
+// dengan tarikan berkala (pekerja, tanpa sesi).
+func ChannelsForPull(ctx context.Context, providers []string) ([]models.Channel, error) {
+	var out []models.Channel
+	err := database.DB.WithContext(ctx).
+		Where("integration_mode = 'api' AND is_active AND provider IN ? AND connection_status = 'connected'", providers).
+		Order("id").Find(&out).Error
+	return out, err
+}
+
 // LastChannelEventAt: kapan peristiwa terakhir dari kanal ini diterima.
 func LastChannelEventAt(ctx context.Context, channelID string) (*time.Time, error) {
 	// MAX tanpa baris = NULL → nil ("belum ada pesanan otomatis").
@@ -403,12 +413,15 @@ func LastChannelEventAt(ctx context.Context, channelID string) (*time.Time, erro
 	return &t.Time, nil
 }
 
-// FindChannelForUpdate memuat kanal & MENGUNCI barisnya (FOR UPDATE) sampai tx
-// selesai — dipakai saat token penyedia diperbarui: refresh token Shopee hanya
-// bisa dipakai sekali, jadi dua pembaruan bersamaan harus antre.
+// FindChannelForUpdate memuat kanal & MENGUNCI barisnya sampai tx selesai —
+// dipakai saat token penyedia diperbarui: refresh token Shopee hanya bisa
+// dipakai sekali, jadi dua pembaruan bersamaan harus antre. NO KEY UPDATE,
+// bukan UPDATE: tarikan pesanan menyisipkan channel_events (FK ke kanal ini)
+// dari koneksi lain selama kunci dipegang — FOR UPDATE membuatnya menunggu
+// kunci itu sampai statement_timeout.
 func FindChannelForUpdate(ctx context.Context, tx *gorm.DB, id string) (models.Channel, error) {
 	var c models.Channel
-	err := scopeTenant(ctx, tenantDB(ctx, tx)).Clauses(lockForUpdate()).First(&c, "id = ?", id).Error
+	err := scopeTenant(ctx, tenantDB(ctx, tx)).Clauses(lockNoKeyUpdate()).First(&c, "id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return c, ErrChannelNotFound
 	}

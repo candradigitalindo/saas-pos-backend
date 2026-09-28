@@ -286,7 +286,13 @@ export function DialogSambungan({ kanal, onTutup }: { kanal: Kanal; onTutup: () 
                 {tersimpan && perluIzin && (
                   <IzinToko
                     penyedia={dipilih.name}
-                    redirect={s?.webhook_values?.find((v) => v.label.startsWith('Redirect'))?.label ?? 'Redirect URL'}
+                    // Nama isiannya beda per penyedia ("Redirect URL Domain", "App
+                    // Callback URL"); nilainya selalu alamat balik …/oauth/callback
+                    // atau domainnya.
+                    redirect={
+                      s?.webhook_values?.find((v) => v.value.endsWith('/oauth/callback') || v.label.startsWith('Redirect'))
+                        ?.label ?? 'Redirect URL'
+                    }
                     alasan={belumIzin && s?.status === 'error' ? s.error : undefined}
                     toko={s?.authorized}
                     menunggu={!!menunggu}

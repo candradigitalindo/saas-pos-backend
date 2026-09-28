@@ -489,19 +489,7 @@ func IngestProviderWebhook(ctx context.Context, provider, token, aksi string, h 
 		return res, kosong, nil
 	}
 	for _, ev := range evs {
-		payload, err := genericFromEvent(ev, body)
-		if err != nil {
-			return res, nil, err
-		}
-		tipe := normalizeEventType(ev.EventType)
-		// Status berurutan (dikirim, diterima, selesai) untuk pesanan yang
-		// sama adalah peristiwa berbeda — tanpa akhiran status, yang kedua
-		// dan seterusnya dibuang sebagai duplikat.
-		ref := ev.ExternalOrderID
-		if tipe == "order.status" && ev.ExternalStatus != "" {
-			ref += "#" + ev.ExternalStatus
-		}
-		created, err := repositories.InsertChannelEvent(ctx, ch.TenantID, ch.ID, tipe, ref, payload)
+		created, err := simpanPeristiwa(ctx, ch, ev, body)
 		if err != nil {
 			return res, nil, err
 		}
@@ -512,6 +500,28 @@ func IngestProviderWebhook(ctx context.Context, provider, token, aksi string, h 
 		}
 	}
 	return res, kosong, nil
+}
+
+// simpanPeristiwa memasukkan satu peristiwa penyedia ke antrean kanal —
+// idempoten lewat kunci (tenant, kanal, tipe, ref). Dipakai webhook dan
+// tarikan berkala, jadi pesanan yang datang lewat keduanya tercatat sekali.
+func simpanPeristiwa(ctx context.Context, ch models.Channel, ev NormalizedEvent, raw []byte) (bool, error) {
+	payload, err := genericFromEvent(ev, raw)
+	if err != nil {
+		return false, err
+	}
+	tipe := normalizeEventType(ev.EventType)
+	// Status berurutan (dikirim, diterima, selesai) untuk pesanan yang sama
+	// adalah peristiwa berbeda — tanpa akhiran status, yang kedua dan
+	// seterusnya dibuang sebagai duplikat.
+	ref := ev.ExternalOrderID
+	switch {
+	case ev.DedupKey != "":
+		ref += "#" + ev.DedupKey
+	case tipe == "order.status" && ev.ExternalStatus != "":
+		ref += "#" + ev.ExternalStatus
+	}
+	return repositories.InsertChannelEvent(ctx, ch.TenantID, ch.ID, tipe, ref, payload)
 }
 
 // halamanPesan: halaman HTML singkat untuk peramban yang kembali dari penyedia.

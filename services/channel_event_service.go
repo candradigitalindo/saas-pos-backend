@@ -73,6 +73,10 @@ type NormalizedEvent struct {
 	// NeedsFetch: rincian pesanan diambil dari API penyedia oleh pekerja
 	// (orderFetcher) — webhook-nya hanya membawa nomor & status.
 	NeedsFetch bool
+	// DedupKey: pembeda tambahan kunci dedup saat disimpan (mis. baris pesanan
+	// Lazada yang dibatalkan satu per satu) — tanpa ini peristiwa kedua untuk
+	// nomor pesanan yang sama dibuang sebagai duplikat.
+	DedupKey string
 }
 
 // NormalizedItem adalah satu baris pesanan ternormalisasi. `ProductID` boleh
