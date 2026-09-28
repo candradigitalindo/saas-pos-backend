@@ -49,12 +49,14 @@ export function HalamanKoreksiStok() {
 
   // Saldo saat ini ditampilkan apa adanya — jujur lebih baik daripada
   // "menguji" petugas dengan menyembunyikannya.
+  // Diambil per barang (?product_ids=), bukan dicari di 100 baris pertama
+  // daftar stok: di toko dengan ratusan barang, saldonya dulu tidak ketemu.
   const saldo = useQuery({
-    queryKey: ['stok', tokoAktif, 'semua'],
-    queryFn: () => stokApi.saldo(tokoAktif!),
-    enabled: !!tokoAktif,
+    queryKey: ['stok', tokoAktif, 'barang', produk?.id],
+    queryFn: () => stokApi.saldo(tokoAktif!, false, 1, 1, { produk: [produk!.id] }),
+    enabled: !!tokoAktif && !!produk,
   })
-  const saldoSekarang = saldo.data?.data.find((s) => s.product_id === produk?.id)
+  const saldoSekarang = saldo.data?.data[0]
 
   // Satu kunci untuk seluruh percobaan di layar ini: menekan "Simpan" lagi
   // setelah sinyal putus tidak mencatat koreksinya dua kali.

@@ -68,13 +68,24 @@ func AdjustStock(c *gin.Context) {
 }
 
 // ListStocks mengembalikan saldo stok (opsional per outlet, opsional hanya yang
-// di bawah min_stock via ?low=true).
+// di bawah min_stock via ?low=true, atau satu keadaan via ?status=), berurut
+// ?sort= (bawaan nama), lengkap dengan nilai stok & laku 30 hari per baris.
 func ListStocks(c *gin.Context) {
 	page, limit, offset := helpers.ParsePaginationParams(c)
 	f := repositories.StockFilter{
 		OutletID: c.Query("outlet_id"),
 		LowOnly:  c.Query("low") == "true" || c.Query("low") == "1",
 		Search:   strings.TrimSpace(c.Query("q")),
+		Status:   c.Query("status"),
+		Sort:     c.Query("sort"),
+	}
+	if f.Status != "" && !repositories.StockStatuses[f.Status] {
+		badRequest(c, "status", "status harus salah satu: safe, low, out, negative, idle")
+		return
+	}
+	if f.Sort != "" && !repositories.StockSorts[f.Sort] {
+		badRequest(c, "sort", "sort harus salah satu: name, urgent, value, sold")
+		return
 	}
 	for _, id := range strings.Split(c.Query("product_ids"), ",") {
 		if id = strings.TrimSpace(id); id != "" {
@@ -110,6 +121,7 @@ func StockSummary(c *gin.Context) {
 		Data: structs.StockSummaryResponse{
 			Total: r.Total, Safe: r.Safe, Low: r.Low, Out: r.Out,
 			Negative: r.Negative, StockValue: r.StockValue,
+			Idle: r.Idle, IdleValue: r.IdleValue,
 		},
 	})
 }

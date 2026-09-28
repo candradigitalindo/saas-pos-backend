@@ -140,4 +140,17 @@ export interface SaldoStok {
   reserved_qty: string
   min_stock: string
   low: boolean
+  // Diisi GET /stocks sejak halaman Stok diperkaya; opsional supaya data lama
+  // (mis. tembolok) tetap sah.
+  sku?: string
+  image_url?: string
+  category_id?: string | null
+  category_name?: string
+  cost_price?: number
+  /** max(qty, 0) × harga modal, rupiah */
+  stock_value?: number
+  /** Keluar bersih lewat penjualan 30 hari terakhir (satuan dasar). */
+  sold_30d?: string
+  /** null = belum pernah terjual di toko ini */
+  last_sold_at?: string | null
 }

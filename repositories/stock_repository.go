@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"time"
 
 	"candra/backend-api/internal/reqctx"
 	"candra/backend-api/models"
@@ -194,6 +195,75 @@ type StockFilter struct {
 	// ProductIDs membatasi ke barang tertentu — daftar Barang memakainya untuk
 	// kolom stok halaman yang sedang tampil saja.
 	ProductIDs []string
+	// Status menyaring satu keadaan — batasnya sama dengan StockSummary:
+	// safe | low | out | negative | idle. Kosong = semua.
+	Status string
+	// Sort: name (bawaan) | urgent | value | sold. Lihat stockOrder.
+	Sort string
+}
+
+// Keadaan & urutan yang dikenali ListStocks. Nilai lain ditolak controller
+// (422), bukan diam-diam diabaikan.
+var (
+	StockStatuses = map[string]bool{"safe": true, "low": true, "out": true, "negative": true, "idle": true}
+	StockSorts    = map[string]bool{"name": true, "urgent": true, "value": true, "sold": true}
+)
+
+// Jendela "laku per hari" dan batas "tidak laku". 30 hari: cukup panjang
+// untuk meratakan hari ramai/sepi, cukup pendek untuk mengikuti musim.
+const stockWindow = "30 days"
+
+// stockMoveMatch mencocokkan gerakan stok dengan baris saldo `stocks`.
+// Stok dihitung di tingkat BARANG (variant_id kosong), sedangkan gerakan penjualan
+// varian tetap membawa variant_id-nya — jadi baris tingkat barang menghitung
+// semua gerakan barang itu.
+const stockMoveMatch = `m.tenant_id = stocks.tenant_id AND m.outlet_id = stocks.outlet_id
+	AND m.product_id = stocks.product_id
+	AND (stocks.variant_id = '' OR m.variant_id = stocks.variant_id)`
+
+// stockIdleCond: masih ada barangnya, TIDAK terjual sama sekali 30 hari
+// terakhir, padahal sudah tercatat di toko lebih dari 30 hari (barang yang baru
+// datang minggu ini bukan "tidak laku").
+var stockIdleCond = `stocks.qty > 0
+	AND NOT EXISTS (SELECT 1 FROM stock_movements m WHERE ` + stockMoveMatch + `
+		AND m.kind = 'sale' AND m.occurred_at >= now() - interval '` + stockWindow + `')
+	AND EXISTS (SELECT 1 FROM stock_movements m WHERE ` + stockMoveMatch + `
+		AND m.occurred_at < now() - interval '` + stockWindow + `')`
+
+// stockStatusCond menerjemahkan StockFilter.Status ke WHERE — batasnya SAMA
+// dengan hitungan StockSummary, supaya angka di kartu ringkasan selalu sama
+// dengan jumlah baris setelah disaring.
+func stockStatusCond(status string) string {
+	switch status {
+	case "safe":
+		return "stocks.qty > p.min_stock AND stocks.qty > 0"
+	case "low":
+		return "stocks.qty > 0 AND stocks.qty <= p.min_stock"
+	case "out":
+		return "stocks.qty = 0"
+	case "negative":
+		return "stocks.qty < 0"
+	case "idle":
+		return stockIdleCond
+	}
+	return ""
+}
+
+// stockOrder: urutan daftar saldo. "urgent" menaikkan yang butuh tindakan —
+// minus, habis, lalu hampir habis dari yang paling jauh di bawah batasnya —
+// sehingga halaman pertama selalu berisi yang perlu diurus hari ini.
+func stockOrder(sort string) string {
+	switch sort {
+	case "urgent":
+		return `CASE WHEN stocks.qty < 0 THEN 0 WHEN stocks.qty = 0 THEN 1
+			WHEN stocks.qty <= p.min_stock THEN 2 ELSE 3 END,
+			stocks.qty / NULLIF(p.min_stock, 0) ASC NULLS LAST, p.name ASC, stocks.product_id ASC`
+	case "value":
+		return "GREATEST(stocks.qty, 0) * p.cost_price DESC, p.name ASC, stocks.product_id ASC"
+	case "sold":
+		return "v.sold_30d DESC, p.name ASC, stocks.product_id ASC"
+	}
+	return "p.name ASC, stocks.product_id ASC"
 }
 
 // stockBase menyusun query dasar saldo stok (JOIN produk, bertenant, sesuai
@@ -220,6 +290,9 @@ func ListStocks(ctx context.Context, f StockFilter, limit, offset int) ([]StockR
 		if f.LowOnly {
 			q = q.Where("stocks.qty <= p.min_stock")
 		}
+		if cond := stockStatusCond(f.Status); cond != "" {
+			q = q.Where(cond)
+		}
 		if f.Search != "" {
 			pola := "%" + escapeLike(f.Search) + "%"
 			q = q.Where("(p.name ILIKE ? OR p.sku ILIKE ? OR p.barcode ILIKE ?)", pola, pola, pola)
@@ -238,10 +311,29 @@ func ListStocks(ctx context.Context, f StockFilter, limit, offset int) ([]StockR
 		return []StockRow{}, 0, nil
 	}
 
+	// Laku 30 hari = keluar bersih lewat penjualan, dikurangi pembatalan &
+	// retur, ditambah yang terpakai sebagai bahan resep. Terakhir terjual
+	// diambil dari indeks (outlet, barang, waktu DESC) — berhenti di penjualan
+	// pertama yang ditemui, tidak memindai seluruh riwayat.
 	var rows []StockRow
 	err := build().
-		Select("stocks.outlet_id, stocks.product_id, stocks.variant_id, stocks.qty, stocks.reserved_qty, p.name AS product_name, p.min_stock, u.name AS unit_name").
-		Order("p.name ASC, stocks.product_id ASC").
+		Joins("LEFT JOIN categories c ON c.tenant_id = p.tenant_id AND c.id = p.category_id AND c.deleted_at IS NULL").
+		Joins(`LEFT JOIN LATERAL (
+			SELECT GREATEST(COALESCE(-SUM(m.qty_delta), 0), 0) AS sold_30d
+			FROM stock_movements m
+			WHERE ` + stockMoveMatch + `
+				AND m.kind IN ('sale', 'void', 'refund', 'recipe')
+				AND m.occurred_at >= now() - interval '` + stockWindow + `'
+		) v ON true`).
+		Select(`stocks.outlet_id, stocks.product_id, stocks.variant_id, stocks.qty, stocks.reserved_qty,
+			p.name AS product_name, p.min_stock, u.name AS unit_name,
+			COALESCE(p.sku, '') AS sku, COALESCE(p.image_url, '') AS image_url,
+			p.category_id, COALESCE(c.name, '') AS category_name, p.cost_price,
+			ROUND(GREATEST(stocks.qty, 0) * p.cost_price)::bigint AS stock_value,
+			v.sold_30d,
+			(SELECT m.occurred_at FROM stock_movements m WHERE ` + stockMoveMatch + ` AND m.kind = 'sale'
+				ORDER BY m.occurred_at DESC LIMIT 1) AS last_sold_at`).
+		Order(stockOrder(f.Sort)).
 		Limit(limit).Offset(offset).
 		Scan(&rows).Error
 	return rows, total, err
@@ -257,6 +349,15 @@ type StockRow struct {
 	ProductName string          `json:"product_name"`
 	MinStock    decimal.Decimal `json:"min_stock"`
 	UnitName    string          `json:"unit_name"`
+
+	SKU          string
+	ImageURL     string
+	CategoryID   *string
+	CategoryName string
+	CostPrice    int64
+	StockValue   int64           // max(qty,0) × harga modal
+	Sold30d      decimal.Decimal `gorm:"column:sold_30d"` // keluar bersih 30 hari terakhir
+	LastSoldAt   *time.Time
 }
 
 // MovementsByRef mengembalikan gerakan stok yang dihasilkan sebuah dokumen
@@ -295,6 +396,11 @@ type StockSummaryRow struct {
 	Out        int64
 	Negative   int64
 	StockValue int64
+	// Idle: masih ada barangnya tapi tidak terjual 30 hari (lihat
+	// stockIdleCond) — modal yang tertahan di rak. Bisa beririsan dengan
+	// safe/low; bukan keadaan kelima.
+	Idle      int64
+	IdleValue int64
 }
 
 // StockSummary merangkum saldo stok SELURUH barang (bukan satu halaman):
@@ -318,7 +424,9 @@ func StockSummary(ctx context.Context, outletID string) (StockSummaryRow, error)
 		COUNT(*) FILTER (WHERE stocks.qty > 0 AND stocks.qty <= p.min_stock) AS low,
 		COUNT(*) FILTER (WHERE stocks.qty = 0)                           AS out,
 		COUNT(*) FILTER (WHERE stocks.qty < 0)                           AS negative,
-		COALESCE(ROUND(SUM(GREATEST(stocks.qty, 0) * p.cost_price)), 0)::bigint AS stock_value`).
+		COALESCE(ROUND(SUM(GREATEST(stocks.qty, 0) * p.cost_price)), 0)::bigint AS stock_value,
+		COUNT(*) FILTER (WHERE ` + stockIdleCond + `)                         AS idle,
+		COALESCE(ROUND(SUM(stocks.qty * p.cost_price) FILTER (WHERE ` + stockIdleCond + `)), 0)::bigint AS idle_value`).
 		Scan(&r).Error
 	return r, err
 }

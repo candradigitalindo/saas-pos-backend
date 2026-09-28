@@ -117,7 +117,7 @@ menu aktif selalu digulir ke dalam pandangan.
 | Impor dari Excel/CSV | `POST /products/import` (dukung `dry_run`) | `product.import` |
 | Resep (F&B) | `GET\|PUT /products/:id/recipe` | `product.view` / `product.edit` |
 | Kategori, satuan, pemasok | `GET\|POST\|PUT\|DELETE /categories[/:id]` · `/units[/:id]` · `/suppliers[/:id]` | `product.view` / `product.edit` |
-| Saldo stok (cari, tabel di desktop) | `GET /stocks?outlet_id=&q=` | `stock.view` |
+| Stok — kartu kesehatan (nilai stok, bilah proporsi aman/hampir habis/habis/perlu dicocokkan yang sekaligus tombol saring, "Rp X modal tertahan di N barang tidak laku 30 hari"), cari + urutan (paling mendesak [bawaan]/paling laku/nilai terbesar/nama); baris: foto, kategori, keadaan + meteran sisa-terhadap-batas, sisa, laku 30 hari + "cukup ±N hari" (≤ 3 hari ditandai), nilai stok, Koreksi/Cocokkan. Saringan & urutan di URL. HP: kartu membuka Riwayat Stok, yang kini menampilkan saldo sekarang + tombol Koreksi/Cocokkan | `GET /stocks/summary` · `GET /stocks?outlet_id=&status=&sort=&q=` | `stock.view` |
 | Ringkasan stok (aman/hampir habis/habis/minus + nilai stok) | `GET /stocks/summary` | `stock.view` |
 | Kartu stok (riwayat keluar-masuk) | `GET /stock-movements?product_id=` | `stock.view` |
 | Koreksi stok | `POST /stock-adjustments` + `Idempotency-Key` | `stock.adjust` |

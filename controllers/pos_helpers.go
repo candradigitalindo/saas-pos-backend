@@ -60,6 +60,11 @@ func cashMovementToResponse(m models.CashMovement) structs.CashMovementResponse 
 }
 
 func stockRowToResponse(s repositories.StockRow) structs.StockResponse {
+	var lastSold *string
+	if s.LastSoldAt != nil {
+		t := s.LastSoldAt.UTC().Format(timeLayout)
+		lastSold = &t
+	}
 	return structs.StockResponse{
 		OutletID:    s.OutletID,
 		ProductID:   s.ProductID,
@@ -70,5 +75,14 @@ func stockRowToResponse(s repositories.StockRow) structs.StockResponse {
 		ReservedQty: s.ReservedQty.String(),
 		MinStock:    s.MinStock.String(),
 		Low:         s.Qty.LessThanOrEqual(s.MinStock),
+
+		SKU:          s.SKU,
+		ImageURL:     s.ImageURL,
+		CategoryID:   s.CategoryID,
+		CategoryName: s.CategoryName,
+		CostPrice:    s.CostPrice,
+		StockValue:   s.StockValue,
+		Sold30d:      s.Sold30d.String(),
+		LastSoldAt:   lastSold,
 	}
 }

@@ -182,6 +182,15 @@ type StockResponse struct {
 	ReservedQty string `json:"reserved_qty"`
 	MinStock    string `json:"min_stock"`
 	Low         bool   `json:"low"`
+
+	SKU          string  `json:"sku,omitempty"`
+	ImageURL     string  `json:"image_url,omitempty"`
+	CategoryID   *string `json:"category_id"`
+	CategoryName string  `json:"category_name,omitempty"`
+	CostPrice    int64   `json:"cost_price"`
+	StockValue   int64   `json:"stock_value"`  // max(qty,0) × harga modal
+	Sold30d      string  `json:"sold_30d"`     // keluar bersih 30 hari terakhir
+	LastSoldAt   *string `json:"last_sold_at"` // null = belum pernah terjual
 }
 
 // StockSummaryResponse menjawab GET /stocks/summary — hitungan atas SELURUH
@@ -193,6 +202,8 @@ type StockSummaryResponse struct {
 	Out        int64 `json:"out"`         // qty = 0
 	Negative   int64 `json:"negative"`    // qty < 0 — perlu dicocokkan
 	StockValue int64 `json:"stock_value"` // Σ max(qty,0) × harga modal
+	Idle       int64 `json:"idle"`        // ada barangnya, tak terjual 30 hari
+	IdleValue  int64 `json:"idle_value"`  // modal yang tertahan di barang idle
 }
 
 type StockMovementResponse struct {

@@ -95,7 +95,16 @@ export interface RingkasanStok {
   negative: number
   /** Σ max(qty, 0) × harga modal, rupiah */
   stock_value: number
+  /** Masih ada barangnya tapi tidak terjual 30 hari — bisa beririsan dengan safe/low. */
+  idle: number
+  /** Modal yang tertahan di barang `idle`, rupiah */
+  idle_value: number
 }
+
+/** Keadaan yang bisa disaring (?status=) — batasnya sama dengan ringkasan. */
+export type KeadaanStok = 'safe' | 'low' | 'out' | 'negative' | 'idle'
+/** Urutan daftar stok (?sort=). */
+export type UrutanStok = 'urgent' | 'name' | 'value' | 'sold'
 
 export const stokApi = {
   saldo: (
@@ -103,12 +112,14 @@ export const stokApi = {
     low?: boolean,
     page = 1,
     limit = 100,
-    opsi: { cari?: string; produk?: string[] } = {},
+    opsi: { cari?: string; produk?: string[]; keadaan?: KeadaanStok; urut?: UrutanStok } = {},
   ) =>
     api.get<Halaman<SaldoStok>>('/stocks', {
       query: {
         outlet_id,
         low: low ? 'true' : undefined,
+        status: opsi.keadaan,
+        sort: opsi.urut,
         q: opsi.cari || undefined,
         product_ids: opsi.produk?.length ? opsi.produk.join(',') : undefined,
         page,
