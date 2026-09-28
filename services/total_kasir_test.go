@@ -84,7 +84,7 @@ func TestKontrakTotalKasir(t *testing.T) {
 				ProductID: id, Qty: decimal.RequireFromString(b.Qty), DiscountAmount: b.Diskon,
 			})
 		}
-		_, tot, err := priceCheckout(in, outlet, produk, nil)
+		_, tot, err := priceCheckout(in, outlet, produk, nil, nil)
 		if err != nil {
 			t.Fatalf("%s: %v", k.Nama, err)
 		}

@@ -29,8 +29,20 @@ export interface Produk {
   description?: string
   /** Varian AKTIF (kasir: dari data lokal) — pilihan dengan selisih harga. */
   varian?: VarianProduk[]
+  /**
+   * Harga grosir per jumlah, jumlah terkecil dulu. Dari API: GET satu barang;
+   * di kasir: dari data lokal (daftar harga default).
+   */
+  wholesale_prices?: TingkatGrosir[]
   created_at: string
   updated_at: string
+}
+
+/** Satu tingkat harga grosir: beli minimal min_qty → harga satuan price. */
+export interface TingkatGrosir {
+  /** Desimal string, > 1. */
+  min_qty: string
+  price: number
 }
 
 /**

@@ -17,6 +17,10 @@
  *     Nominal selalu dijepit ke batas yang diterima server (diskon baris ≤
  *     nilai baris, diskon transaksi ≤ total baris) supaya pengurangan qty
  *     tidak membuat checkout ditolak.
+ *   - Harga grosir per jumlah dipilih dari TOTAL jumlah barang itu di
+ *     keranjang (semua varian dijumlah) — aturan yang sama dengan server.
+ *     Karena itu fungsi harga menerima `qtyProduk`; tanpa itu dipakai qty
+ *     barisnya sendiri.
  */
 import { useCallback, useMemo, useState } from 'react'
 import Decimal from 'decimal.js'
@@ -84,17 +88,20 @@ function bulat(d: Decimal): number {
 }
 
 /** Nilai kotor baris = bulat(qty × harga), sama dengan server. */
-export function kotorBaris(b: Pick<BarisKeranjang, 'produk' | 'varian' | 'qty'>): number {
+export function kotorBaris(b: Pick<BarisKeranjang, 'produk' | 'varian' | 'qty'>, qtyProduk?: string): number {
   try {
-    return bulat(new Decimal(b.qty || '0').mul(hargaBaris(b)))
+    return bulat(new Decimal(b.qty || '0').mul(hargaBaris(b, qtyProduk)))
   } catch {
     return 0
   }
 }
 
 /** Diskon baris yang berlaku (rupiah), sudah dijepit 0..nilai baris. */
-export function diskonBaris(b: Pick<BarisKeranjang, 'produk' | 'varian' | 'qty' | 'diskon' | 'diskonPersen'>): number {
-  const kotor = kotorBaris(b)
+export function diskonBaris(
+  b: Pick<BarisKeranjang, 'produk' | 'varian' | 'qty' | 'diskon' | 'diskonPersen'>,
+  qtyProduk?: string,
+): number {
+  const kotor = kotorBaris(b, qtyProduk)
   const mentah =
     b.diskonPersen !== undefined ? bulat(new Decimal(kotor).mul(b.diskonPersen).div(100)) : b.diskon
   return Math.min(Math.max(0, mentah), kotor)
@@ -104,9 +111,28 @@ export function kunciBaris(produkId: string, varianId?: string): string {
   return varianId ? `${produkId}|${varianId}` : produkId
 }
 
-/** Harga satuan pratinjau: harga jual + selisih varian. */
-export function hargaBaris(b: Pick<BarisKeranjang, 'produk' | 'varian'>): number {
-  return b.produk.sell_price + (b.varian?.price_delta ?? 0)
+/**
+ * Harga satuan dasar untuk total jumlah `qtyTotal`: tingkat grosir ber-jumlah
+ * minimal terbesar yang terpenuhi, selain itu harga jual (services.hargaDasarGrosir).
+ */
+export function hargaGrosir(produk: Pick<Produk, 'sell_price' | 'wholesale_prices'>, qtyTotal: string): number {
+  let harga = produk.sell_price
+  for (const t of produk.wholesale_prices ?? []) {
+    if (bandingQty(qtyTotal, t.min_qty) >= 0) harga = t.price // urut jumlah menaik → yang terakhir cocok menang
+  }
+  return harga
+}
+
+/** Harga satuan pratinjau: harga dasar (grosir bila memenuhi) + selisih varian. */
+export function hargaBaris(b: Pick<BarisKeranjang, 'produk' | 'varian' | 'qty'>, qtyProduk?: string): number {
+  return hargaGrosir(b.produk, qtyProduk ?? b.qty) + (b.varian?.price_delta ?? 0)
+}
+
+/** Total qty per barang di keranjang (semua varian dijumlah) — dasar harga grosir. */
+export function qtyPerProduk(baris: Pick<BarisKeranjang, 'produk' | 'qty'>[]): Map<string, string> {
+  const peta = new Map<string, string>()
+  for (const b of baris) peta.set(b.produk.id, tambahQty(peta.get(b.produk.id) ?? '0', b.qty))
+  return peta
 }
 
 /** "Kopi (Besar)" — sama dengan nama yang dicetak server di struk. */
@@ -213,7 +239,11 @@ export function useKeranjang(aturan?: AturanHarga): Keranjang {
 
 /** Baris keranjang dalam bentuk yang dipakai hitungTotal. */
 export function barisHitung(baris: BarisKeranjang[]) {
-  return baris.map((b) => ({ harga: hargaBaris(b), qty: b.qty, diskon: diskonBaris(b) }))
+  const total = qtyPerProduk(baris)
+  return baris.map((b) => {
+    const q = total.get(b.produk.id)
+    return { harga: hargaBaris(b, q), qty: b.qty, diskon: diskonBaris(b, q) }
+  })
 }
 
 /**
@@ -231,13 +261,17 @@ export function nominalDiskonTransaksi(tanpaDiskon: RincianTotal, d: DiskonTrans
 
 /** Menyusun item checkout dari keranjang. Perhatikan: TANPA harga. */
 export function itemUntukCheckout(baris: BarisKeranjang[]) {
-  return baris.map((b) => ({
-    product_id: b.produk.id,
-    ...(b.varian ? { variant_id: b.varian.id } : {}),
-    qty: b.qty,
-    ...(diskonBaris(b) > 0 ? { discount_amount: diskonBaris(b) } : {}),
-    ...(b.catatan?.trim() ? { note: b.catatan.trim() } : {}),
-  }))
+  const total = qtyPerProduk(baris)
+  return baris.map((b) => {
+    const diskon = diskonBaris(b, total.get(b.produk.id))
+    return {
+      product_id: b.produk.id,
+      ...(b.varian ? { variant_id: b.varian.id } : {}),
+      qty: b.qty,
+      ...(diskon > 0 ? { discount_amount: diskon } : {}),
+      ...(b.catatan?.trim() ? { note: b.catatan.trim() } : {}),
+    }
+  })
 }
 
 /** Apakah stok cukup untuk qty yang diminta. Dipakai menandai kartu "HABIS". */

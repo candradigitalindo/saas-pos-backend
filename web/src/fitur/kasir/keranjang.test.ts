@@ -157,6 +157,28 @@ describe('keranjang', () => {
     expect(result.current.diskonTransaksiNominal).toBe(11000)
   })
 
+  it('harga grosir dipilih dari TOTAL jumlah barang (semua varian), varian menambah selisihnya', () => {
+    const { result } = renderHook(() => useKeranjang())
+    const galon: Produk = {
+      ...produk('G1', 10000, 'Galon'),
+      wholesale_prices: [
+        { min_qty: '6', price: 9500 },
+        { min_qty: '12', price: 9000 },
+      ],
+    }
+    const besar: VarianProduk = { id: 'VB', product_id: 'G1', name: 'Besar', price_delta: 2000, is_active: true }
+    act(() => result.current.tambah(galon, '5'))
+    expect(result.current.pratinjauTotal).toBe(50000)
+    act(() => result.current.tambah(galon, '1'))
+    expect(result.current.pratinjauTotal).toBe(57000) // 6 × 9.500
+    act(() => result.current.tambah(galon, '6', besar))
+    // 12 galon total → dasar 9.000; Besar +2.000 = 11.000.
+    expect(result.current.pratinjauTotal).toBe(6 * 9000 + 6 * 11000)
+    // Diskon persen dihitung dari harga grosir, bukan harga jual.
+    act(() => result.current.aturBaris('G1', { diskon: 0, diskonPersen: 10 }))
+    expect(itemUntukCheckout(result.current.baris)[0]?.discount_amount).toBe(5400)
+  })
+
   it('mengosongkan keranjang setelah transaksi selesai', () => {
     const { result } = renderHook(() => useKeranjang())
     act(() => result.current.tambah(produk('P1', 18000)))

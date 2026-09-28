@@ -11,6 +11,8 @@ import {
   type SatuanLokal,
   type StokLokal,
   type VarianLokal,
+  type DaftarHargaLokal,
+  type HargaProdukLokal,
 } from './db'
 
 /**
@@ -56,6 +58,16 @@ export interface PerubahanTarik {
     barcode: string | null
     price_delta: number
     is_active: boolean
+    sync_version: number
+  }[]
+  price_lists?: null | { id: string; name: string; kind: string; is_default: boolean; sync_version: number }[]
+  product_prices?: null | {
+    id: string
+    product_id: string
+    variant_id: string | null
+    price_list_id: string
+    min_qty: string
+    price: number
     sync_version: number
   }[]
   customers: null | {
@@ -106,6 +118,8 @@ export async function tarikMasterData(outletId: string): Promise<{ halaman: numb
       units: mentah.units ?? [],
       products: mentah.products ?? [],
       variants: mentah.product_variants ?? [],
+      priceLists: mentah.price_lists ?? [],
+      productPrices: mentah.product_prices ?? [],
       customers: mentah.customers ?? [],
       stocks: mentah.stocks ?? [],
       deleted: mentah.deleted ?? {},
@@ -114,7 +128,7 @@ export async function tarikMasterData(outletId: string): Promise<{ halaman: numb
 
     await db.transaction(
       'rw',
-      [db.produk, db.varian, db.kategori, db.satuan, db.pelanggan, db.stok, db.meta],
+      [db.produk, db.varian, db.daftarHarga, db.hargaProduk, db.kategori, db.satuan, db.pelanggan, db.stok, db.meta],
       async () => {
         if (p.categories.length) {
           await db.kategori.bulkPut(
@@ -154,6 +168,31 @@ export async function tarikMasterData(outletId: string): Promise<{ halaman: numb
               price_delta: v.price_delta,
               is_active: v.is_active,
               sync_version: v.sync_version,
+            })),
+          )
+        }
+
+        if (p.priceLists.length) {
+          await db.daftarHarga.bulkPut(
+            p.priceLists.map<DaftarHargaLokal>((l) => ({
+              id: l.id,
+              name: l.name,
+              kind: l.kind,
+              is_default: l.is_default,
+              sync_version: l.sync_version,
+            })),
+          )
+        }
+        if (p.productPrices.length) {
+          await db.hargaProduk.bulkPut(
+            p.productPrices.map<HargaProdukLokal>((h) => ({
+              id: h.id,
+              product_id: h.product_id,
+              variant_id: h.variant_id,
+              price_list_id: h.price_list_id,
+              min_qty: h.min_qty,
+              price: h.price,
+              sync_version: h.sync_version,
             })),
           )
         }
@@ -210,6 +249,14 @@ async function terapkanPenghapusan(deleted: Record<string, string[]>): Promise<v
         // Saldo stok & varian barang yang dihapus ikut dibuang supaya tidak jadi hantu.
         await db.stok.where('product_id').anyOf(ids).delete()
         await db.varian.where('product_id').anyOf(ids).delete()
+        await db.hargaProduk.where('product_id').anyOf(ids).delete()
+        break
+      case 'price_lists':
+        await db.daftarHarga.bulkDelete(ids)
+        await db.hargaProduk.where('price_list_id').anyOf(ids).delete()
+        break
+      case 'product_prices':
+        await db.hargaProduk.bulkDelete(ids)
         break
       case 'product_variants':
         await db.varian.bulkDelete(ids)
@@ -224,8 +271,8 @@ async function terapkanPenghapusan(deleted: Record<string, string[]>): Promise<v
         await db.pelanggan.bulkDelete(ids)
         break
       default:
-        // Tabel yang belum dipakai layar mana pun (daftar harga)
-        // sengaja diabaikan, bukan dianggap galat.
+        // Tabel yang belum dipakai layar mana pun sengaja diabaikan,
+        // bukan dianggap galat.
         break
     }
   }

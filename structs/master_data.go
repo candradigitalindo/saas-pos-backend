@@ -91,6 +91,20 @@ type ProductCreateRequest struct {
 	ImageURL   string `json:"image_url" binding:"omitempty,max=500"`
 	// Description: untuk menu aplikasi antar (GoFood menampilkan 250 karakter).
 	Description string `json:"description" binding:"omitempty,max=500"`
+	// WholesalePrices: harga grosir per jumlah (maks. 5 tingkat).
+	WholesalePrices []WholesalePriceRequest `json:"wholesale_prices" binding:"omitempty,max=5,dive"`
+}
+
+// WholesalePriceRequest: satu tingkat harga grosir — beli minimal MinQty
+// (total barang itu dalam satu transaksi), harga satuannya Price.
+type WholesalePriceRequest struct {
+	MinQty string `json:"min_qty" binding:"required"` // desimal string, > 1
+	Price  int64  `json:"price" binding:"required,gt=0"`
+}
+
+type WholesalePriceResponse struct {
+	MinQty string `json:"min_qty"`
+	Price  int64  `json:"price"`
 }
 
 type ProductUpdateRequest struct {
@@ -106,6 +120,8 @@ type ProductUpdateRequest struct {
 	IsActive    *bool   `json:"is_active" binding:"omitempty"`
 	ImageURL    *string `json:"image_url" binding:"omitempty,max=500"`
 	Description *string `json:"description" binding:"omitempty,max=500"`
+	// WholesalePrices: nil = tidak diubah; [] = semua tingkat dihapus.
+	WholesalePrices *[]WholesalePriceRequest `json:"wholesale_prices" binding:"omitempty,dive"`
 }
 
 type ProductResponse struct {
@@ -124,8 +140,10 @@ type ProductResponse struct {
 	IsActive     bool   `json:"is_active"`
 	ImageURL     string `json:"image_url,omitempty"`
 	Description  string `json:"description,omitempty"`
-	CreatedAt    string `json:"created_at"`
-	UpdatedAt    string `json:"updated_at"`
+	// WholesalePrices hanya di GET satu barang & balasan buat/ubah.
+	WholesalePrices []WholesalePriceResponse `json:"wholesale_prices,omitempty"`
+	CreatedAt       string                   `json:"created_at"`
+	UpdatedAt       string                   `json:"updated_at"`
 }
 
 // ProductVariantRequest: satu varian (PUT = ganti utuh).

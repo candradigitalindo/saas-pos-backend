@@ -9,6 +9,8 @@ import { pratinjauBaris } from '@/bersama/util/uang'
 import type { ItemTransaksi, Shift, Transaksi } from '@/bersama/tipe/pos'
 import { kasirApi, type InputCheckout } from './api'
 import { hitungTotal, type AturanHarga, type BarisHitung } from '@/bersama/util/total'
+import { tambahQty } from '@/bersama/util/desimal'
+import { hargaGrosir } from './keranjang'
 
 /**
  * Shift yang sedang terbuka di toko aktif.
@@ -132,11 +134,15 @@ async function simpanKeAntrean(
 
   const items: ItemTransaksi[] = []
   const untukHitung: BarisHitung[] = []
+  // Harga grosir memakai total jumlah per barang, sama dengan server.
+  const totalQty = new Map<string, string>()
+  for (const it of input.items) totalQty.set(it.product_id, tambahQty(totalQty.get(it.product_id) ?? '0', it.qty))
   for (const [i, it] of input.items.entries()) {
     const p = await produkLokal(it.product_id)
     const v = it.variant_id ? await varianLokal(it.variant_id) : undefined
-    // Harga & nama mengikuti server: harga jual + selisih varian, "Kopi (Besar)".
-    const hargaSatuan = (p?.sell_price ?? 0) + (v?.price_delta ?? 0)
+    // Harga & nama mengikuti server: harga dasar (grosir bila memenuhi) +
+    // selisih varian, "Kopi (Besar)".
+    const hargaSatuan = (p ? hargaGrosir(p, totalQty.get(it.product_id) ?? it.qty) : 0) + (v?.price_delta ?? 0)
     const lineTotal = pratinjauBaris(hargaSatuan, it.qty, it.discount_amount ?? 0)
     untukHitung.push({ harga: hargaSatuan, qty: it.qty, diskon: it.discount_amount ?? 0 })
     const nama = p?.name ?? 'Barang'

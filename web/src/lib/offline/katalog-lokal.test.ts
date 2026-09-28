@@ -115,6 +115,29 @@ describe('varian di katalog lokal', () => {
     expect(await varianDariBarcode('KOPI-X')).toBeUndefined()
   })
 
+  it('harga grosir diambil dari daftar harga DEFAULT saja, jumlah terkecil dulu', async () => {
+    await db.daftarHarga.bulkPut([
+      { id: 'L1', name: 'Harga umum', kind: 'retail', is_default: true, sync_version: 1 },
+      { id: 'L2', name: 'Member', kind: 'member', is_default: false, sync_version: 1 },
+    ])
+    const h = (id: string, list: string, min: string, price: number, variant: string | null = null) => ({
+      id, product_id: 'P1', variant_id: variant, price_list_id: list, min_qty: min, price, sync_version: 1,
+    })
+    await db.hargaProduk.bulkPut([
+      h('H1', 'L1', '12', 12000),
+      h('H2', 'L1', '6', 13000),
+      h('H3', 'L2', '1', 11000),
+      h('H4', 'L1', '6', 1, 'Besar'),
+    ])
+    const p = await produkLokal('P1')
+    expect(p?.wholesale_prices).toEqual([
+      { min_qty: '6', price: 13000 },
+      { min_qty: '12', price: 12000 },
+    ])
+    await db.daftarHarga.clear()
+    await db.hargaProduk.clear()
+  })
+
   it('varian dari barang nonaktif tidak terpindai', async () => {
     await db.produk.put(produk({ id: 'P1', name: 'Kopi', is_active: false }))
     await db.varian.put(varian('Besar', { sku: 'KOPI-L' }))

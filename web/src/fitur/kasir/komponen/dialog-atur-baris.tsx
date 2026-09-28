@@ -16,11 +16,14 @@ import { KolomDiskon, galatDiskon, type NilaiDiskon } from './kolom-diskon'
  */
 export function DialogAturBaris({
   baris,
+  qtyProduk,
   bolehDiskon,
   onSimpan,
   onTutup,
 }: {
   baris: BarisKeranjang
+  /** Total jumlah barang ini di keranjang — penentu harga grosir. */
+  qtyProduk?: string
   bolehDiskon: boolean
   onSimpan: (isi: Pick<BarisKeranjang, 'catatan' | 'diskon' | 'diskonPersen'>) => void
   onTutup: () => void
@@ -36,15 +39,15 @@ export function DialogAturBaris({
     diskon: diskon.jenis === 'nominal' ? diskon.nilai : 0,
     diskonPersen: diskon.jenis === 'persen' && diskon.nilai > 0 ? diskon.nilai : undefined,
   }
-  const kotor = kotorBaris(baris)
-  const potongan = diskonBaris({ ...baris, ...isi })
+  const kotor = kotorBaris(baris, qtyProduk)
+  const potongan = diskonBaris({ ...baris, ...isi }, qtyProduk)
   const galat = bolehDiskon ? galatDiskon(diskon, kotor) : undefined
 
   return (
     <Dialog open onOpenChange={(o) => !o && onTutup()}>
       <IsiDialog
         judul={namaBaris(baris)}
-        keterangan={`${formatQty(baris.qty)} ${baris.produk.unit_name ?? ''} × ${formatRupiah(hargaBaris(baris))}`}
+        keterangan={`${formatQty(baris.qty)} ${baris.produk.unit_name ?? ''} × ${formatRupiah(hargaBaris(baris, qtyProduk))}`}
       >
         <form
           onSubmit={(e) => {

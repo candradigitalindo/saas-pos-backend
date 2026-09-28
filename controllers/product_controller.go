@@ -106,8 +106,15 @@ func GetProduct(c *gin.Context) {
 		notFoundOr(c, err, repositories.ErrProductNotFound, "Produk tidak ditemukan")
 		return
 	}
+	res := productToResponse(row)
+	tiers, err := services.WholesaleTiersResponse(c.Request.Context(), row.ID)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	res.WholesalePrices = tiers
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.ProductResponse]{
-		Success: true, Message: "Berhasil mengambil data produk", Data: productToResponse(row),
+		Success: true, Message: "Berhasil mengambil data produk", Data: res,
 	})
 }
 
@@ -130,6 +137,11 @@ func CreateProduct(c *gin.Context) {
 	}
 	if alamatUnggahanKita(req.ImageURL) {
 		badRequest(c, "image_url", pesanFotoLewatUnggah)
+		return
+	}
+	grosir, err := services.NormalWholesaleTiers(req.WholesalePrices)
+	if err != nil {
+		respondServiceError(c, err)
 		return
 	}
 
@@ -156,7 +168,13 @@ func CreateProduct(c *gin.Context) {
 		if err := cekKodeVarian(ctx, tx, row.SKU, row.Barcode); err != nil {
 			return err
 		}
-		return repositories.CreateProduct(ctx, tx, &row)
+		if err := repositories.CreateProduct(ctx, tx, &row); err != nil {
+			return err
+		}
+		if len(grosir) == 0 {
+			return nil
+		}
+		return services.SaveWholesaleTiers(ctx, tx, row.ID, grosir)
 	}); err != nil {
 		if helpers.IsDuplicateEntryError(err) || errors.Is(err, errKodeDipakaiVarian) {
 			conflict(c, "sku", "SKU atau barcode sudah dipakai")
@@ -168,8 +186,10 @@ func CreateProduct(c *gin.Context) {
 
 	row.Unit = &unit
 	row.Category = cat
+	res := productToResponse(row)
+	res.WholesalePrices = wholesaleToResponse(grosir)
 	c.JSON(http.StatusCreated, structs.SuccessResponse[structs.ProductResponse]{
-		Success: true, Message: "Produk berhasil dibuat", Data: productToResponse(row),
+		Success: true, Message: "Produk berhasil dibuat", Data: res,
 	})
 }
 
@@ -251,6 +271,14 @@ func UpdateProduct(c *gin.Context) {
 	if req.Description != nil {
 		row.Description = strings.TrimSpace(*req.Description)
 	}
+	var grosir []models.ProductPrice
+	if req.WholesalePrices != nil {
+		var err error
+		if grosir, err = services.NormalWholesaleTiers(*req.WholesalePrices); err != nil {
+			respondServiceError(c, err)
+			return
+		}
+	}
 
 	if err := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
 		var kode []*string
@@ -263,7 +291,13 @@ func UpdateProduct(c *gin.Context) {
 		if err := cekKodeVarian(ctx, tx, kode...); err != nil {
 			return err
 		}
-		return repositories.UpdateProduct(ctx, tx, &row)
+		if err := repositories.UpdateProduct(ctx, tx, &row); err != nil {
+			return err
+		}
+		if req.WholesalePrices == nil {
+			return nil
+		}
+		return services.SaveWholesaleTiers(ctx, tx, row.ID, grosir)
 	}); err != nil {
 		if helpers.IsDuplicateEntryError(err) || errors.Is(err, errKodeDipakaiVarian) {
 			conflict(c, "sku", "SKU atau barcode sudah dipakai")
@@ -272,9 +306,24 @@ func UpdateProduct(c *gin.Context) {
 		notFoundOr(c, err, repositories.ErrProductNotFound, "Produk tidak ditemukan")
 		return
 	}
+	res := productToResponse(row)
+	tiers, err := services.WholesaleTiersResponse(ctx, row.ID)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	res.WholesalePrices = tiers
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.ProductResponse]{
-		Success: true, Message: "Produk berhasil diperbarui", Data: productToResponse(row),
+		Success: true, Message: "Produk berhasil diperbarui", Data: res,
 	})
+}
+
+func wholesaleToResponse(tiers []models.ProductPrice) []structs.WholesalePriceResponse {
+	out := make([]structs.WholesalePriceResponse, 0, len(tiers))
+	for _, t := range tiers {
+		out = append(out, structs.WholesalePriceResponse{MinQty: t.MinQty.String(), Price: t.Price})
+	}
+	return out
 }
 
 // DeleteProduct menghapus (soft delete) produk.

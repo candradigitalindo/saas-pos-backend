@@ -223,7 +223,7 @@ describe('tarik master data', () => {
         cursor: 1,
         has_more: false,
         safety_lag: 0,
-        deleted: { price_lists: ['X1'] },
+        deleted: { dining_tables: ['X1'] },
       }),
     )
     await expect(tarikMasterData('O1')).resolves.toBeDefined()

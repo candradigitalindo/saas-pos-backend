@@ -4,7 +4,7 @@ import { Tombol } from '@/bersama/ui/tombol'
 import { StepperJumlah } from '@/bersama/ui/stepper-jumlah'
 import { useIzin } from '@/bersama/hooks/use-sesi'
 import { formatRupiah, pratinjauBaris } from '@/bersama/util/uang'
-import { diskonBaris, hargaBaris, namaBaris, type Keranjang } from '../keranjang'
+import { diskonBaris, hargaBaris, hargaGrosir, namaBaris, type Keranjang } from '../keranjang'
 import { DialogAturBaris } from './dialog-atur-baris'
 import { DialogDiskonTransaksi } from './dialog-diskon-transaksi'
 
@@ -82,22 +82,29 @@ export function PanelKeranjang({
           </p>
         ) : (
           <ul className="divide-y divide-garis">
-            {baris.map((b) => (
+            {baris.map((b) => {
+              // Harga grosir dipilih dari total barang ini (semua varian).
+              const q = keranjang.qtyDari(b.produk.id)
+              const harga = hargaBaris(b, q)
+              const diskon = diskonBaris(b, q)
+              const grosir = hargaGrosir(b.produk, q) !== b.produk.sell_price
+              return (
               <li key={b.kunci} className="flex flex-col gap-2 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="font-semibold text-teks-utama">{namaBaris(b)}</p>
                     <p className="text-keterangan tabular-nums text-teks-redup">
-                      {formatRupiah(hargaBaris(b))} × {b.qty}
-                      {diskonBaris(b) > 0 &&
-                        ` − ${formatRupiah(diskonBaris(b))}${b.diskonPersen !== undefined ? ` (${b.diskonPersen}%)` : ''}`}
+                      {formatRupiah(harga)} × {b.qty}
+                      {grosir && <span className="font-semibold text-utama"> · harga grosir</span>}
+                      {diskon > 0 &&
+                        ` − ${formatRupiah(diskon)}${b.diskonPersen !== undefined ? ` (${b.diskonPersen}%)` : ''}`}
                     </p>
                     {b.catatan && (
                       <p className="break-words text-keterangan italic text-teks-sekunder">“{b.catatan}”</p>
                     )}
                   </div>
                   <p className="shrink-0 font-bold tabular-nums text-teks-utama">
-                    {formatRupiah(pratinjauBaris(hargaBaris(b), b.qty, diskonBaris(b)))}
+                    {formatRupiah(pratinjauBaris(harga, b.qty, diskon))}
                   </p>
                 </div>
 
@@ -128,7 +135,8 @@ export function PanelKeranjang({
                   </button>
                 </div>
               </li>
-            ))}
+              )
+            })}
           </ul>
         )}
       </div>
@@ -198,6 +206,7 @@ export function PanelKeranjang({
       {barisAtur && (
         <DialogAturBaris
           baris={barisAtur}
+          qtyProduk={keranjang.qtyDari(barisAtur.produk.id)}
           bolehDiskon={bolehDiskon}
           onSimpan={(isi) => {
             keranjang.aturBaris(barisAtur.kunci, isi)

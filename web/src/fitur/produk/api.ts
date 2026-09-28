@@ -1,5 +1,5 @@
 import { api, type Halaman } from '@/lib/api-client'
-import type { Kategori, Pemasok, Produk, Satuan, VarianProduk } from '@/bersama/tipe/katalog'
+import type { Kategori, Pemasok, Produk, Satuan, TingkatGrosir, VarianProduk } from '@/bersama/tipe/katalog'
 
 export interface InputProduk {
   name: string
@@ -14,6 +14,8 @@ export interface InputProduk {
   is_active?: boolean
   /** Untuk menu aplikasi antar; string kosong = dihapus. */
   description?: string
+  /** Harga grosir per jumlah; [] = dihapus semua. */
+  wholesale_prices?: TingkatGrosir[]
 }
 
 /** Isi varian. PUT mengganti utuh, jadi semua kolom selalu dikirim. */

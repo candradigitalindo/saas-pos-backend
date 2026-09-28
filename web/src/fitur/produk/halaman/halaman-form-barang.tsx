@@ -16,6 +16,8 @@ import { PemindaiBarcode } from '@/bersama/komponen/pemindai-barcode'
 import { bisaMemindai } from '@/bersama/hooks/use-pemindai'
 import { produkApi } from '../api'
 import { BagianVarian } from '../komponen/bagian-varian'
+import { IsianGrosir, siapkanGrosir } from '../komponen/isian-grosir'
+import type { TingkatGrosir } from '@/bersama/tipe/katalog'
 import { formatRupiah } from '@/bersama/util/uang'
 import { cn } from '@/bersama/util/cn'
 
@@ -64,6 +66,7 @@ export function HalamanFormBarang() {
     track_stock: true,
     description: '',
   })
+  const [grosir, setGrosir] = useState<TingkatGrosir[]>([])
   const [bukaDetail, setBukaDetail] = useState(false)
   const [bukaPindai, setBukaPindai] = useState(false)
   const [kolomGalat, setKolomGalat] = useState<Record<string, string>>({})
@@ -85,6 +88,7 @@ export function HalamanFormBarang() {
       track_stock: p.track_stock,
       description: p.description ?? '',
     })
+    setGrosir(p.wholesale_prices ?? [])
     setFotoURL(p.image_url || null)
   }, [detail.data])
 
@@ -97,7 +101,10 @@ export function HalamanFormBarang() {
 
   const simpan = useMutation({
     mutationFn: () => {
+      const g = siapkanGrosir(grosir)
+      if ('galat' in g) return Promise.reject(new GalatAPI(400, g.galat))
       const isi = {
+        wholesale_prices: g.tingkat,
         name: form.name.trim(),
         unit_id: form.unit_id,
         sell_price: form.sell_price,
@@ -136,7 +143,9 @@ export function HalamanFormBarang() {
     onError: (e) => {
       if (e instanceof GalatAPI) {
         setKolomGalat(e.kolom)
-        setGalat(e.status === 422 ? null : e.pesan)
+        // 422 dari validasi kolom tampil di kolomnya; 422 dari aturan layanan
+        // (mis. tingkat grosir) hanya membawa `request` — tanpa ini pesannya hilang.
+        setGalat(e.status === 422 ? (e.kolom.request ?? null) : e.pesan)
         // Kolom tersembunyi yang bermasalah harus ikut terlihat, kalau tidak
         // pengguna melihat form yang menolak simpan tanpa alasan yang tampak.
         if (['sku', 'barcode', 'min_stock', 'category_id'].some((k) => e.kolom[k])) {
@@ -235,6 +244,17 @@ export function HalamanFormBarang() {
           </div>
 
           <InfoUntung jual={form.sell_price} modal={form.cost_price} />
+
+          <IsianGrosir
+            nilai={grosir}
+            onNilai={(v) => {
+              setGrosir(v)
+              setGalat(null)
+            }}
+            hargaJual={form.sell_price}
+            hargaBeli={form.cost_price}
+            satuan={satuan.data?.data.find((s) => s.id === form.unit_id)?.name}
+          />
 
           <button
             type="button"

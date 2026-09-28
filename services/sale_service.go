@@ -170,9 +170,13 @@ func Checkout(ctx context.Context, in CheckoutInput) (int, []byte, bool, error) 
 		if err != nil {
 			return err
 		}
+		grosir, err := repositories.WholesaleTiers(ctx, tx, productIDs)
+		if err != nil {
+			return err
+		}
 
 		// 4. Hitung per baris lalu jumlahkan.
-		priced, totals, err := priceCheckout(in, outlet, products, variants)
+		priced, totals, err := priceCheckout(in, outlet, products, variants, grosir)
 		if err != nil {
 			return err
 		}
@@ -290,12 +294,19 @@ type saleTotals struct {
 
 // priceCheckout membuat SNAPSHOT tiap baris dan menghitung total. Harga jual &
 // modal diambil dari master produk (+ price_delta varian), TIDAK dari klien.
-func priceCheckout(in CheckoutInput, outlet models.Outlet, products map[string]models.Product, variants map[string]models.ProductVariant) ([]pricedItem, saleTotals, error) {
+func priceCheckout(in CheckoutInput, outlet models.Outlet, products map[string]models.Product, variants map[string]models.ProductVariant, grosir map[string][]models.ProductPrice) ([]pricedItem, saleTotals, error) {
 	taxRate := outlet.TaxRate
 	taxOn := outlet.TaxEnabled && taxRate.GreaterThan(decimal.Zero)
 
 	out := make([]pricedItem, 0, len(in.Items))
 	var t saleTotals
+
+	// Harga grosir memakai TOTAL jumlah barang itu di transaksi ini — "Kopi
+	// (Besar) ×6 + Kopi (Kecil) ×6" = 12 kopi, sama dengan kasir menghitungnya.
+	totalQty := map[string]decimal.Decimal{}
+	for _, it := range in.Items {
+		totalQty[it.ProductID] = totalQty[it.ProductID].Add(it.Qty)
+	}
 
 	for _, it := range in.Items {
 		p, ok := products[it.ProductID]
@@ -307,7 +318,7 @@ func priceCheckout(in CheckoutInput, outlet models.Outlet, products map[string]m
 			unitName = p.Unit.Name
 		}
 
-		unitPrice := p.SellPrice
+		unitPrice := hargaDasarGrosir(p.SellPrice, grosir[p.ID], totalQty[p.ID])
 		nama := p.Name
 		if it.VariantID != "" {
 			v, ok := variants[it.VariantID]

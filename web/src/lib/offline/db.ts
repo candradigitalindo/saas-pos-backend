@@ -51,6 +51,26 @@ export interface TagihanLokal extends TagihanTerbuka {
   tertunda?: boolean
 }
 
+/** Daftar harga (price_lists). Yang is_default memuat harga grosir per jumlah. */
+export interface DaftarHargaLokal {
+  id: string
+  name: string
+  kind: string
+  is_default: boolean
+  sync_version: number
+}
+
+/** Satu harga pada daftar harga (product_prices) — tingkat per jumlah minimal. */
+export interface HargaProdukLokal {
+  id: string
+  product_id: string
+  variant_id: string | null
+  price_list_id: string
+  min_qty: string
+  price: number
+  sync_version: number
+}
+
 export interface KategoriLokal {
   id: string
   name: string
@@ -109,6 +129,8 @@ class DBOffline extends Dexie {
   produk!: EntityTable<ProdukLokal, 'id'>
   varian!: EntityTable<VarianLokal, 'id'>
   tagihan!: EntityTable<TagihanLokal, 'id'>
+  daftarHarga!: EntityTable<DaftarHargaLokal, 'id'>
+  hargaProduk!: EntityTable<HargaProdukLokal, 'id'>
   kategori!: EntityTable<KategoriLokal, 'id'>
   satuan!: EntityTable<SatuanLokal, 'id'>
   pelanggan!: EntityTable<PelangganLokal, 'id'>
@@ -174,6 +196,25 @@ class DBOffline extends Dexie {
       antrean: 'id, status, dibuatPada',
       meta: 'kunci',
     })
+
+    // v5 menyimpan daftar harga & harga per jumlah (harga grosir) supaya
+    // pratinjau keranjang dan struk offline memakai harga yang sama dengan
+    // server. Kursor dibuang: harga yang sudah ada di server ikut tertarik.
+    this.version(5)
+      .stores({
+        produk: 'id, name, cari, category_id, is_active, barcode, sku',
+        varian: 'id, product_id, barcode, sku',
+        tagihan: 'id, outlet_id',
+        daftarHarga: 'id',
+        hargaProduk: 'id, product_id, price_list_id',
+        kategori: 'id, name',
+        satuan: 'id, name',
+        pelanggan: 'id, name, phone',
+        stok: 'kunci, product_id, outlet_id',
+        antrean: 'id, status, dibuatPada',
+        meta: 'kunci',
+      })
+      .upgrade((tx) => tx.table('meta').delete('kursor-sync'))
   }
 }
 
@@ -209,6 +250,8 @@ export async function kosongkanDB(): Promise<void> {
     db.produk.clear(),
     db.varian.clear(),
     db.tagihan.clear(),
+    db.daftarHarga.clear(),
+    db.hargaProduk.clear(),
     db.kategori.clear(),
     db.satuan.clear(),
     db.pelanggan.clear(),
