@@ -18,13 +18,13 @@ import { GalatAPI } from '@/lib/api-client'
 import { formatRupiah } from '@/bersama/util/uang'
 import { formatJam } from '@/bersama/util/tanggal'
 import { cn } from '@/bersama/util/cn'
-import type { MetodeBayar, Transaksi } from '@/bersama/tipe/pos'
+import type { Transaksi } from '@/bersama/tipe/pos'
 import type { Produk } from '@/bersama/tipe/katalog'
 import { KartuProduk } from '../komponen/kartu-produk'
 import { PanelKeranjang } from '../komponen/panel-keranjang'
 import { DialogPilihVarian } from '../komponen/dialog-pilih-varian'
 import { SegmenPilihan } from '@/bersama/ui/segmen'
-import { LayarBayar } from '../komponen/layar-bayar'
+import { LayarBayar, type BagianBayar } from '../komponen/layar-bayar'
 import { Struk } from '../komponen/struk'
 import { itemUntukCheckout, kunciBaris, namaBaris, useKeranjang } from '../keranjang'
 import { kunciBaru, useCheckout, useKatalogKasir, useShiftAktif } from '../hooks'
@@ -89,7 +89,7 @@ export function HalamanKasir() {
     setBukaBayar(true)
   }
 
-  async function selesaikan(metode: MetodeBayar, dibayar: number, pelangganId?: string) {
+  async function selesaikan(pembayaran: BagianBayar[], pelangganId?: string) {
     if (!tokoAktif || !shift) return
     setGalatBayar(null)
     try {
@@ -101,9 +101,10 @@ export function HalamanKasir() {
           shift_id: shift.id,
           items: itemUntukCheckout(keranjang.baris),
           ...(keranjang.diskonTransaksiNominal > 0 ? { order_discount: keranjang.diskonTransaksiNominal } : {}),
-          // Kasbon dicatat penuh sebagai utang; tunai memakai uang yang
-          // benar-benar diterima supaya server yang menghitung kembaliannya.
-          payments: [{ method: metode, amount: dibayar }],
+          // Kasbon dicatat sebesar sisa sebagai utang; tunai terakhir memakai
+          // uang yang benar-benar diterima supaya server yang menghitung
+          // kembaliannya.
+          payments: pembayaran,
           customer_id: pelangganId,
         },
       })

@@ -363,8 +363,9 @@ type paymentResolution struct {
 }
 
 // resolvePayments memvalidasi pembayaran terhadap total: non-kredit boleh
-// melebihi (kembalian); bila ada kredit, harus pas dan butuh customer_id +
-// tidak melampaui batas kredit.
+// melebihi (kembalian) — tapi kembalian hanya sebesar uang TUNAI yang
+// diterima; bila ada kredit, harus pas dan butuh customer_id + tidak
+// melampaui batas kredit.
 func resolvePayments(ctx context.Context, tx *gorm.DB, in CheckoutInput, total int64) (paymentResolution, error) {
 	var r paymentResolution
 	now := time.Now().UTC()
@@ -384,7 +385,7 @@ func resolvePayments(ctx context.Context, tx *gorm.DB, in CheckoutInput, total i
 		}
 	}
 
-	var nonCredit int64
+	var nonCredit, tunai int64
 	for _, p := range in.Payments {
 		if p.Amount <= 0 {
 			return r, fmt.Errorf("%w: nominal pembayaran harus > 0", helpers.ErrValidation)
@@ -393,6 +394,9 @@ func resolvePayments(ctx context.Context, tx *gorm.DB, in CheckoutInput, total i
 			r.creditAmount += p.Amount
 		} else {
 			nonCredit += p.Amount
+		}
+		if p.Method == "cash" {
+			tunai += p.Amount
 		}
 		r.rows = append(r.rows, models.SalePayment{
 			Method: p.Method, Amount: p.Amount, Reference: p.Reference, PaidAt: now,
@@ -424,6 +428,14 @@ func resolvePayments(ctx context.Context, tx *gorm.DB, in CheckoutInput, total i
 		return r, fmt.Errorf("%w: pembayaran kurang dari total", helpers.ErrValidation)
 	}
 	r.changeAmount = r.paidAmount - total
+	// Kembalian keluar dari laci, jadi hanya bisa berasal dari uang tunai.
+	// QRIS Rp 70.000 untuk belanja Rp 64.000 akan tercatat "kembalian Rp 6.000"
+	// yang tak pernah ada — laci shift (tunai − kembalian) lalu tampak kurang
+	// dan laporan tunai per cara bayar bisa minus. Bayar gabungan membuat
+	// kesalahan ini mudah terjadi, jadi ditolak di sini.
+	if r.changeAmount > tunai {
+		return r, fmt.Errorf("%w: pembayaran non-tunai melebihi sisa belanja — kembalian hanya bisa dari uang tunai", helpers.ErrValidation)
+	}
 	return r, nil
 }
 

@@ -28,7 +28,7 @@ Sebuah framework backend REST API berbasis Golang dan Gin, dengan struktur modul
 - **Master data** — kategori, satuan, produk (+ pencarian trigram < 200 ms), supplier
 - **Varian barang** — pilihan dengan selisih harga (ukuran, es/panas, level pedas); stok tetap di tingkat barang; struk mencatat "Barang (Varian)"; SKU/barcode varian unik lintas barang & varian (dipindai kasir, dikenali pesanan kanal, dikirim sebagai pilihan wajib di menu GoFood/GrabFood)
 - **Impor produk CSV** — pratinjau (`dry_run`), impor sebagian, laporan baris gagal per baris
-- **Kasir** — checkout 1 transaksi (harga dari server, hitung & bulat per baris), idempoten via `Idempotency-Key`, penomoran struk terkunci, void & retur, kasbon → piutang
+- **Kasir** — checkout 1 transaksi (harga dari server, hitung & bulat per baris), idempoten via `Idempotency-Key`, penomoran struk terkunci, void & retur, kasbon → piutang; bayar gabungan (beberapa baris `payments`; kasbon harus pas, kembalian hanya dari uang tunai)
 - **Buku besar stok** — `stock_movements` sumber kebenaran, `stocks` cache; satu jalur `ApplyStockDeltas` (kunci urut `product_id`, saldo berjalan) dipakai penjualan/void/retur/opname/transfer/pembelian; rekonsiliasi cache dari buku besar
 - **Shift & kas** — buka/tutup shift, rekonsiliasi `expected_cash`, gerakan kas non-penjualan
 - **Pembelian** — stok masuk (idempoten), harga modal = harga beli terakhir
