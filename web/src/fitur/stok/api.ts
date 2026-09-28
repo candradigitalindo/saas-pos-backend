@@ -20,9 +20,17 @@ export interface GerakanStok {
 export interface ItemPembelian {
   id: string
   product_id: string
+  variant_id?: string
+  /** Per kemasan bila dibeli per dus (lihat unit_name & unit_conversion). */
   qty: string
   unit_cost: number
   line_total: number
+  unit_name?: string
+  unit_conversion?: string
+  /** Diisi GET /purchases/:id. */
+  product_name?: string
+  variant_name?: string
+  base_unit_name?: string
 }
 
 export interface Pembelian {
@@ -40,6 +48,11 @@ export interface Pembelian {
   business_date: string
   items?: ItemPembelian[]
   created_at: string
+  supplier_name?: string
+  created_by_name?: string
+  item_count: number
+  /** Paling banyak tiga nama barang pertama. */
+  item_names?: string[]
 }
 
 export interface ItemOpname {
@@ -103,6 +116,8 @@ export interface RingkasanStok {
 
 /** Keadaan yang bisa disaring (?status=) — batasnya sama dengan ringkasan. */
 export type KeadaanStok = 'safe' | 'low' | 'out' | 'negative' | 'idle'
+/** Saringan server untuk saran belanja: di bawah batas ATAU habis < seminggu. */
+export type SaringStok = KeadaanStok | 'restock'
 /** Urutan daftar stok (?sort=). */
 export type UrutanStok = 'urgent' | 'name' | 'value' | 'sold'
 
@@ -112,7 +127,7 @@ export const stokApi = {
     low?: boolean,
     page = 1,
     limit = 100,
-    opsi: { cari?: string; produk?: string[]; keadaan?: KeadaanStok; urut?: UrutanStok } = {},
+    opsi: { cari?: string; produk?: string[]; keadaan?: SaringStok; urut?: UrutanStok } = {},
   ) =>
     api.get<Halaman<SaldoStok>>('/stocks', {
       query: {
@@ -168,8 +183,8 @@ export const stokApi = {
     kunci: string,
   ) => api.post<Pembelian>('/purchases', input, { idempotencyKey: kunci }),
 
-  daftarPembelian: (page = 1, limit = 20) =>
-    api.get<Halaman<Pembelian>>('/purchases', { query: { page, limit } }),
+  daftarPembelian: (outlet_id: string, page = 1, limit = 20) =>
+    api.get<Halaman<Pembelian>>('/purchases', { query: { outlet_id, page, limit } }),
 
   pembelian: (id: string) => api.get<Pembelian>(`/purchases/${id}`),
 

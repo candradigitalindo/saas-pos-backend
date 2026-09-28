@@ -80,7 +80,7 @@ func ListStocks(c *gin.Context) {
 		Sort:     c.Query("sort"),
 	}
 	if f.Status != "" && !repositories.StockStatuses[f.Status] {
-		badRequest(c, "status", "status harus salah satu: safe, low, out, negative, idle")
+		badRequest(c, "status", "status harus salah satu: safe, low, out, negative, idle, restock")
 		return
 	}
 	if f.Sort != "" && !repositories.StockSorts[f.Sort] {

@@ -121,7 +121,7 @@ menu aktif selalu digulir ke dalam pandangan.
 | Ringkasan stok (aman/hampir habis/habis/minus + nilai stok) | `GET /stocks/summary` | `stock.view` |
 | Kartu stok (riwayat keluar-masuk) | `GET /stock-movements?product_id=` | `stock.view` |
 | Koreksi stok | `POST /stock-adjustments` + `Idempotency-Key` | `stock.adjust` |
-| Barang masuk (pembelian) | `POST /purchases` + `Idempotency-Key` · `GET /purchases` · `GET /purchases/:id` | `stock.adjust` / `stock.view` |
+| Barang Masuk — "Perlu dibeli": saran belanja (di bawah batas / habis < seminggu) dengan jumlah untuk dua minggu, ketuk = masuk daftar ("+ Semua"); terlipat bila formulir diisi lewat pemilih, tetap terbuka saat orang mengambil dari saran. Baris: foto, "sisa X → jadi Y", perubahan harga modal "Rp A → Rp B (naik n%)" (≥ 50% → "periksa lagi harganya"). Kartu total menyebut berapa barang yang modalnya berubah. Pemilih barang menampilkan sisa stok + modal. "Riwayat" (dialog): nota terbaru dulu — pemasok, nota, cuplikan barang, total, waktu & pencatat; ketuk untuk rincian. Status bayar tidak ditampilkan (belum ada layar utang pemasok) | `GET /stocks?status=restock` · `POST /purchases` + `Idempotency-Key` · `GET /purchases?outlet_id=` · `GET /purchases/:id` | `stock.adjust` / `stock.view` |
 | Hitung fisik (opname) | `POST /stock-opnames` → `POST /stock-opnames/:id/items` → `POST /stock-opnames/:id/post` · `GET /stock-opnames[/:id]` | `stock.opname` / `stock.view` |
 | Kirim barang antar toko | `POST /stock-transfers` → `POST /stock-transfers/:id/send` → `POST /stock-transfers/:id/receive` · `GET /stock-transfers[/:id]` | `stock.transfer` / `stock.view` |
 | Cocokkan ulang stok | `POST /stock-reconcile` | `stock.opname` |

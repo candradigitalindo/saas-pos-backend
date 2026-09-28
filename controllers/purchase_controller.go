@@ -70,9 +70,19 @@ func ListPurchases(c *gin.Context) {
 		respondServiceError(c, err)
 		return
 	}
+	ids := make([]string, len(rows))
+	for i := range rows {
+		ids[i] = rows[i].ID
+	}
+	extras, err := repositories.PurchaseExtras(c.Request.Context(), ids)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
 	items := make([]structs.PurchaseResponse, len(rows))
 	for i := range rows {
 		items[i] = services.PurchaseToResponse(&rows[i])
+		isiExtra(&items[i], extras[rows[i].ID])
 	}
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.PaginatedResponse[structs.PurchaseResponse]]{
 		Success: true, Message: "Berhasil mengambil data pembelian",
@@ -91,7 +101,30 @@ func GetPurchase(c *gin.Context) {
 		notFound(c, "Pembelian tidak ditemukan")
 		return
 	}
+	ctx := c.Request.Context()
+	extras, err := repositories.PurchaseExtras(ctx, []string{p.ID})
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	nama, err := repositories.PurchaseItemNames(ctx, p.ID)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	r := services.PurchaseToResponse(&p)
+	isiExtra(&r, extras[p.ID])
+	for i := range r.Items {
+		n := nama[r.Items[i].ID]
+		r.Items[i].ProductName, r.Items[i].VariantName, r.Items[i].BaseUnitName = n.ProductName, n.VariantName, n.BaseUnitName
+	}
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.PurchaseResponse]{
-		Success: true, Message: "Berhasil mengambil data pembelian", Data: services.PurchaseToResponse(&p),
+		Success: true, Message: "Berhasil mengambil data pembelian", Data: r,
 	})
+}
+
+// isiExtra menempelkan nama pemasok, pencatat, dan ringkasan barang.
+func isiExtra(r *structs.PurchaseResponse, e repositories.PurchaseExtra) {
+	r.SupplierName, r.CreatedByName = e.SupplierName, e.CreatedByName
+	r.ItemCount, r.ItemNames = e.ItemCount, e.ItemNames
 }

@@ -65,3 +65,20 @@ export function isiMeter(s: Pick<SaldoStok, 'qty' | 'min_stock'>): number | null
   const qty = Number.parseFloat(s.qty) || 0
   return Math.min(1, Math.max(0, qty / (min * 2)))
 }
+
+/** Belanja diperkirakan cukup untuk dua minggu penjualan. */
+export const HARI_TARGET_BELANJA = 14
+
+/**
+ * Saran jumlah beli (satuan dasar) untuk barang di saran belanja: cukup untuk
+ * dua minggu menurut laju jual, dan paling sedikit sampai dua kali batas
+ * minimum. Saldo minus dianggap nol — catatannya memang belum cocok, dan rak
+ * yang "minus" di sistem biasanya kosong di dunia nyata. Selalu ≥ 1 dan bulat:
+ * orang membeli barang utuh.
+ */
+export function saranBeli(s: Pick<SaldoStok, 'qty' | 'min_stock' | 'sold_30d'>): number {
+  const qty = Math.max(Number.parseFloat(s.qty) || 0, 0)
+  const min = Number.parseFloat(s.min_stock) || 0
+  const target = Math.max(min * 2, lakuPerHari(s) * HARI_TARGET_BELANJA)
+  return Math.max(1, Math.ceil(target - qty))
+}

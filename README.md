@@ -361,12 +361,13 @@ menyebut paket termurah yang membukanya.
 | `POST /api/v1/shifts/:id/handover` | `shift.close` + `shift.open` | Serah terima: tutup + buka shift baru dalam satu transaksi (shift baru atas nama akun yang masuk) |
 | `GET  /api/v1/shifts` · `GET /api/v1/shifts/:id` | `shift.open` / `shift.close` | Daftar / detail shift. Detail membawa rincian laci (`cash_sales`, `cash_in`, `cash_out`), `opened_by_name`/`closed_by_name`, dan `sales` (ringkasan penjualan shift: jumlah, total, retur, batal, per cara bayar) |
 | `POST/GET /api/v1/cash-movements` | `cash.movement` | Kas masuk/keluar; daftar membawa `created_by_name` (pencatatnya) |
-| `GET  /api/v1/stocks?outlet_id=&low=&status=&sort=&q=&product_ids=` | `stock.view` | Saldo stok; `q` cari nama/SKU/barcode, `product_ids` (dipisah koma) untuk barang tertentu, `status` = `safe`/`low`/`out`/`negative`/`idle` (batas sama dengan ringkasan), `sort` = `name` (bawaan)/`urgent`/`value`/`sold`. Tiap baris membawa foto, kategori, SKU, `cost_price`, `stock_value`, `sold_30d` (keluar bersih 30 hari), `last_sold_at` |
+| `GET  /api/v1/stocks?outlet_id=&low=&status=&sort=&q=&product_ids=` | `stock.view` | Saldo stok; `q` cari nama/SKU/barcode, `product_ids` (dipisah koma) untuk barang tertentu, `status` = `safe`/`low`/`out`/`negative`/`idle` (batas sama dengan ringkasan) atau `restock` (saran belanja: di bawah batas minimum ATAU habis < 7 hari menurut laju 30 hari), `sort` = `name` (bawaan)/`urgent`/`value`/`sold`. Tiap baris membawa foto, kategori, SKU, `cost_price`, `stock_value`, `sold_30d` (keluar bersih 30 hari), `last_sold_at` |
 | `GET  /api/v1/stocks/summary?outlet_id=` | `stock.view` | Ringkasan SELURUH barang: `total`, `safe`, `low`, `out`, `negative`, `stock_value` (harga modal), `idle` & `idle_value` (masih ada tapi tak terjual 30 hari — modal tertahan) |
 | `GET  /api/v1/stock-movements?product_id=` | `stock.view` | Kartu stok |
 | `POST /api/v1/stock-adjustments` | `stock.adjust` | Saldo awal / koreksi stok. Wajib `Idempotency-Key` |
 | `POST /api/v1/stock-reconcile?outlet_id=` | `stock.opname` | Hitung ulang cache stok dari buku besar |
 | `POST /api/v1/purchases` (header `Idempotency-Key`) | `stock.adjust` | Terima barang (stok masuk) |
+| `GET  /api/v1/purchases?outlet_id=` · `/:id` | `stock.view` | Riwayat barang masuk, terbaru dulu; tiap nota membawa `supplier_name`, `created_by_name`, `item_count`, `item_names` (≤3 nama pertama). Rincian: baris membawa `product_name`, `variant_name`, `base_unit_name` |
 | `POST /api/v1/stock-opnames` · `/:id/items` · `/:id/post` | `stock.opname` | Hitung fisik → posting selisih |
 | `POST /api/v1/stock-transfers` · `/:id/send` · `/:id/receive` | `stock.transfer` | Transfer antar outlet |
 | `GET/PUT /api/v1/products/:id/recipe` | `product.view` / `product.edit` | Resep menu F&B |

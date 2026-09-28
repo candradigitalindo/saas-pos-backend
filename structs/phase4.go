@@ -32,6 +32,10 @@ type PurchaseItemResponse struct {
 	// Kemasan: qty & unit_cost per kemasan; stok masuk qty × unit_conversion.
 	UnitName       string `json:"unit_name,omitempty"`
 	UnitConversion string `json:"unit_conversion,omitempty"`
+	// Diisi GET /purchases/:id — baris hanya menyimpan product_id.
+	ProductName  string `json:"product_name,omitempty"`
+	VariantName  string `json:"variant_name,omitempty"`
+	BaseUnitName string `json:"base_unit_name,omitempty"`
 }
 
 type PurchaseResponse struct {
@@ -49,6 +53,12 @@ type PurchaseResponse struct {
 	BusinessDate   string                 `json:"business_date"`
 	Items          []PurchaseItemResponse `json:"items,omitempty"`
 	CreatedAt      string                 `json:"created_at"`
+
+	// Keterangan tampilan (GET /purchases & /purchases/:id).
+	SupplierName  string   `json:"supplier_name,omitempty"`
+	CreatedByName string   `json:"created_by_name,omitempty"`
+	ItemCount     int64    `json:"item_count"`
+	ItemNames     []string `json:"item_names,omitempty"` // maks 3 nama pertama
 }
 
 // ── Stock opname ───────────────────────────────────────────────────────────

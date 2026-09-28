@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cukupHari, isiMeter, keadaanSaldo, lakuPerHari, teksCukup } from './keadaan-stok'
+import { cukupHari, isiMeter, keadaanSaldo, lakuPerHari, saranBeli, teksCukup } from './keadaan-stok'
 
 describe('keadaanSaldo — batasnya sama dengan server', () => {
   it.each([
@@ -51,5 +51,21 @@ describe('isiMeter', () => {
   })
   it('tanpa batas minimum tidak ada meteran', () => {
     expect(isiMeter({ qty: '5', min_stock: '0' })).toBeNull()
+  })
+})
+
+describe('saranBeli', () => {
+  it('cukup dua minggu menurut laju jual', () => {
+    // 20 terjual sebulan → ±9,3 untuk dua minggu; sisa 3 → beli 7.
+    expect(saranBeli({ qty: '3', min_stock: '0', sold_30d: '20' })).toBe(7)
+  })
+  it('tanpa penjualan: sampai dua kali batas minimum', () => {
+    expect(saranBeli({ qty: '3', min_stock: '5', sold_30d: '0' })).toBe(7)
+  })
+  it('saldo minus dianggap kosong', () => {
+    expect(saranBeli({ qty: '-4', min_stock: '5', sold_30d: '0' })).toBe(10)
+  })
+  it('selalu paling sedikit satu', () => {
+    expect(saranBeli({ qty: '30', min_stock: '5', sold_30d: '0' })).toBe(1)
   })
 })

@@ -196,7 +196,8 @@ type StockFilter struct {
 	// kolom stok halaman yang sedang tampil saja.
 	ProductIDs []string
 	// Status menyaring satu keadaan — batasnya sama dengan StockSummary:
-	// safe | low | out | negative | idle. Kosong = semua.
+	// safe | low | out | negative | idle, atau restock (saran belanja, lihat
+	// stockRestockCond). Kosong = semua.
 	Status string
 	// Sort: name (bawaan) | urgent | value | sold. Lihat stockOrder.
 	Sort string
@@ -205,7 +206,7 @@ type StockFilter struct {
 // Keadaan & urutan yang dikenali ListStocks. Nilai lain ditolak controller
 // (422), bukan diam-diam diabaikan.
 var (
-	StockStatuses = map[string]bool{"safe": true, "low": true, "out": true, "negative": true, "idle": true}
+	StockStatuses = map[string]bool{"safe": true, "low": true, "out": true, "negative": true, "idle": true, "restock": true}
 	StockSorts    = map[string]bool{"name": true, "urgent": true, "value": true, "sold": true}
 )
 
@@ -245,9 +246,23 @@ func stockStatusCond(status string) string {
 		return "stocks.qty < 0"
 	case "idle":
 		return stockIdleCond
+	case "restock":
+		return stockRestockCond
 	}
 	return ""
 }
+
+// Cakrawala "perlu dibeli": barang yang menurut laju jual 30 hari terakhir
+// habis dalam seminggu — belanja umumnya mingguan.
+const stockRestockDays = "7"
+
+// stockRestockCond: saran belanja. Sudah di bawah/di batas minimum (termasuk
+// habis & minus), ATAU masih di atas batas tapi sisanya kurang dari
+// seminggu penjualan — barang laris tanpa batas minimum tidak boleh luput.
+var stockRestockCond = `(stocks.qty <= p.min_stock OR stocks.qty < COALESCE((
+	SELECT -SUM(m.qty_delta) FROM stock_movements m WHERE ` + stockMoveMatch + `
+		AND m.kind IN ('sale', 'void', 'refund', 'recipe')
+		AND m.occurred_at >= now() - interval '` + stockWindow + `'), 0) * ` + stockRestockDays + ` / 30)`
 
 // stockOrder: urutan daftar saldo. "urgent" menaikkan yang butuh tindakan —
 // minus, habis, lalu hampir habis dari yang paling jauh di bawah batasnya —
