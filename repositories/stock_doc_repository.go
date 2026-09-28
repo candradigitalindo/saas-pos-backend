@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"candra/backend-api/internal/reqctx"
 	"candra/backend-api/models"
 
 	"gorm.io/gorm"
@@ -144,4 +145,71 @@ func SetTransferStatus(ctx context.Context, tx *gorm.DB, id, status string, extr
 		return ErrTransferNotFound
 	}
 	return nil
+}
+
+// OpnameExtra: ringkasan satu sesi hitung fisik untuk riwayat.
+type OpnameExtra struct {
+	CreatedByName string
+	ItemCount     int64 // barang yang dihitung
+	ChangedCount  int64 // yang hitungannya beda dari catatan
+	// ValueDiff: perubahan NILAI STOK, Σ (dihitung − max(catatan, 0)) × harga
+	// modal SEKARANG. Catatan minus dihitung nol — sama dengan nilai stok di
+	// ringkasan — sehingga mencocokkan catatan minus tidak tampil sebagai
+	// "untung". Gerakan opname tidak menyimpan harga modal saat itu, jadi ini
+	// perkiraan — layar menyebutnya "≈".
+	ValueDiff int64
+}
+
+// OpnameExtras mengambil OpnameExtra untuk banyak sesi sekaligus.
+func OpnameExtras(ctx context.Context, ids []string) (map[string]OpnameExtra, error) {
+	out := make(map[string]OpnameExtra, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var rows []struct {
+		ID string
+		OpnameExtra
+	}
+	err := tenantDB(ctx, nil).Raw(`
+		SELECT o.id, COALESCE(u.name, '') AS created_by_name,
+			COUNT(i.id) AS item_count,
+			COUNT(i.id) FILTER (WHERE i.diff_qty <> 0) AS changed_count,
+			COALESCE(ROUND(SUM((i.counted_qty - GREATEST(i.system_qty, 0)) * p.cost_price)), 0)::bigint AS value_diff
+		FROM stock_opnames o
+		LEFT JOIN users u ON u.tenant_id = o.tenant_id AND u.id = o.created_by
+		LEFT JOIN stock_opname_items i ON i.tenant_id = o.tenant_id AND i.opname_id = o.id
+		LEFT JOIN products p ON p.tenant_id = i.tenant_id AND p.id = i.product_id
+		WHERE o.tenant_id = ? AND o.id IN ?
+		GROUP BY o.id, u.name`, reqctx.TenantID(ctx), ids).Scan(&rows).Error
+	for _, r := range rows {
+		out[r.ID] = r.OpnameExtra
+	}
+	return out, err
+}
+
+// OpnameItemInfo: nama, satuan dasar, dan harga modal sekarang satu baris
+// hitungan — baris opname hanya menyimpan product_id.
+type OpnameItemInfo struct {
+	ProductName string
+	UnitName    string
+	CostPrice   int64
+}
+
+// OpnameItemInfos mengembalikan OpnameItemInfo per id baris hitungan.
+func OpnameItemInfos(ctx context.Context, opnameID string) (map[string]OpnameItemInfo, error) {
+	var rows []struct {
+		ID string
+		OpnameItemInfo
+	}
+	err := tenantDB(ctx, nil).Raw(`
+		SELECT i.id, p.name AS product_name, COALESCE(un.name, '') AS unit_name, p.cost_price
+		FROM stock_opname_items i
+		JOIN products p ON p.tenant_id = i.tenant_id AND p.id = i.product_id
+		LEFT JOIN units un ON un.tenant_id = p.tenant_id AND un.id = p.unit_id
+		WHERE i.tenant_id = ? AND i.opname_id = ?`, reqctx.TenantID(ctx), opnameID).Scan(&rows).Error
+	out := make(map[string]OpnameItemInfo, len(rows))
+	for _, r := range rows {
+		out[r.ID] = r.OpnameItemInfo
+	}
+	return out, err
 }

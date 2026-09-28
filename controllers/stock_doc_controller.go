@@ -74,9 +74,19 @@ func ListOpnames(c *gin.Context) {
 		respondServiceError(c, err)
 		return
 	}
+	ids := make([]string, len(rows))
+	for i := range rows {
+		ids[i] = rows[i].ID
+	}
+	extras, err := repositories.OpnameExtras(c.Request.Context(), ids)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
 	items := make([]structs.OpnameResponse, len(rows))
 	for i := range rows {
 		items[i] = services.OpnameToResponse(&rows[i])
+		isiOpnameExtra(&items[i], extras[rows[i].ID])
 	}
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.PaginatedResponse[structs.OpnameResponse]]{
 		Success: true, Message: "Daftar opname",
@@ -94,9 +104,32 @@ func GetOpname(c *gin.Context) {
 		notFound(c, "Opname tidak ditemukan")
 		return
 	}
+	ctx := c.Request.Context()
+	extras, err := repositories.OpnameExtras(ctx, []string{o.ID})
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	info, err := repositories.OpnameItemInfos(ctx, o.ID)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	r := services.OpnameToResponse(&o)
+	isiOpnameExtra(&r, extras[o.ID])
+	for i := range r.Items {
+		n := info[r.Items[i].ID]
+		r.Items[i].ProductName, r.Items[i].UnitName, r.Items[i].CostPrice = n.ProductName, n.UnitName, n.CostPrice
+	}
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.OpnameResponse]{
-		Success: true, Message: "Detail opname", Data: services.OpnameToResponse(&o),
+		Success: true, Message: "Detail opname", Data: r,
 	})
+}
+
+// isiOpnameExtra menempelkan ringkasan riwayat ke satu sesi hitung fisik.
+func isiOpnameExtra(r *structs.OpnameResponse, e repositories.OpnameExtra) {
+	r.CreatedByName = e.CreatedByName
+	r.ItemCount, r.ChangedCount, r.ValueDiff = e.ItemCount, e.ChangedCount, e.ValueDiff
 }
 
 // ── Transfer stok ─────────────────────────────────────────────────────────

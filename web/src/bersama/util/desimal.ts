@@ -59,3 +59,15 @@ export function formatSisaStok(qty: string, satuan?: string): string {
 export function stokPerluDicocokkan(qty: string): boolean {
   return new Decimal(qty || '0').lessThan(0)
 }
+
+/**
+ * Membaca jumlah yang DIKETIK ("12", "1,5", "1.5", " 7 ") menjadi string
+ * desimal kanonis ("12", "1.5"). Koma dan titik sama-sama dianggap desimal —
+ * formatQty tidak memakai pemisah ribuan, jadi tidak ada yang bentrok.
+ * null bila bukan angka, sehingga pemanggil bisa mengembalikan nilai lama.
+ */
+export function bacaQty(teks: string): string | null {
+  const bersih = teks.trim().replace(',', '.')
+  if (!/^\d+(\.\d+)?$/.test(bersih)) return null
+  return new Decimal(bersih).toDecimalPlaces(3).toString()
+}

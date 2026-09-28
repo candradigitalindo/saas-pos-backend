@@ -62,6 +62,11 @@ export interface ItemOpname {
   system_qty: string
   counted_qty: string
   diff_qty: string
+  /** Diisi GET /stock-opnames/:id. */
+  product_name?: string
+  unit_name?: string
+  /** Harga modal SEKARANG. */
+  cost_price?: number
 }
 
 export interface Opname {
@@ -73,6 +78,11 @@ export interface Opname {
   business_date: string
   items?: ItemOpname[]
   created_at: string
+  created_by_name?: string
+  item_count: number
+  changed_count: number
+  /** ≈ Σ selisih × harga modal sekarang, rupiah. */
+  value_diff: number
 }
 
 export interface ItemTransfer {
@@ -203,8 +213,8 @@ export const stokApi = {
   /** Menerapkan hasil hitungan ke stok. Tidak bisa dibatalkan. */
   postingOpname: (id: string) => api.post<Opname>(`/stock-opnames/${id}/post`, {}),
 
-  daftarOpname: (page = 1, limit = 20) =>
-    api.get<Halaman<Opname>>('/stock-opnames', { query: { page, limit } }),
+  daftarOpname: (outlet_id: string, page = 1, limit = 20) =>
+    api.get<Halaman<Opname>>('/stock-opnames', { query: { outlet_id, page, limit } }),
 
   opname: (id: string) => api.get<Opname>(`/stock-opnames/${id}`),
 

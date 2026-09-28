@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  bacaQty,
   bandingQty,
   formatQty,
   formatSisaStok,
@@ -64,5 +65,21 @@ describe('formatSisaStok', () => {
     expect(stokPerluDicocokkan('-2')).toBe(true)
     expect(stokPerluDicocokkan('0')).toBe(false)
     expect(stokPerluDicocokkan('5')).toBe(false)
+  })
+})
+
+describe('bacaQty — jumlah yang diketik', () => {
+  it.each([
+    ['12', '12'],
+    [' 7 ', '7'],
+    ['1,5', '1.5'],
+    ['1.5', '1.5'],
+    ['0', '0'],
+    ['2,0004', '2'],
+  ])('%s → %s', (teks, mau) => {
+    expect(bacaQty(teks)).toBe(mau)
+  })
+  it.each(['', 'abc', '-3', '1,2,3', '1e3'])('%s ditolak', (teks) => {
+    expect(bacaQty(teks)).toBeNull()
   })
 })

@@ -85,6 +85,10 @@ type OpnameItemResponse struct {
 	SystemQty  string `json:"system_qty"`
 	CountedQty string `json:"counted_qty"`
 	DiffQty    string `json:"diff_qty"`
+	// Diisi GET /stock-opnames/:id — baris hanya menyimpan product_id.
+	ProductName string `json:"product_name,omitempty"`
+	UnitName    string `json:"unit_name,omitempty"`
+	CostPrice   int64  `json:"cost_price"` // harga modal SEKARANG
 }
 
 type OpnameResponse struct {
@@ -96,6 +100,12 @@ type OpnameResponse struct {
 	BusinessDate string               `json:"business_date"`
 	Items        []OpnameItemResponse `json:"items,omitempty"`
 	CreatedAt    string               `json:"created_at"`
+
+	// Ringkasan untuk riwayat (GET /stock-opnames & /:id).
+	CreatedByName string `json:"created_by_name,omitempty"`
+	ItemCount     int64  `json:"item_count"`
+	ChangedCount  int64  `json:"changed_count"`
+	ValueDiff     int64  `json:"value_diff"` // ≈ perubahan nilai stok (catatan minus = 0)
 }
 
 // ── Stock transfer ─────────────────────────────────────────────────────────

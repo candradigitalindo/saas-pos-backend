@@ -369,6 +369,7 @@ menyebut paket termurah yang membukanya.
 | `POST /api/v1/purchases` (header `Idempotency-Key`) | `stock.adjust` | Terima barang (stok masuk) |
 | `GET  /api/v1/purchases?outlet_id=` · `/:id` | `stock.view` | Riwayat barang masuk, terbaru dulu; tiap nota membawa `supplier_name`, `created_by_name`, `item_count`, `item_names` (≤3 nama pertama). Rincian: baris membawa `product_name`, `variant_name`, `base_unit_name` |
 | `POST /api/v1/stock-opnames` · `/:id/items` · `/:id/post` | `stock.opname` | Hitung fisik → posting selisih |
+| `GET  /api/v1/stock-opnames?outlet_id=` · `/:id` | `stock.view` | Riwayat hitung fisik; tiap sesi membawa `created_by_name`, `item_count`, `changed_count`, `value_diff` (≈ perubahan nilai stok: Σ (dihitung − max(catatan, 0)) × harga modal sekarang). Rincian: baris membawa `product_name`, `unit_name`, `cost_price` |
 | `POST /api/v1/stock-transfers` · `/:id/send` · `/:id/receive` | `stock.transfer` | Transfer antar outlet |
 | `GET/PUT /api/v1/products/:id/recipe` | `product.view` / `product.edit` | Resep menu F&B |
 | `GET  /api/v1/receivables` · `POST /api/v1/receivable-payments` | `receivable.manage` | Piutang & pelunasan. Setoran wajib `Idempotency-Key` |
