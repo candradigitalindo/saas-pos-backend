@@ -293,6 +293,7 @@ Semua endpoint bisnis di bawah prefiks `/api/v1`.
 | `GET  /api/v1/sales-summary?from=&to=` | `report.view` | Ringkasan omzet/laba (langsung dari `sales`) |
 | `GET  /api/v1/reports/dashboard?outlet_id=&date=` | `report.view` | Ringkasan hari + bulan berjalan + per kanal (dari agregat) |
 | `GET  /api/v1/reports/sales?from=&to=&group_by=` | `report.view` | Laporan penjualan; `group_by` = day\|hour\|channel\|cashier\|payment\|product (per barang: baris membawa `label`, `unit`, `qty`; bersih dari void & retur) |
+| `GET  /api/v1/reports/purchases?from=&to=&outlet_id=` | `report.view` + `stock.view` | Laporan belanja & utang pemasok: `totals` (`belanja`, `nota_count`, `sisa_nota` = sisa utang sekarang dari nota di rentang, `dibayar` = uang keluar ke pemasok di rentang menurut tanggal bayar — `dari_laci` / `dari_lain`, `utang_kini`), `suppliers[]` (terbesar dulu), `days[]` (hanya hari yang ada nota), `products[]` (10 barang dengan belanja terbesar, qty satuan dasar) |
 | `GET  /api/v1/reports/profit?from=&to=` | `report.profit` | Laba bersih per kanal (§13.5) |
 | `GET  /api/v1/reports/export?type=&format=csv` | `report.export` | Ekspor CSV (`type` = sales\|profit\|dashboard) |
 | `POST /api/v1/reports/rebuild-summaries?from=&to=&outlet_id=` | `report.view` + `outlet.manage` | Bangun ulang `daily_sales_summaries` dari `sales` |

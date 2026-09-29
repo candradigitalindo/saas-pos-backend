@@ -397,6 +397,8 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	rep.GET("/dashboard", middlewares.Require("report.view"), controllers.ReportDashboard)
 	rep.GET("/sales", middlewares.Require("report.view"), controllers.ReportSales)
 	rep.GET("/profit", middlewares.Require("report.profit"), controllers.ReportProfit)
+	// Belanja & utang pemasok: izin laporan DAN izin stok (nilai pembelian).
+	rep.GET("/purchases", middlewares.Require("report.view"), middlewares.Require("stock.view"), controllers.ReportPurchases)
 	rep.GET("/export", middlewares.Require("report.export"), controllers.ReportExport)
 	// Bangun ulang ringkasan: pekerjaan pemeliharaan BERAT (sampai 366 hari ×
 	// semua cabang) yang menulis ulang tabel laporan. Izin baca laporan saja

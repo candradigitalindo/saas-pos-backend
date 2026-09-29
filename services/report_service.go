@@ -267,3 +267,59 @@ func RebuildDailySummaries(ctx context.Context, outletID, from, to string) (stru
 	out.RowsRebuilt = len(outlets) * days
 	return out, nil
 }
+
+// PurchaseReport: laporan belanja & utang pemasok (GET /reports/purchases) —
+// berapa uang yang dibelanjakan, ke pemasok mana, barang apa, berapa yang
+// sudah keluar (dari laci / uang lain), dan utang yang masih tersisa.
+func PurchaseReport(ctx context.Context, outletID, from, to string) (structs.PurchaseReportResponse, error) {
+	var out structs.PurchaseReportResponse
+	f, t, err := parseRange(from, to)
+	if err != nil {
+		return out, err
+	}
+	fromStr, toStr := f.Format(dateLayout), t.Format(dateLayout)
+
+	tot, err := repositories.PurchaseReportTotalsFor(ctx, outletID, fromStr, toStr)
+	if err != nil {
+		return out, err
+	}
+	out.From, out.To = fromStr, toStr
+	out.Totals = structs.PurchaseReportTotals{
+		NotaCount: tot.NotaCount, Belanja: tot.Belanja, SisaNota: tot.SisaNota,
+		Dibayar: tot.Dibayar, DariLaci: tot.DariLaci, DariLain: tot.DariLain, UtangKini: tot.UtangKini,
+	}
+
+	pemasok, err := repositories.PurchaseReportBySupplier(ctx, outletID, fromStr, toStr)
+	if err != nil {
+		return out, err
+	}
+	out.Suppliers = make([]structs.PurchaseReportSupplier, len(pemasok))
+	for i, s := range pemasok {
+		out.Suppliers[i] = structs.PurchaseReportSupplier{
+			SupplierID: s.SupplierID, SupplierName: s.SupplierName,
+			NotaCount: s.NotaCount, Belanja: s.Belanja, SisaNota: s.SisaNota,
+		}
+	}
+
+	hari, err := repositories.PurchaseReportByDay(ctx, outletID, fromStr, toStr)
+	if err != nil {
+		return out, err
+	}
+	out.Days = make([]structs.PurchaseReportDay, len(hari))
+	for i, h := range hari {
+		out.Days[i] = structs.PurchaseReportDay{Date: h.Tanggal, Belanja: h.Belanja, NotaCount: h.Nota}
+	}
+
+	barang, err := repositories.PurchaseReportTopProducts(ctx, outletID, fromStr, toStr, 10)
+	if err != nil {
+		return out, err
+	}
+	out.Products = make([]structs.PurchaseReportProduct, len(barang))
+	for i, b := range barang {
+		out.Products[i] = structs.PurchaseReportProduct{
+			ProductID: b.ProductID, ProductName: b.ProductName, UnitName: b.UnitName,
+			Qty: b.Qty.String(), Nilai: b.Nilai,
+		}
+	}
+	return out, nil
+}

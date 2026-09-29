@@ -25,6 +25,7 @@ const HalamanStrukPublik = muat(() => import('@/fitur/kasir/halaman/halaman-stru
 const HalamanKas = muat(() => import('@/fitur/kasir/halaman/halaman-kas'), 'HalamanKas')
 const HalamanPerluDiperiksa = muat(() => import('@/fitur/kasir/halaman/halaman-perlu-diperiksa'), 'HalamanPerluDiperiksa')
 const HalamanLaporan = muat(() => import('@/fitur/laporan/halaman/halaman-laporan'), 'HalamanLaporan')
+const HalamanLaporanBelanja = muat(() => import('@/fitur/laporan/halaman/halaman-laporan-belanja'), 'HalamanLaporanBelanja')
 const HalamanLainnya = muat(() => import('./halaman/halaman-lainnya'), 'HalamanLainnya')
 const HalamanSelamatDatang = muat(() => import('@/fitur/onboarding/halaman/halaman-selamat-datang'), 'HalamanSelamatDatang')
 const HalamanDaftarBarang = muat(() => import('@/fitur/produk/halaman/halaman-daftar-barang'), 'HalamanDaftarBarang')
@@ -487,6 +488,18 @@ const router = createBrowserRouter([
           <ButuhIzin izin={[IZIN.reportView]}>
             <Tunggu>
               <HalamanLaporan />
+            </Tunggu>
+          </ButuhIzin>
+        ),
+      },
+      {
+        // Butuh report.view DAN stock.view: ButuhIzin cukup salah satu, jadi
+        // yang kedua diperiksa di dalam — lihat HalamanLaporanBelanja.
+        path: '/laporan/belanja',
+        element: (
+          <ButuhIzin izin={[IZIN.reportView]}>
+            <Tunggu>
+              <HalamanLaporanBelanja />
             </Tunggu>
           </ButuhIzin>
         ),

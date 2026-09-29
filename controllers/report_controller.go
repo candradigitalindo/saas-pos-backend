@@ -108,3 +108,22 @@ func RebuildReportSummaries(c *gin.Context) {
 		Success: true, Message: "Rebuild ringkasan selesai", Data: res,
 	})
 }
+
+// ReportPurchases: GET /api/v1/reports/purchases?from=&to=&outlet_id=
+// Laporan belanja & utang pemasok. Butuh report.view DAN stock.view (nilai
+// pembelian).
+func ReportPurchases(c *gin.Context) {
+	from, to := c.Query("from"), c.Query("to")
+	if from == "" || to == "" {
+		badRequest(c, "from", "Parameter from & to (YYYY-MM-DD) wajib")
+		return
+	}
+	res, err := services.PurchaseReport(c.Request.Context(), c.Query("outlet_id"), from, to)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[structs.PurchaseReportResponse]{
+		Success: true, Message: "Laporan belanja", Data: res,
+	})
+}

@@ -28,7 +28,14 @@ function labelHari(kunci: string): string {
   return b ? `${Number(tg)} ${b}` : kunci
 }
 
-export function GrafikHarian({ rows }: { rows: BarisLaporan[] }) {
+export function GrafikHarian({
+  rows,
+  labelNilai = 'Uang masuk',
+}: {
+  rows: Pick<BarisLaporan, 'key' | 'net_amount'>[]
+  /** Nama besaran di keterangan batang ("Uang masuk", "Belanja"). */
+  labelNilai?: string
+}) {
   // "2026-09-10" → "10 Sep". Angka "10" sendirian tidak memberi tahu apa pun,
   // apalagi saat rentangnya melintasi pergantian bulan.
   const data = rows.map((r) => ({
@@ -76,7 +83,7 @@ export function GrafikHarian({ rows }: { rows: BarisLaporan[] }) {
               color: 'var(--warna-teks-utama)',
             }}
             labelFormatter={(l, p) => p?.[0]?.payload?.tanggal ?? String(l)}
-            formatter={(n) => [formatRupiah(Number(n) || 0), 'Uang masuk']}
+            formatter={(n) => [formatRupiah(Number(n) || 0), labelNilai]}
           />
           <Bar
             dataKey="omzet"

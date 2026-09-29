@@ -229,3 +229,46 @@ type PayablesSummaryResponse struct {
 	Today         string                     `json:"today"` // tanggal usaha outlet
 	Suppliers     []PayablesSupplierResponse `json:"suppliers"`
 }
+
+// ── Laporan belanja (GET /reports/purchases) ─────────────────────────────
+
+type PurchaseReportTotals struct {
+	NotaCount int64 `json:"nota_count"`
+	Belanja   int64 `json:"belanja"`   // Σ total nota di rentang
+	SisaNota  int64 `json:"sisa_nota"` // sisa utang SEKARANG dari nota di rentang
+	Dibayar   int64 `json:"dibayar"`   // pembayaran ke pemasok di rentang (tgl bayar)
+	DariLaci  int64 `json:"dari_laci"`
+	DariLain  int64 `json:"dari_lain"`
+	UtangKini int64 `json:"utang_kini"` // seluruh utang belum lunas saat ini
+}
+
+type PurchaseReportSupplier struct {
+	SupplierID   string `json:"supplier_id,omitempty"` // kosong = tanpa pemasok
+	SupplierName string `json:"supplier_name,omitempty"`
+	NotaCount    int64  `json:"nota_count"`
+	Belanja      int64  `json:"belanja"`
+	SisaNota     int64  `json:"sisa_nota"`
+}
+
+type PurchaseReportDay struct {
+	Date      string `json:"date"`
+	Belanja   int64  `json:"belanja"`
+	NotaCount int64  `json:"nota_count"`
+}
+
+type PurchaseReportProduct struct {
+	ProductID   string `json:"product_id"`
+	ProductName string `json:"product_name"`
+	UnitName    string `json:"unit_name"`
+	Qty         string `json:"qty"` // satuan dasar
+	Nilai       int64  `json:"nilai"`
+}
+
+type PurchaseReportResponse struct {
+	From      string                   `json:"from"`
+	To        string                   `json:"to"`
+	Totals    PurchaseReportTotals     `json:"totals"`
+	Suppliers []PurchaseReportSupplier `json:"suppliers"`
+	Days      []PurchaseReportDay      `json:"days"`
+	Products  []PurchaseReportProduct  `json:"products"`
+}

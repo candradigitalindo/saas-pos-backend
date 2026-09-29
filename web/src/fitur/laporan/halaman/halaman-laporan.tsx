@@ -13,10 +13,11 @@ import { IZIN } from '@/lib/izin'
 import { formatRupiah } from '@/bersama/util/uang'
 import { formatQtySatuan } from '@/bersama/util/desimal'
 import { tanggalISO } from '@/bersama/util/tanggal'
-import { cn } from '@/bersama/util/cn'
 import { BarChart3, CloudOff, ReceiptText, TicketPercent, Wallet } from 'lucide-react'
 import { api, type Halaman } from '@/lib/api-client'
 import { laporanApi, type Pengelompokan } from '../api'
+import { hitungRentang, KolomTanggal, labelPembanding, periodeSebelum, RENTANG, type Rentang } from '../rentang'
+import { TabLaporan } from '../komponen/tab-laporan'
 import { lengkapiHari } from '../deret'
 import { BatangKanal, type BarisBatang } from '../komponen/batang-kanal'
 import { GrafikJam } from '../komponen/grafik-jam'
@@ -29,22 +30,12 @@ const GrafikHarian = lazy(async () => ({
   default: (await import('../komponen/grafik-harian')).GrafikHarian,
 }))
 
-type Rentang = 'hari-ini' | '7-hari' | '30-hari' | 'bulan-ini' | 'pilih'
-
 /**
  * Berapa barang yang digambar di rincian "Per barang". Toko kelontong bisa
  * punya ratusan barang; ratusan batang bukan lagi ringkasan. Sisanya ada di
  * berkas unduhan, yang memuat semuanya.
  */
 const BATAS_BARANG = 20
-
-const RENTANG: Record<Rentang, string> = {
-  'hari-ini': 'Hari ini',
-  '7-hari': '7 hari terakhir',
-  '30-hari': '30 hari terakhir',
-  'bulan-ini': 'Bulan ini',
-  pilih: 'Pilih tanggal',
-}
 
 /**
  * Laporan pemilik — jawab dulu, rinci belakangan (ui/05-ALUR-UTAMA.md §6).
@@ -135,6 +126,7 @@ export function HalamanLaporan() {
 
   return (
     <div className="flex flex-col gap-4">
+      <TabLaporan />
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-judul font-bold text-teks-utama">Laporan</h1>
 
@@ -393,70 +385,6 @@ function Wawasan({
 }
 
 // ── Bantuan ────────────────────────────────────────────────────────────────
-
-function hitungRentang(
-  r: Rentang,
-  dariPilih: string,
-  sampaiPilih: string,
-): { dari: string; sampai: string } {
-  const kini = new Date()
-  const sampai = tanggalISO(kini)
-  if (r === 'pilih') {
-    // Dibalik bila terbalik, bukan ditolak: orang sering mengisi kolom kedua
-    // lebih dulu, dan menolak isian yang maksudnya jelas cuma menghalangi.
-    return dariPilih <= sampaiPilih
-      ? { dari: dariPilih, sampai: sampaiPilih }
-      : { dari: sampaiPilih, sampai: dariPilih }
-  }
-  if (r === 'hari-ini') return { dari: sampai, sampai }
-  if (r === 'bulan-ini') {
-    return { dari: `${sampai.slice(0, 7)}-01`, sampai }
-  }
-  const hari = r === '7-hari' ? 6 : 29
-  return { dari: tanggalISO(new Date(kini.getTime() - hari * 86_400_000)), sampai }
-}
-
-function periodeSebelum(dari: string, sampai: string): { dari: string; sampai: string } {
-  const d = new Date(`${dari}T00:00:00Z`)
-  const s = new Date(`${sampai}T00:00:00Z`)
-  const panjang = Math.max(1, Math.round((s.getTime() - d.getTime()) / 86_400_000) + 1)
-  const sBaru = new Date(d.getTime() - 86_400_000)
-  const dBaru = new Date(sBaru.getTime() - (panjang - 1) * 86_400_000)
-  const iso = (x: Date) => x.toISOString().slice(0, 10)
-  return { dari: iso(dBaru), sampai: iso(sBaru) }
-}
-
-function labelPembanding(r: Rentang): string {
-  return r === 'hari-ini' ? 'dibanding kemarin' : 'dibanding periode sebelumnya'
-}
-
-/** Kolom tanggal: label di atas, bukan placeholder (ui/02 — Kolom isian). */
-function KolomTanggal({
-  label,
-  nilai,
-  onUbah,
-}: {
-  label: string
-  nilai: string
-  onUbah: (v: string) => void
-}) {
-  return (
-    <label className="flex flex-1 flex-col gap-1">
-      <span className="text-keterangan font-medium text-teks-sekunder">{label}</span>
-      <input
-        type="date"
-        value={nilai}
-        max={tanggalISO()}
-        onChange={(e) => onUbah(e.target.value)}
-        className={cn(
-          'h-12 w-full rounded-kontrol border border-garis bg-permukaan px-3',
-          'text-isi tabular-nums text-teks-utama',
-          'focus:border-utama focus:outline-none focus:ring-2 focus:ring-utama/30',
-        )}
-      />
-    </label>
-  )
-}
 
 /**
  * Nama kanal untuk ditampilkan.

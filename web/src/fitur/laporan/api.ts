@@ -72,6 +72,10 @@ export const laporanApi = {
   untung: (from: string, to: string, outlet_id?: string) =>
     api.get<LaporanUntung>('/reports/profit', { query: { from, to, outlet_id } }),
 
+  /** Belanja & utang pemasok. Butuh report.view DAN stock.view. */
+  belanja: (from: string, to: string, outlet_id?: string) =>
+    api.get<LaporanBelanja>('/reports/purchases', { query: { from, to, outlet_id } }),
+
   /**
    * Unduh CSV.
    *
@@ -103,4 +107,25 @@ export const laporanApi = {
     a.click()
     URL.revokeObjectURL(url)
   },
+}
+
+/** GET /reports/purchases — nota menurut tanggal usaha nota, pembayaran menurut tanggal bayarnya. */
+export interface LaporanBelanja {
+  from: string
+  to: string
+  totals: {
+    nota_count: number
+    belanja: number
+    /** Sisa utang SEKARANG dari nota di rentang. */
+    sisa_nota: number
+    /** Uang keluar ke pemasok di rentang (apa pun tanggal notanya). */
+    dibayar: number
+    dari_laci: number
+    dari_lain: number
+    /** Seluruh utang belum lunas saat ini. */
+    utang_kini: number
+  }
+  suppliers: { supplier_id?: string; supplier_name?: string; nota_count: number; belanja: number; sisa_nota: number }[]
+  days: { date: string; belanja: number; nota_count: number }[]
+  products: { product_id: string; product_name: string; unit_name: string; qty: string; nilai: number }[]
 }

@@ -213,6 +213,7 @@ export const AKSI_PALET: ItemMenu[] = [
   { ke: '/kasir', label: 'Buka Kasir', ikon: Receipt, izin: [IZIN.saleCreate], kataKunci: ['jual', 'transaksi baru', 'pos', 'kasir'] },
   { ke: '/barang/baru', label: 'Tambah barang', ikon: ShoppingBag, izin: [IZIN.productEdit], kataKunci: ['produk baru', 'item baru'] },
   { ke: '/stok/masuk', label: 'Catat barang masuk', ikon: Boxes, izin: [IZIN.stockAdjust], kataKunci: ['pembelian', 'restok', 'belanja', 'kulakan'] },
+  { ke: '/laporan/belanja', label: 'Laporan belanja', ikon: BarChart3, izin: [IZIN.reportView], kataKunci: ['pengeluaran', 'belanja', 'pembelian', 'uang keluar', 'utang'] },
   { ke: '/stok/koreksi', label: 'Koreksi stok', ikon: ClipboardList, izin: [IZIN.stockAdjust], kataKunci: ['sesuaikan stok', 'stok awal'] },
   { ke: '/barang/impor', label: 'Impor barang dari Excel', ikon: ShoppingBag, izin: [IZIN.productImport], kataKunci: ['csv', 'excel', 'unggah'] },
   { ke: '/kasir/tutup-shift', label: 'Tutup shift', ikon: ArrowRightLeft, izin: [IZIN.shiftClose], kataKunci: ['setor', 'akhir hari'] },
