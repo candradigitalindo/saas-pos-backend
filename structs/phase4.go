@@ -39,6 +39,8 @@ type PurchaseItemResponse struct {
 	ProductName  string `json:"product_name,omitempty"`
 	VariantName  string `json:"variant_name,omitempty"`
 	BaseUnitName string `json:"base_unit_name,omitempty"`
+	// ReturnedQty: yang sudah diretur dari baris ini (satuan beli baris).
+	ReturnedQty string `json:"returned_qty,omitempty"`
 }
 
 type PurchaseResponse struct {
@@ -59,6 +61,9 @@ type PurchaseResponse struct {
 
 	DueDate     string `json:"due_date,omitempty"` // YYYY-MM-DD
 	Outstanding int64  `json:"outstanding"`        // sisa utang = total − paid_amount
+	// ReturnedAmount: nilai yang sudah diretur (total sudah dikurangi ini).
+	ReturnedAmount int64                    `json:"returned_amount"`
+	Returns        []PurchaseReturnListItem `json:"returns,omitempty"` // GET /purchases/:id
 
 	// Pembayaran (GET /purchases/:id), terlama dulu.
 	Payments []PurchasePaymentResponse `json:"payments,omitempty"`
@@ -271,4 +276,50 @@ type PurchaseReportResponse struct {
 	Suppliers []PurchaseReportSupplier `json:"suppliers"`
 	Days      []PurchaseReportDay      `json:"days"`
 	Products  []PurchaseReportProduct  `json:"products"`
+}
+
+// ── Retur ke pemasok (000049) ─────────────────────────────────────────────
+
+// PurchaseReturnRequest: POST /purchases/:id/returns.
+type PurchaseReturnRequest struct {
+	Items []struct {
+		PurchaseItemID string `json:"purchase_item_id" binding:"required,ulid"`
+		Qty            string `json:"qty" binding:"required"`
+	} `json:"items" binding:"required,min=1,dive"`
+	Reason string `json:"reason" binding:"required,max=255"`
+	// Ke mana uang dari pemasok masuk bila nota sudah dibayar melebihi total
+	// barunya: drawer (laci kasir) atau other.
+	RefundSource string `json:"refund_source" binding:"omitempty,oneof=drawer other"`
+}
+
+// PurchaseReturnResponse: hasil satu retur.
+type PurchaseReturnResponse struct {
+	ID                  string `json:"id"`
+	PurchaseID          string `json:"purchase_id"`
+	Total               int64  `json:"total"`         // nilai barang yang diretur
+	RefundAmount        int64  `json:"refund_amount"` // uang yang dikembalikan pemasok
+	RefundSource        string `json:"refund_source,omitempty"`
+	PurchaseTotal       int64  `json:"purchase_total"`       // total nota setelah retur
+	PurchaseOutstanding int64  `json:"purchase_outstanding"` // sisa utang nota setelah retur
+}
+
+// PurchaseReturnListItem: satu retur di rincian nota.
+type PurchaseReturnListItem struct {
+	ID            string                   `json:"id"`
+	Reason        string                   `json:"reason"`
+	Total         int64                    `json:"total"`
+	RefundAmount  int64                    `json:"refund_amount"`
+	RefundSource  string                   `json:"refund_source,omitempty"`
+	OccurredAt    string                   `json:"occurred_at"`
+	CreatedByName string                   `json:"created_by_name,omitempty"`
+	Items         []PurchaseReturnLineResp `json:"items"`
+}
+
+// PurchaseReturnLineResp: satu baris retur.
+type PurchaseReturnLineResp struct {
+	PurchaseItemID string `json:"purchase_item_id"`
+	ProductName    string `json:"product_name"`
+	Qty            string `json:"qty"`
+	UnitName       string `json:"unit_name"`
+	LineTotal      int64  `json:"line_total"`
 }

@@ -20,7 +20,7 @@ import { Laku, LencanaKeadaan, Meter, teksSisa } from '../komponen/bagian-saldo'
  * Sebab pergerakan stok, dalam bahasa orang (ui/01-PRINSIP-DESAIN.md §2).
  *
  * Daftarnya WAJIB sama persis dengan CHECK constraint `stock_ledger.kind` di
- * database/migrations/000008_stock_ledger.up.sql. Tipe `JenisGerakan` di bawah
+ * database/migrations/000008_stock_ledger.up.sql (+ purchase_return, 000049). Tipe `JenisGerakan` di bawah
  * membuat kunci yang hilang jadi galat kompilasi, bukan istilah sistem yang
  * diam-diam bocor ke layar.
  *
@@ -40,6 +40,7 @@ type JenisGerakan =
   | 'opname'
   | 'recipe'
   | 'initial'
+  | 'purchase_return'
 
 const SEBAB: Record<JenisGerakan, string> = {
   sale: 'Terjual',
@@ -52,6 +53,7 @@ const SEBAB: Record<JenisGerakan, string> = {
   transfer_out: 'Dikirim ke toko lain',
   recipe: 'Terpakai sebagai bahan',
   initial: 'Stok awal',
+  purchase_return: 'Retur ke pemasok',
 }
 
 /** Kartu stok: riwayat keluar-masuk satu barang. */

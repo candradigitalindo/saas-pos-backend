@@ -17,7 +17,16 @@ import type { SumberBayar } from '../api'
  *   kasir di toko ini belum dibuka, atau pengguna tidak punya izin uang masuk
  *   & keluar — alasannya ditulis, bukan pilihan yang hilang diam-diam.
  */
-export function PilihSumberBayar({ nilai, onPilih }: { nilai: SumberBayar; onPilih: (s: SumberBayar) => void }) {
+export function PilihSumberBayar({
+  nilai,
+  onPilih,
+  arah = 'keluar',
+}: {
+  nilai: SumberBayar
+  onPilih: (s: SumberBayar) => void
+  /** keluar = membayar pemasok; masuk = uang kembali dari pemasok (retur). */
+  arah?: 'keluar' | 'masuk'
+}) {
   const { boleh } = useSesi()
   const { shift, memuat } = useShiftAktif()
   const bolehLaci = boleh(IZIN.cashMovement)
@@ -31,7 +40,9 @@ export function PilihSumberBayar({ nilai, onPilih }: { nilai: SumberBayar; onPil
 
   return (
     <fieldset className="flex min-w-0 flex-col gap-1.5">
-      <legend className="mb-1.5 text-label font-medium text-teks-sekunder">Sumber uang</legend>
+      <legend className="mb-1.5 text-label font-medium text-teks-sekunder">
+        {arah === 'masuk' ? 'Uang dari pemasok masuk ke' : 'Sumber uang'}
+      </legend>
       <div className="grid grid-cols-2 gap-2">
         <Pilihan
           ikon={Landmark}
@@ -42,10 +53,13 @@ export function PilihSumberBayar({ nilai, onPilih }: { nilai: SumberBayar; onPil
         />
         <Pilihan
           ikon={Wallet}
-          judul="Dari laci kasir"
+          judul={arah === 'masuk' ? 'Laci kasir' : 'Dari laci kasir'}
           keterangan={
             alasanTidak ??
-            `Uang keluar shift ${shift?.opened_by_name ?? ''} (sejak ${formatJam(shift!.opened_at)})`.replace('  ', ' ')
+            `Uang ${arah === 'masuk' ? 'masuk' : 'keluar'} shift ${shift?.opened_by_name ?? ''} (sejak ${formatJam(shift!.opened_at)})`.replace(
+              '  ',
+              ' ',
+            )
           }
           aktif={nilai === 'drawer'}
           nonaktif={!!alasanTidak}

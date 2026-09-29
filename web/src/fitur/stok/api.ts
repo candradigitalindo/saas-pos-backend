@@ -31,6 +31,8 @@ export interface ItemPembelian {
   product_name?: string
   variant_name?: string
   base_unit_name?: string
+  /** Yang sudah diretur ke pemasok dari baris ini (satuan beli baris). */
+  returned_qty?: string
 }
 
 export interface Pembelian {
@@ -54,11 +56,29 @@ export interface Pembelian {
   outstanding: number
   /** GET /purchases/:id — terlama dulu. */
   payments?: PembayaranPembelian[]
+  /** Nilai yang sudah diretur ke pemasok — total SUDAH dikurangi ini. */
+  returned_amount: number
+  /** GET /purchases/:id — terlama dulu. */
+  returns?: ReturPembelian[]
   supplier_name?: string
   created_by_name?: string
   item_count: number
   /** Paling banyak tiga nama barang pertama. */
   item_names?: string[]
+}
+
+/** Satu retur ke pemasok atas satu nota. */
+export interface ReturPembelian {
+  id: string
+  reason: string
+  /** Nilai barang yang diretur. */
+  total: number
+  /** Uang yang dikembalikan pemasok (nota sudah dibayar melebihi total barunya). */
+  refund_amount: number
+  refund_source?: SumberBayar
+  occurred_at: string
+  created_by_name?: string
+  items: { purchase_item_id: string; product_name: string; qty: string; unit_name: string; line_total: number }[]
 }
 
 /** Sumber uang pembayaran pemasok: laci kasir (uang keluar shift) atau uang lain. */
@@ -286,6 +306,24 @@ export const stokApi = {
     }),
 
   ringkasanUtang: (outlet_id: string) => api.get<RingkasanUtang>('/payables/summary', { query: { outlet_id } }),
+
+  /**
+   * Retur barang ke pemasok atas satu nota. refund_source wajib bila nota sudah
+   * dibayar melebihi total barunya (pemasok mengembalikan uang). Wajib
+   * Idempotency-Key: mengubah stok & uang.
+   */
+  returPembelian: (
+    id: string,
+    input: { items: { purchase_item_id: string; qty: string }[]; reason: string; refund_source?: SumberBayar },
+    kunci: string,
+  ) =>
+    api.post<{
+      id: string
+      total: number
+      refund_amount: number
+      purchase_total: number
+      purchase_outstanding: number
+    }>(`/purchases/${id}/returns`, input, { idempotencyKey: kunci }),
 
   /** Bayar utang satu pembelian. Wajib Idempotency-Key: memindahkan uang. */
   bayarPembelian: (id: string, input: { amount: number; source: SumberBayar; note?: string }, kunci: string) =>

@@ -19,7 +19,7 @@ func PurchaseToResponse(p *models.Purchase) structs.PurchaseResponse {
 		ID: p.ID, OutletID: p.OutletID, SupplierID: ptrStr(p.SupplierID),
 		InvoiceNo: p.InvoiceNo, Status: p.Status,
 		Subtotal: p.Subtotal, DiscountAmount: p.DiscountAmount, TaxAmount: p.TaxAmount,
-		Total: p.Total, PaidAmount: p.PaidAmount, Outstanding: p.Total - p.PaidAmount,
+		Total: p.Total, PaidAmount: p.PaidAmount, Outstanding: p.Total - p.PaidAmount, ReturnedAmount: p.ReturnedAmount,
 		OccurredAt:   p.OccurredAt.UTC().Format(saleTimeLayout),
 		BusinessDate: p.BusinessDate.Format("2006-01-02"),
 		CreatedAt:    p.CreatedAt.UTC().Format(saleTimeLayout),

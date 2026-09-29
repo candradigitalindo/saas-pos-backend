@@ -126,6 +126,11 @@ func GetPurchase(c *gin.Context) {
 		respondServiceError(c, err)
 		return
 	}
+	retur, returBaris, err := repositories.ListPurchaseReturns(ctx, p.ID)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
 	r := services.PurchaseToResponse(&p)
 	isiExtra(&r, extras[p.ID])
 	for _, b := range bayar {
@@ -133,6 +138,29 @@ func GetPurchase(c *gin.Context) {
 			ID: b.ID, Amount: b.Amount, Source: b.Source, Note: b.Note,
 			PaidAt: b.PaidAt.UTC().Format(timeLayout), CreatedByName: b.CreatedByName,
 		})
+	}
+	// Retur: daftar per retur, dan jumlah yang sudah diretur per baris nota
+	// (batas retur berikutnya).
+	perRetur := map[string][]structs.PurchaseReturnLineResp{}
+	sudah := map[string]decimal.Decimal{}
+	for _, b := range returBaris {
+		perRetur[b.ReturnID] = append(perRetur[b.ReturnID], structs.PurchaseReturnLineResp{
+			PurchaseItemID: b.PurchaseItemID, ProductName: b.ProductName, Qty: b.Qty.String(),
+			UnitName: b.UnitName, LineTotal: b.LineTotal,
+		})
+		sudah[b.PurchaseItemID] = sudah[b.PurchaseItemID].Add(b.Qty)
+	}
+	for _, rt := range retur {
+		r.Returns = append(r.Returns, structs.PurchaseReturnListItem{
+			ID: rt.ID, Reason: rt.Reason, Total: rt.Total, RefundAmount: rt.RefundAmount,
+			RefundSource: deref(rt.RefundSource), OccurredAt: rt.OccurredAt.UTC().Format(timeLayout),
+			CreatedByName: rt.CreatedByName, Items: perRetur[rt.ID],
+		})
+	}
+	for i := range r.Items {
+		if q, ada := sudah[r.Items[i].ID]; ada {
+			r.Items[i].ReturnedQty = q.String()
+		}
 	}
 	for i := range r.Items {
 		n := nama[r.Items[i].ID]
@@ -223,4 +251,37 @@ func hariUsahaOutlet(c *gin.Context, outletID string) time.Time {
 		}
 	}
 	return time.Date(h.Year(), h.Month(), h.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+// ReturnPurchase mencatat retur barang ke pemasok atas satu nota. Wajib
+// header Idempotency-Key.
+func ReturnPurchase(c *gin.Context) {
+	raw, err := io.ReadAll(io.LimitReader(c.Request.Body, checkoutMaxBodyBytes))
+	if err != nil {
+		badRequest(c, "body", "Gagal membaca body")
+		return
+	}
+	var req structs.PurchaseReturnRequest
+	if err := bindJSONBytes(raw, &req); err != nil {
+		validationFailed(c, err)
+		return
+	}
+	in := services.PurchaseReturnInput{
+		PurchaseID: c.Param("id"), Reason: req.Reason, RefundSource: req.RefundSource,
+		IdempotencyKey: c.GetHeader("Idempotency-Key"), RequestHash: helpers.SHA256Hex(raw),
+	}
+	for _, it := range req.Items {
+		q, e := decimal.NewFromString(it.Qty)
+		if e != nil {
+			badRequest(c, "items.qty", "qty bukan angka yang valid")
+			return
+		}
+		in.Items = append(in.Items, services.PurchaseReturnLine{PurchaseItemID: it.PurchaseItemID, Qty: q})
+	}
+	status, body, err := services.ReturnPurchase(c.Request.Context(), in)
+	if err != nil {
+		notFoundOr(c, err, repositories.ErrPurchaseNotFound, "Pembelian tidak ditemukan")
+		return
+	}
+	c.Data(status, "application/json; charset=utf-8", body)
 }

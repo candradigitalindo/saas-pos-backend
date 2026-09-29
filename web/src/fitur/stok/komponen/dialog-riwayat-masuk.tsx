@@ -1,18 +1,20 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { ChevronDown, PackageOpen } from 'lucide-react'
+import { ChevronDown, PackageOpen, Undo2 } from 'lucide-react'
 import { Dialog, IsiDialog } from '@/bersama/ui/dialog'
 import { Tombol } from '@/bersama/ui/tombol'
 import { KeadaanGagal } from '@/bersama/komponen/keadaan-kosong'
 import { Kerangka, KerangkaBaris } from '@/bersama/komponen/kerangka'
 import { useSesi } from '@/bersama/hooks/use-sesi'
+import { IZIN } from '@/lib/izin'
 import { GalatAPI } from '@/lib/api-client'
 import { formatRupiah } from '@/bersama/util/uang'
 import { formatQty, formatQtySatuan } from '@/bersama/util/desimal'
 import { formatTanggalJam } from '@/bersama/util/tanggal'
 import { cn } from '@/bersama/util/cn'
 import { stokApi, type Pembelian } from '../api'
+import { DialogReturPemasok } from './dialog-retur-pemasok'
 
 const PER_HALAMAN = 20
 
@@ -143,6 +145,8 @@ export function BarisNota({
 }
 
 function RincianNota({ id }: { id: string }) {
+  const { boleh } = useSesi()
+  const [retur, setRetur] = useState<Pembelian | null>(null)
   const q = useQuery({ queryKey: ['pembelian', 'rinci', id], queryFn: () => stokApi.pembelian(id) })
   if (q.isLoading) return <Kerangka className="mb-3 h-16 w-full" />
   if (q.isError || !q.data) return <p className="pb-3 text-label text-bahaya-teks">Rincian belum bisa dimuat.</p>
@@ -183,6 +187,33 @@ function RincianNota({ id }: { id: string }) {
           ))}
         </ul>
       )}
+      {/* Retur: apa, berapa, kenapa — dan uang yang dikembalikan pemasok. */}
+      {(d.returns?.length ?? 0) > 0 && (
+        <ul className="flex flex-col gap-1.5 border-t border-garis pt-2 text-keterangan text-teks-sekunder">
+          {d.returns!.map((r) => (
+            <li key={r.id} className="flex items-baseline justify-between gap-3">
+              <span className="min-w-0">
+                Diretur · {r.reason} · {formatTanggalJam(r.occurred_at)}
+                {r.created_by_name && ` · ${r.created_by_name}`}
+                <span className="block text-teks-redup">
+                  {r.items.map((x) => `${x.product_name} ${formatQty(x.qty)} ${x.unit_name}`).join(', ')}
+                  {r.refund_amount > 0 &&
+                    ` · pemasok mengembalikan ${formatRupiah(r.refund_amount)} ke ${r.refund_source === 'drawer' ? 'laci' : 'uang lain'}`}
+                </span>
+              </span>
+              <span className="shrink-0 font-medium tabular-nums text-teks-utama">−{formatRupiah(r.total)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {boleh(IZIN.stockAdjust) &&
+        (d.items ?? []).some((it) => Number.parseFloat(it.qty) > Number.parseFloat(it.returned_qty ?? '0')) && (
+          <Tombol jenis="kedua" ukuran="padat" onClick={() => setRetur(d)} className="self-start">
+            <Undo2 className="h-4 w-4" aria-hidden />
+            Retur barang
+          </Tombol>
+        )}
+      <DialogReturPemasok pembelian={retur} onTutup={() => setRetur(null)} />
       {d.outstanding > 0 && (
         <p className="flex items-baseline justify-between gap-3 border-t border-garis pt-2 text-label">
           <span className="font-semibold text-jingga-700">Sisa utang {formatRupiah(d.outstanding)}</span>
