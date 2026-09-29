@@ -134,10 +134,11 @@ menu aktif selalu digulir ke dalam pandangan.
 
 | Layar | Endpoint | Izin |
 |---|---|---|
-| Daftar & detail pelanggan (avatar, kedatangan, belanja, terakhir datang, sisa kasbon) | `GET /customers` (`stats`) · `GET /customers/:id` | `customer.view` (sisa kasbon: `receivable.manage`) |
-| Tambah / ubah / hapus | `POST\|PUT\|DELETE /customers[/:id]` | `customer.edit` |
-| Daftar kasbon | `GET /receivables` · `GET /receivables/:id` | `receivable.manage` |
-| Terima setoran kasbon | `POST /receivable-payments` + `Idempotency-Key` | `receivable.manage` |
+| Daftar pelanggan (`/pelanggan`): avatar, kedatangan, belanja, terakhir datang, sisa kasbon (merah bila ada yang lewat jatuh tempo), tombol WhatsApp; nama/kartu membuka rinciannya | `GET /customers?outlet_id=` (`stats`) | `customer.view` (sisa kasbon: `receivable.manage`) |
+| Rincian pelanggan (`/pelanggan/:id`): kontak + WhatsApp / Telepon, tempo & batas kasbon, ubah & hapus (ikon); angka Total belanja · Datang · Rata-rata · Terakhir datang; bagian Kasbon (sama dengan dialog rincian di layar Kasbon); "Sering dibeli" (5 barang, N× beli); riwayat belanja (nota → Riwayat Penjualan `?tanggal=&cari=`) | `GET /customers/:id` · `GET /customers/:id/top-products` · `GET /sales?customer_id=` | `customer.view` (+ `receivable.manage` untuk kasbon, `sale.create` untuk riwayat) |
+| Tambah / ubah / hapus pelanggan: nama, nomor WhatsApp (diperiksa, tidak menghalangi), batas kasbon, tempo kasbon (hari), daftar harga, alamat, catatan | `POST\|PUT\|DELETE /customers[/:id]` | `customer.edit` |
+| Kasbon (`/kasbon`) — per PELANGGAN: total belum dibayar, "N pelanggan · M nota", penanda "K pelanggan lewat jatuh tempo · Rp" & "segera"; kartu per pelanggan (lewat jatuh tempo terbesar dulu): jatuh tempo terdekat / "sejak", terakhir bayar, sisa (merah bila lewat), batas; "Tagih" (teks WhatsApp ringkas ke `wa.me`) & "Terima"; ketuk kartu → dialog rincian: nota belum lunas terlama dulu (tanggal · status jatuh tempo, nomor nota, dicicil), "Tagih via WA" (teks merinci ≤ 5 nota + total; tanpa nomor → "Salin tagihan"), ikon kalender → "Jatuh tempo kasbon" (+7/+14/+30 hari atau tanggal; "Tanpa jatuh tempo"), riwayat setoran (dilipat). Menu samping berlencana K; Beranda menampilkan "Kasbon: …" HANYA saat ada yang lewat / segera | `GET /receivable-summary` · `GET /receivables?status=unpaid&customer_id=` · `PUT /receivables/:id` · `GET /customers/:id/receivable-payments` | `receivable.manage` |
+| Terima setoran (dialog): jumlah (mulai dari seluruh sisa, "Lunasi semua"), Tunai / QRIS / Transfer, tunai → "Laci kasir" (pilihan awal bila kasir buka; uang masuk shift) atau "Uang lain", catatan, akibat ("seluruh kasbon LUNAS" / "Sisa setelah ini Rp X") | `POST /customers/:id/receivable-payments` + `Idempotency-Key` | `receivable.manage` |
 
 ---
 

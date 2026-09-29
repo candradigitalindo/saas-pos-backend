@@ -7,6 +7,7 @@ import (
 
 	"candra/backend-api/models"
 
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -83,7 +84,7 @@ func CreateCustomer(ctx context.Context, tx *gorm.DB, row *models.Customer) erro
 func UpdateCustomer(ctx context.Context, tx *gorm.DB, row *models.Customer) error {
 	err := updateTenantColumns(ctx, tx, row,
 		"code", "name", "phone", "email", "address", "type",
-		"price_list_id", "owner_id", "credit_limit", "latitude", "longitude", "note")
+		"price_list_id", "owner_id", "credit_limit", "credit_term_days", "latitude", "longitude", "note")
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return ErrCustomerNotFound
 	}
@@ -155,28 +156,71 @@ func CustomerSpending(ctx context.Context, ids []string) (map[string]CustomerSpe
 	return out, nil
 }
 
-// CustomerReceivableOutstanding menjumlahkan sisa kasbon terbuka per pelanggan
-// (amount − paid_amount atas piutang berstatus 'open'). Piutang tidak berlapis
-// toko — kasbon melekat pada pelanggan, bukan pada cabang tempat ia berutang.
-func CustomerReceivableOutstanding(ctx context.Context, ids []string) (map[string]int64, error) {
-	out := make(map[string]int64, len(ids))
+// CustomerOutstanding: sisa kasbon seorang pelanggan, dan bagiannya yang
+// sudah lewat jatuh tempo.
+type CustomerOutstanding struct {
+	CustomerID  string
+	Outstanding int64
+	Overdue     int64
+}
+
+// CustomerReceivableOutstanding menjumlahkan sisa kasbon BELUM LUNAS per
+// pelanggan — status 'open' DAN 'partial' (sudah dicicil sebagian). Dulu hanya
+// 'open', sehingga kasbon yang baru dicicil sekali lenyap dari sisa kasbon
+// pelanggannya. Piutang tidak berlapis toko — kasbon melekat pada pelanggan,
+// bukan pada cabang tempat ia berutang.
+func CustomerReceivableOutstanding(ctx context.Context, ids []string, hariIni time.Time) (map[string]CustomerOutstanding, error) {
+	out := make(map[string]CustomerOutstanding, len(ids))
 	if len(ids) == 0 {
 		return out, nil
 	}
-	var rows []struct {
-		CustomerID  string
-		Outstanding int64
-	}
+	var rows []CustomerOutstanding
 	err := tenantDB(ctx, nil).Table("receivables").
-		Where("tenant_id = ? AND customer_id IN ? AND status = 'open'", currentTenantID(ctx), ids).
-		Select("customer_id, COALESCE(SUM(amount - paid_amount), 0) AS outstanding").
+		Where("tenant_id = ? AND customer_id IN ? AND status IN ('open', 'partial')", currentTenantID(ctx), ids).
+		Select(`customer_id, COALESCE(SUM(amount - paid_amount), 0)::bigint AS outstanding,
+			COALESCE(SUM(amount - paid_amount) FILTER (WHERE due_date < ?::date), 0)::bigint AS overdue`,
+			hariIni.Format("2006-01-02")).
 		Group("customer_id").
 		Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
 	for _, r := range rows {
-		out[r.CustomerID] = r.Outstanding
+		out[r.CustomerID] = r
 	}
 	return out, nil
+}
+
+// CustomerTopProduct: barang yang sering dibeli seorang pelanggan.
+type CustomerTopProduct struct {
+	ProductID   string
+	ProductName string
+	UnitName    string // satuan dasar
+	Times       int64  // berapa nota memuatnya
+	Qty         decimal.Decimal
+	LastAt      time.Time
+}
+
+// CustomerTopProducts: `limit` barang yang paling sering dibeli pelanggan
+// (nota 'completed'; varian digabung ke barangnya; jumlah dalam satuan dasar),
+// di toko yang boleh dilihat pengguna — sama dengan angka belanjanya.
+func CustomerTopProducts(ctx context.Context, customerID string, limit int) ([]CustomerTopProduct, error) {
+	q := tenantDB(ctx, nil).Table("sale_items si").
+		Joins("JOIN sales s ON s.tenant_id = si.tenant_id AND s.id = si.sale_id").
+		Joins("LEFT JOIN products p ON p.tenant_id = si.tenant_id AND p.id = si.product_id").
+		Joins("LEFT JOIN units un ON un.tenant_id = p.tenant_id AND un.id = p.unit_id").
+		Where("si.tenant_id = ? AND s.customer_id = ? AND s.status = 'completed'", currentTenantID(ctx), customerID)
+	q = scopeOutlet(ctx, q, "s.outlet_id")
+	var rows []CustomerTopProduct
+	err := q.Select(`si.product_id,
+			COALESCE(MAX(p.name), (array_agg(si.product_name ORDER BY s.occurred_at DESC))[1]) AS product_name,
+			COALESCE(MAX(un.name), '') AS unit_name,
+			COUNT(DISTINCT s.id) AS times,
+			SUM(si.qty * si.unit_conversion) AS qty,
+			MAX(s.occurred_at) AS last_at`).
+		Group("si.product_id").
+		Order("times DESC, last_at DESC").
+		Limit(limit).
+		Scan(&rows).Error
+	return rows, err
 }

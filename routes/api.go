@@ -354,6 +354,10 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	cust.POST("", middlewares.Require("customer.edit"), controllers.CreateCustomer)
 	cust.PUT("/:id", middlewares.Require("customer.edit"), controllers.UpdateCustomer)
 	cust.DELETE("/:id", middlewares.Require("customer.edit"), controllers.DeleteCustomer)
+	cust.GET("/:id/top-products", middlewares.Require("customer.view"), controllers.CustomerTopProducts)
+	// Setoran per pelanggan (melunasi kasbon terlama dulu) & riwayatnya.
+	cust.POST("/:id/receivable-payments", middlewares.Require("receivable.manage"), controllers.PayCustomerReceivables)
+	cust.GET("/:id/receivable-payments", middlewares.Require("receivable.manage"), controllers.ListCustomerReceivablePayments)
 
 	// Shift & kas.
 	t.POST("/shifts/open", middlewares.Require("shift.open"), controllers.OpenShift)
@@ -389,6 +393,8 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	// Piutang.
 	t.GET("/receivables", middlewares.Require("receivable.manage"), controllers.ListReceivables)
 	t.GET("/receivables/:id", middlewares.Require("receivable.manage"), controllers.GetReceivable)
+	t.PUT("/receivables/:id", middlewares.Require("receivable.manage"), controllers.SetReceivableDueDate)
+	t.GET("/receivable-summary", middlewares.Require("receivable.manage"), controllers.ReceivablesSummary)
 	t.POST("/receivable-payments", middlewares.Require("receivable.manage"), controllers.AddReceivablePayment)
 
 	// Laporan & dashboard — agregat dari daily_sales_summaries (Fase 5, §8).

@@ -20,6 +20,7 @@ import { StatusKoneksi } from '@/bersama/komponen/status-koneksi'
 import { useSesi } from '@/bersama/hooks/use-sesi'
 import { useSinkron } from '@/lib/offline/mesin'
 import { PeringatanUtang } from '@/fitur/stok/komponen/peringatan-utang'
+import { PeringatanKasbon } from '@/fitur/pelanggan/komponen/peringatan-kasbon'
 import { api } from '@/lib/api-client'
 import { IZIN } from '@/lib/izin'
 import { formatRupiah } from '@/bersama/util/uang'
@@ -182,8 +183,10 @@ export function HalamanBeranda() {
         </Link>
       )}
 
-      {/* Muncul hanya saat ada utang pemasok yang lewat / segera jatuh tempo. */}
+      {/* Muncul hanya saat ada utang pemasok / kasbon pelanggan yang lewat
+          atau segera jatuh tempo. */}
       <PeringatanUtang />
+      <PeringatanKasbon />
 
       {bolehLihatLaporan &&
         (dashboard.isLoading ? (

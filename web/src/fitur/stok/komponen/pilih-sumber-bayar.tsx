@@ -21,15 +21,23 @@ export function PilihSumberBayar({
   nilai,
   onPilih,
   arah = 'keluar',
+  legenda,
+  butuhIzinKas = true,
 }: {
   nilai: SumberBayar
   onPilih: (s: SumberBayar) => void
   /** keluar = membayar pemasok; masuk = uang kembali dari pemasok (retur). */
   arah?: 'keluar' | 'masuk'
+  legenda?: string
+  /**
+   * Laci hanya bisa dipilih pemegang izin uang masuk & keluar. Setoran kasbon
+   * tidak memerlukannya (uang bertambah — server tidak memintanya).
+   */
+  butuhIzinKas?: boolean
 }) {
   const { boleh } = useSesi()
   const { shift, memuat } = useShiftAktif()
-  const bolehLaci = boleh(IZIN.cashMovement)
+  const bolehLaci = !butuhIzinKas || boleh(IZIN.cashMovement)
   const alasanTidak = !bolehLaci
     ? 'Butuh izin uang masuk & keluar'
     : memuat
@@ -41,7 +49,7 @@ export function PilihSumberBayar({
   return (
     <fieldset className="flex min-w-0 flex-col gap-1.5">
       <legend className="mb-1.5 text-label font-medium text-teks-sekunder">
-        {arah === 'masuk' ? 'Uang dari pemasok masuk ke' : 'Sumber uang'}
+        {legenda ?? (arah === 'masuk' ? 'Uang dari pemasok masuk ke' : 'Sumber uang')}
       </legend>
       <div className="grid grid-cols-2 gap-2">
         <Pilihan

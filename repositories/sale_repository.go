@@ -91,6 +91,8 @@ type SaleFilter struct {
 	// Method: hanya transaksi yang punya pembayaran dengan cara ini
 	// (cash | qris | credit | ...).
 	Method string
+	// CustomerID: hanya transaksi pelanggan ini (riwayat belanja pelanggan).
+	CustomerID string
 }
 
 // ListSales mengembalikan satu halaman transaksi milik tenant konteks (tanpa
@@ -116,6 +118,9 @@ func ListSales(ctx context.Context, f SaleFilter, limit, offset int) ([]models.S
 	if f.Method != "" {
 		conds = append(conds, "EXISTS (SELECT 1 FROM sale_payments sp WHERE sp.sale_id = sales.id AND sp.method = ?)")
 		args = append(args, f.Method)
+	}
+	if f.CustomerID != "" {
+		conds, args = append(conds, "customer_id = ?"), append(args, f.CustomerID)
 	}
 	where := ""
 	for i, c := range conds {

@@ -1,275 +1,237 @@
-import { useMemo, useRef, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ulid } from 'ulid'
-import { NotebookPen } from 'lucide-react'
+import { useDeferredValue, useState } from 'react'
+import { MessageCircle, NotebookPen, Search, TriangleAlert, Wallet } from 'lucide-react'
 import { Kartu } from '@/bersama/ui/kartu'
-import { KolomUang } from '@/bersama/ui/kolom-uang'
-import { Pilihan } from '@/bersama/ui/kolom'
 import { Tombol } from '@/bersama/ui/tombol'
-import { AksiDialog, Dialog, IsiDialog } from '@/bersama/ui/dialog'
-import { LencanaStatus } from '@/bersama/komponen/lencana-status'
 import { KeadaanGagal, KeadaanKosong } from '@/bersama/komponen/keadaan-kosong'
-import { KerangkaBaris } from '@/bersama/komponen/kerangka'
-import { useToast } from '@/bersama/komponen/toast'
+import { Kerangka } from '@/bersama/komponen/kerangka'
 import { GalatAPI } from '@/lib/api-client'
 import { formatRupiah } from '@/bersama/util/uang'
-import { formatTanggal } from '@/bersama/util/tanggal'
+import { formatLaluHari, formatTanggal } from '@/bersama/util/tanggal'
+import { inisialNama } from '@/bersama/util/inisial'
+import { kelasAvatar } from '@/bersama/util/warna-kategori'
 import { cn } from '@/bersama/util/cn'
-import { pelangganApi, type Kasbon } from '../api'
-import { SegmenPilihan } from '@/bersama/ui/segmen'
-import { KartuAngka } from '@/bersama/komponen/kartu-angka'
-import { HandCoins } from 'lucide-react'
-import { FITUR } from '@/lib/fitur'
-import { useSesi } from '@/bersama/hooks/use-sesi'
+import { nomorWA, tautanWA } from '@/fitur/kasir/struk-wa'
+import { statusJatuhTempo } from '@/fitur/stok/utang'
+import type { KasbonPelanggan } from '../api'
+import { teksTagihan } from '../tagihan'
+import { DialogRincianKasbon, WARNA_TEMPO, useNamaToko } from '../komponen/rincian-kasbon'
+import { DialogSetoran } from '../komponen/dialog-setoran'
+import { useRingkasanKasbon } from '../komponen/peringatan-kasbon'
+
+/** Kotak cari muncul bila pelanggan berutang sebanyak ini atau lebih. */
+const CARI_MULAI = 8
 
 /**
- * Kasbon — utang pelanggan.
+ * Kasbon — utang pelanggan, PER PELANGGAN.
  *
- * Yang dicari pemilik cuma dua: siapa yang masih berutang, dan berapa. Karena
- * itu total tunggakan ada di paling atas, dan setiap baris langsung punya
- * tombol untuk menerima setoran.
+ * Yang dicari pemilik: siapa yang masih berutang, berapa, dan siapa yang
+ * harus ditagih lebih dulu. Karena itu yang lewat jatuh tempo di atas (merah),
+ * lalu sisa terbesar. Setiap baris langsung punya "Tagih" (WhatsApp dari nomor
+ * toko, teks sudah jadi) dan "Terima" (setoran — dibagi ke kasbon terlama).
+ * Rincian nota, janji bayar, dan riwayat setoran ada di balik ketukan baris.
+ *
+ * Dulu layar ini daftar per NOTA: 25 teratas saja, total dihitung dari 25 itu,
+ * nama pelanggan di luar 25 pertama tertulis "Pelanggan", dan kasbon yang
+ * sudah dicicil hilang dari saringan "Belum lunas".
  */
 export function HalamanKasbon() {
-  const [hanyaBelumLunas, setHanyaBelumLunas] = useState(true)
-  const [bayarUntuk, setBayarUntuk] = useState<Kasbon | null>(null)
+  const namaToko = useNamaToko()
+  const [cari, setCari] = useState('')
+  const cariTunda = useDeferredValue(cari.trim().toLowerCase())
+  const [rinci, setRinci] = useState<KasbonPelanggan | null>(null)
+  const [setor, setSetor] = useState<KasbonPelanggan | null>(null)
 
-  const kasbon = useQuery({
-    queryKey: ['kasbon', hanyaBelumLunas],
-    queryFn: () => pelangganApi.daftarKasbon(undefined, hanyaBelumLunas ? 'open' : undefined),
-    staleTime: 30_000,
-  })
-
-  const pelanggan = useQuery({
-    queryKey: ['pelanggan', ''],
-    queryFn: () => pelangganApi.daftar(),
-    staleTime: 60_000,
-  })
-
-  const namaPelanggan = useMemo(() => {
-    const m = new Map<string, string>()
-    for (const p of pelanggan.data?.data ?? []) m.set(p.id, p.name)
-    return m
-  }, [pelanggan.data])
-
-  const daftar = kasbon.data?.data ?? []
-  const totalTunggakan = daftar.reduce((j, k) => j + k.outstanding, 0)
+  const q = useRingkasanKasbon()
+  const r = q.data
+  const daftar = (r?.customers ?? []).filter(
+    (k) => !cariTunda || k.customer_name.toLowerCase().includes(cariTunda) || (k.phone ?? '').includes(cariTunda),
+  )
 
   return (
-    <div className="flex flex-col gap-4">
-      <h1 className="text-judul font-bold text-teks-utama">Kasbon</h1>
+    <div className="flex w-full max-w-4xl flex-col gap-4">
+      <header className="min-w-0">
+        <h1 className="text-judul font-bold text-teks-utama">Kasbon</h1>
+        <p className="text-label text-teks-sekunder">Siapa yang masih berutang, dan siapa yang perlu ditagih dulu.</p>
+      </header>
 
-      {daftar.length > 0 && (
-        <KartuAngka
-          ikon={HandCoins}
-          label="Total belum dibayar"
-          nilai={totalTunggakan}
-          keterangan={`dari ${daftar.length} kasbon`}
-        />
-      )}
-
-      <SegmenPilihan
-        label="Saring kasbon"
-        nilai={hanyaBelumLunas ? 'belum' : 'semua'}
-        onPilih={(v) => setHanyaBelumLunas(v === 'belum')}
-        pilihan={[
-          ['belum', 'Belum lunas'],
-          ['semua', 'Semua'],
-        ]}
-      />
-
-      {kasbon.isLoading ? (
-        <KerangkaBaris jumlah={4} />
-      ) : kasbon.isError ? (
+      {q.isLoading ? (
+        <Kerangka className="h-64 w-full rounded-kartu" />
+      ) : q.isError ? (
         <KeadaanGagal
-          pesan={kasbon.error instanceof GalatAPI ? kasbon.error.pesan : 'Kasbon belum bisa dimuat.'}
-          onCobaLagi={() => kasbon.refetch()}
+          pesan={q.error instanceof GalatAPI ? q.error.pesan : 'Kasbon belum bisa dimuat.'}
+          onCobaLagi={() => q.refetch()}
         />
-      ) : daftar.length === 0 ? (
+      ) : !r || r.customers.length === 0 ? (
         <KeadaanKosong
           ikon={NotebookPen}
-          judul={hanyaBelumLunas ? 'Tidak ada kasbon yang belum lunas' : 'Belum ada kasbon'}
-          penjelasan={
-            hanyaBelumLunas
-              ? 'Semua pelanggan sudah melunasi utangnya. Bagus.'
-              : 'Kasbon muncul di sini saat Anda menjual dengan cara bayar "Kasbon" di kasir.'
-          }
-          aksi={
-            hanyaBelumLunas
-              ? { label: 'Lihat semua kasbon', onKlik: () => setHanyaBelumLunas(false) }
-              : undefined
-          }
+          judul="Tidak ada kasbon yang belum lunas"
+          penjelasan='Kasbon muncul di sini saat Anda menjual dengan cara bayar "Kasbon" di kasir, sampai pelanggannya melunasi.'
         />
       ) : (
-        <ul className="flex flex-col gap-2">
-          {daftar.map((k) => (
-            <li key={k.id}>
-              {/* Membungkus di HP: nama & tanggal + sisa di baris pertama,
-                  tombol selebar kartu di baris kedua. Dulu ketiganya dipaksa
-                  sebaris — di 360px nama tinggal "B…" dan tanggal tersusun
-                  tegak "18 / Sep / 2026". */}
-              <Kartu className="flex flex-wrap items-center gap-x-4 gap-y-3 p-4">
-                <div className="min-w-0 flex-1 basis-40">
-                  <p className="truncate font-semibold text-teks-utama">
-                    {namaPelanggan.get(k.customer_id) ?? 'Pelanggan'}
-                  </p>
-                  <p className="text-keterangan text-teks-redup">
-                    {formatTanggal(k.created_at)}
-                    {k.paid_amount > 0 &&
-                      ` · sudah bayar ${formatRupiah(k.paid_amount)} dari ${formatRupiah(k.amount)}`}
-                  </p>
-                </div>
+        <>
+          <Kartu className="flex flex-wrap items-end justify-between gap-3 p-4 sm:p-5">
+            <div>
+              <p className="text-keterangan font-medium text-teks-sekunder">Total belum dibayar</p>
+              <p className="text-judul font-extrabold tabular-nums text-teks-utama">{formatRupiah(r.outstanding)}</p>
+              <p className="text-keterangan text-teks-redup">
+                {r.customers.length} pelanggan · {r.count} nota
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {r.overdue_count > 0 && (
+                <p className="flex items-center gap-1.5 rounded-full bg-bahaya-teks/10 px-3 py-1.5 text-label font-semibold text-bahaya-teks">
+                  <TriangleAlert className="h-4 w-4" aria-hidden />
+                  {r.overdue_count} pelanggan lewat jatuh tempo · {formatRupiah(r.overdue_amount)}
+                </p>
+              )}
+              {r.due_soon_count > 0 && (
+                <p className="rounded-full bg-permukaan-2 px-3 py-1.5 text-label font-semibold text-jingga-700">
+                  {r.due_soon_count} pelanggan jatuh tempo ≤ {r.due_soon_days} hari · {formatRupiah(r.due_soon_amount)}
+                </p>
+              )}
+            </div>
+          </Kartu>
 
-                <div className="shrink-0 text-right">
-                  <p
-                    className={cn(
-                      'font-bold tabular-nums',
-                      k.outstanding > 0 ? 'text-jingga-700' : 'text-hijau-700',
-                    )}
-                  >
-                    {formatRupiah(k.outstanding)}
-                  </p>
-                  {k.outstanding === 0 ? (
-                    <LencanaStatus nada="berhasil" anak="Lunas" />
-                  ) : (
-                    <LencanaStatus nada="menunggu" anak="Belum lunas" />
-                  )}
-                </div>
-                {k.outstanding > 0 && (
-                  <Tombol
-                    jenis="kedua"
-                    ukuran="padat"
-                    className="w-full sm:w-auto"
-                    onClick={() => setBayarUntuk(k)}
-                  >
-                    Terima Setoran
-                  </Tombol>
-                )}
-              </Kartu>
-            </li>
-          ))}
-        </ul>
+          {r.customers.length >= CARI_MULAI && (
+            <div className="relative">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-teks-redup"
+                aria-hidden
+              />
+              <input
+                type="search"
+                value={cari}
+                onChange={(e) => setCari(e.target.value)}
+                placeholder="Cari nama atau nomor…"
+                aria-label="Cari pelanggan berkasbon"
+                className="h-12 w-full rounded-kontrol border border-garis bg-permukaan pl-10 pr-3 text-isi text-teks-utama placeholder:text-teks-redup"
+              />
+            </div>
+          )}
+
+          {daftar.length === 0 ? (
+            <p className="py-6 text-center text-label text-teks-redup">Tidak ada pelanggan berkasbon bernama "{cari}".</p>
+          ) : (
+            <ul className="grid gap-2 md:grid-cols-2">
+              {daftar.map((k) => (
+                <li key={k.customer_id}>
+                  <BarisKasbon
+                    k={k}
+                    hariIni={r.today}
+                    namaToko={namaToko}
+                    onRinci={() => setRinci(k)}
+                    onSetor={() => setSetor(k)}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
       )}
 
-      {bayarUntuk && (
-        <DialogSetoran
-          kasbon={bayarUntuk}
-          nama={namaPelanggan.get(bayarUntuk.customer_id) ?? 'Pelanggan'}
-          onTutup={() => setBayarUntuk(null)}
-        />
-      )}
+      <DialogRincianKasbon
+        pelanggan={rinci ? { id: rinci.customer_id, name: rinci.customer_name, phone: rinci.phone } : null}
+        hariIni={r?.today ?? ''}
+        onTutup={() => setRinci(null)}
+      />
+      <DialogSetoran
+        pelanggan={setor ? { id: setor.customer_id, name: setor.customer_name, outstanding: setor.outstanding } : null}
+        onTutup={() => setSetor(null)}
+      />
     </div>
   )
 }
 
-function DialogSetoran({
-  kasbon,
-  nama,
-  onTutup,
+function BarisKasbon({
+  k,
+  hariIni,
+  namaToko,
+  onRinci,
+  onSetor,
 }: {
-  kasbon: Kasbon
-  nama: string
-  onTutup: () => void
+  k: KasbonPelanggan
+  hariIni: string
+  namaToko: string
+  onRinci: () => void
+  onSetor: () => void
 }) {
-  const toast = useToast()
-  const qc = useQueryClient()
-  const [nominal, setNominal] = useState(kasbon.outstanding)
-  const { punyaFitur, paketUntuk } = useSesi()
-  const [cara, setCara] = useState<'cash' | 'qris' | 'transfer'>('cash')
-  const [galat, setGalat] = useState<string | null>(null)
-
-  // Satu kunci per dialog: tombol yang ditekan lagi setelah sinyal putus
-  // tidak mencatat setoran yang sama dua kali.
-  const kunci = useRef(ulid())
-  const bayar = useMutation({
-    mutationFn: () =>
-      pelangganApi.terimaSetoran(
-        {
-          receivable_id: kasbon.id,
-          amount: nominal,
-          method: cara,
-        },
-        kunci.current,
-      ),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['kasbon'] })
-      qc.invalidateQueries({ queryKey: ['shift-aktif'] })
-      toast.berhasil(`Setoran ${formatRupiah(nominal)} dari ${nama} tercatat.`)
-      onTutup()
-    },
-    // Kalimat server dipakai apa adanya: 409 di sini berarti kasbonnya sudah
-    // lunas/dihapusbukukan, sedangkan kelebihan bayar dibalas 400 dengan
-    // pesannya sendiri — menebak dari kode status dulu menyebut "melebihi
-    // sisa" untuk kasbon yang sudah lunas.
-    onError: (e) => setGalat(e instanceof GalatAPI ? e.pesan : 'Terjadi kesalahan. Coba lagi.'),
+  const tempo = statusJatuhTempo(k.nearest_due, hariIni)
+  const lewat = k.overdue_count > 0
+  const wa = k.phone ? nomorWA(k.phone) : null
+  const teks = teksTagihan({
+    nama: k.customer_name,
+    toko: namaToko,
+    total: k.outstanding,
+    hariIni,
+    jumlahNota: k.count,
+    jatuhTempo: k.nearest_due,
   })
-
-  const lebih = nominal > kasbon.outstanding
+  const keterangan = [
+    tempo.nada === 'tanpa' ? `sejak ${formatTanggal(k.oldest_at)}` : null,
+    k.last_paid_at ? `terakhir bayar ${formatLaluHari(k.last_paid_at).toLowerCase()}` : 'belum pernah bayar',
+  ]
+    .filter(Boolean)
+    .join(' · ')
 
   return (
-    <Dialog open onOpenChange={(o) => !o && !bayar.isPending && onTutup()}>
-      <IsiDialog judul={`Terima setoran dari ${nama}`}>
-        <div className="flex items-baseline justify-between border-b border-garis pb-3">
-          <span className="text-isi text-teks-sekunder">Sisa utang</span>
-          <span className="text-judul-kartu font-bold tabular-nums text-teks-utama">
-            {formatRupiah(kasbon.outstanding)}
-          </span>
-        </div>
-
-        <KolomUang
-          label="Jumlah setoran"
-          nilai={nominal}
-          onNilai={setNominal}
-          bantuan="Boleh dicicil — tidak harus lunas sekaligus."
-          galat={lebih ? 'Tidak boleh lebih besar dari sisa utang.' : undefined}
-          autoFocus
-        />
-
-        <Pilihan
-          label="Cara bayar"
-          value={cara}
-          onChange={(e) => setCara(e.target.value as typeof cara)}
+    <Kartu
+      className={cn(
+        'relative flex h-full flex-col justify-between gap-3 p-4 transition-colors hover:border-utama/40',
+        lewat && 'border-bahaya-teks/40',
+      )}
+    >
+      <div className="flex items-start gap-3">
+        <span
+          className={cn(
+            'flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-label font-bold',
+            kelasAvatar(k.customer_id),
+          )}
+          aria-hidden
         >
-          <option value="cash">Tunai</option>
-          {/* Terkunci paket: tetap tertulis (dengan alasannya) tapi tidak
-              bisa dipilih — server menolak setoran QRIS di paket tanpa QRIS. */}
-          <option value="qris" disabled={!punyaFitur(FITUR.qris)}>
-            {punyaFitur(FITUR.qris) ? 'QRIS' : `QRIS — paket ${paketUntuk(FITUR.qris) ?? 'berbayar'}`}
-          </option>
-          <option value="transfer">Transfer</option>
-        </Pilihan>
-
-        {nominal > 0 && !lebih && (
-          <p className="rounded-kontrol bg-sorot px-3 py-2 text-label text-hijau-800">
-            Sisa utang setelah setoran ini:{' '}
-            <strong className="tabular-nums">
-              {formatRupiah(kasbon.outstanding - nominal)}
-            </strong>
-          </p>
-        )}
-
-        {galat && (
-          <p className="rounded-kontrol border border-bahaya bg-bahaya-teks/10 px-3 py-2 text-label text-bahaya-teks">
-            {galat}
-          </p>
-        )}
-
-        <AksiDialog>
-          <Tombol
-            memuat={bayar.isPending}
-            disabled={nominal <= 0 || lebih}
-            onClick={() => {
-              setGalat(null)
-              bayar.mutate()
-            }}
+          {inisialNama(k.customer_name)}
+        </span>
+        <div className="min-w-0 flex-1">
+          {/* Seluruh kartu membuka rinciannya (tombol terentang). */}
+          <button
+            type="button"
+            onClick={onRinci}
+            className="block max-w-full truncate text-left font-semibold text-teks-utama after:absolute after:inset-0 after:rounded-kartu focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-utama"
           >
-            Catat Setoran
+            {k.customer_name}
+          </button>
+          <p className="text-keterangan">
+            <span className={WARNA_TEMPO[tempo.nada]}>{tempo.nada === 'tanpa' ? `${k.count} nota` : tempo.teks}</span>
+            {tempo.nada !== 'tanpa' && <span className="text-teks-redup"> · {k.count} nota</span>}
+          </p>
+          <p className="text-keterangan text-teks-redup">{keterangan}</p>
+        </div>
+        <div className="shrink-0 text-right">
+          <p className={cn('font-bold tabular-nums', lewat ? 'text-bahaya-teks' : 'text-jingga-700')}>
+            {formatRupiah(k.outstanding)}
+          </p>
+          {k.credit_limit > 0 && (
+            <p className="text-keterangan tabular-nums text-teks-redup">batas {formatRupiah(k.credit_limit)}</p>
+          )}
+        </div>
+      </div>
+      <div className="relative z-10 grid grid-cols-2 gap-2">
+        {wa ? (
+          <Tombol jenis="kedua" ukuran="padat" asChild>
+            <a href={tautanWA(wa, teks)} target="_blank" rel="noreferrer" aria-label={`Tagih ${k.customer_name} lewat WhatsApp`}>
+              <MessageCircle className="h-4 w-4" aria-hidden />
+              Tagih
+            </a>
           </Tombol>
-          <Tombol jenis="kedua" onClick={onTutup} disabled={bayar.isPending}>
-            Batal
+        ) : (
+          <Tombol jenis="kedua" ukuran="padat" onClick={onRinci} aria-label={`Rincian kasbon ${k.customer_name}`}>
+            Rincian
           </Tombol>
-        </AksiDialog>
-      </IsiDialog>
-    </Dialog>
+        )}
+        <Tombol ukuran="padat" onClick={onSetor} aria-label={`Terima setoran ${k.customer_name}`}>
+          <Wallet className="h-4 w-4" aria-hidden />
+          Terima
+        </Tombol>
+      </div>
+    </Kartu>
   )
 }
-

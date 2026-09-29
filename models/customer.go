@@ -12,20 +12,23 @@ var CustomerTypes = []string{"person", "company", "store"}
 
 // Customer adalah pelanggan tenant. credit_limit membatasi total kasbon.
 type Customer struct {
-	ID          string   `json:"id" gorm:"primaryKey;type:char(26)"`
-	TenantID    string   `json:"tenant_id" gorm:"type:char(26);not null;index"`
-	Code        *string  `json:"code"`
-	Name        string   `json:"name" gorm:"not null"`
-	Phone       *string  `json:"phone"` // unik per tenant di antara baris hidup
-	Email       string   `json:"email"`
-	Address     string   `json:"address"`
-	Type        string   `json:"type" gorm:"not null;default:person"`
-	PriceListID *string  `json:"price_list_id" gorm:"type:char(26)"`
-	OwnerID     *string  `json:"owner_id" gorm:"type:char(26)"` // CRM: sales pemilik data
-	CreditLimit int64    `json:"credit_limit" gorm:"not null;default:0"`
-	Latitude    *float64 `json:"latitude" gorm:"type:numeric(9,6)"`
-	Longitude   *float64 `json:"longitude" gorm:"type:numeric(9,6)"`
-	Note        string   `json:"note"`
+	ID          string  `json:"id" gorm:"primaryKey;type:char(26)"`
+	TenantID    string  `json:"tenant_id" gorm:"type:char(26);not null;index"`
+	Code        *string `json:"code"`
+	Name        string  `json:"name" gorm:"not null"`
+	Phone       *string `json:"phone"` // unik per tenant di antara baris hidup
+	Email       string  `json:"email"`
+	Address     string  `json:"address"`
+	Type        string  `json:"type" gorm:"not null;default:person"`
+	PriceListID *string `json:"price_list_id" gorm:"type:char(26)"`
+	OwnerID     *string `json:"owner_id" gorm:"type:char(26)"` // CRM: sales pemilik data
+	CreditLimit int64   `json:"credit_limit" gorm:"not null;default:0"`
+	// CreditTermDays: tempo kasbon (hari) — jatuh tempo kasbon baru dari kasir
+	// (000052). 0 = tanpa jatuh tempo.
+	CreditTermDays int      `json:"credit_term_days" gorm:"not null;default:0"`
+	Latitude       *float64 `json:"latitude" gorm:"type:numeric(9,6)"`
+	Longitude      *float64 `json:"longitude" gorm:"type:numeric(9,6)"`
+	Note           string   `json:"note"`
 
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
@@ -105,6 +108,10 @@ type ReceivablePayment struct {
 	BusinessDate time.Time `json:"business_date" gorm:"type:date"`
 	CollectedBy  *string   `json:"collected_by" gorm:"type:char(26)"`
 	ProofURL     string    `json:"proof_url"`
+	// CashMovementID: setoran tunai yang masuk laci kasir → gerakan kasnya
+	// (000052). Satu setoran yang melunasi beberapa kasbon berbagi satu gerakan.
+	CashMovementID *string `json:"cash_movement_id" gorm:"type:char(26)"`
+	Note           string  `json:"note"`
 
 	CreatedAt time.Time `json:"created_at"`
 }

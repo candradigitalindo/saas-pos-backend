@@ -62,7 +62,7 @@ const SARINGAN: [Saring, string][] = [
  *
  * Tanggalnya ikut di alamat (`?tanggal=2026-09-18`): tautan dari "Transaksi
  * terakhir" di Beranda membuka hari nota itu, dan memuat ulang halaman tidak
- * melempar kembali ke hari ini.
+ * melempar kembali ke hari ini. `&cari=NOTA` mengisi kotak cari.
  */
 export function HalamanRiwayat() {
   const { tokoAktif, boleh } = useSesi()
@@ -76,8 +76,9 @@ export function HalamanRiwayat() {
     setParams(t === hariIni ? {} : { tanggal: t }, { replace: true })
   }
 
-  const [ketikCari, setKetikCari] = useState('')
-  const [cari, setCari] = useState('')
+  // `?cari=` membuka langsung satu nota (tautan dari halaman pelanggan).
+  const [ketikCari, setKetikCari] = useState(() => params.get('cari') ?? '')
+  const [cari, setCari] = useState(ketikCari)
   useEffect(() => {
     const w = setTimeout(() => setCari(ketikCari.trim()), 300)
     return () => clearTimeout(w)

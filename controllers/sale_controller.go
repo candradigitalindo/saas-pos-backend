@@ -66,6 +66,7 @@ func ListSales(c *gin.Context) {
 		ShiftID:      c.Query("shift_id"),
 		Search:       c.Query("search"),
 		Method:       c.Query("method"),
+		CustomerID:   c.Query("customer_id"),
 	}
 	items, total, err := services.ListSalesDetailed(c.Request.Context(), f, limit, offset)
 	if err != nil {

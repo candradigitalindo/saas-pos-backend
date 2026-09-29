@@ -235,6 +235,12 @@ func Checkout(ctx context.Context, in CheckoutInput) (int, []byte, bool, error) 
 				Amount:      pay.creditAmount,
 				Status:      "open",
 			}
+			// Tempo pelanggan → jatuh tempo, dihitung dari TANGGAL USAHA (bukan
+			// jam UTC) supaya "30 hari" sama dengan hitungan pemilik toko.
+			if pay.creditTermDays > 0 {
+				due := bizDate.AddDate(0, 0, pay.creditTermDays)
+				rec.DueDate = &due
+			}
 			if err := repositories.CreateReceivable(ctx, tx, &rec); err != nil {
 				return err
 			}
@@ -424,6 +430,8 @@ type paymentResolution struct {
 	paidAmount   int64
 	changeAmount int64
 	creditAmount int64
+	// creditTermDays: tempo kasbon pelanggan (000052) — jatuh tempo kasbonnya.
+	creditTermDays int
 }
 
 // resolvePayments memvalidasi pembayaran terhadap total: non-kredit boleh
@@ -485,6 +493,7 @@ func resolvePayments(ctx context.Context, tx *gorm.DB, in CheckoutInput, total i
 			}
 		}
 		r.changeAmount = 0
+		r.creditTermDays = cust.CreditTermDays
 		return r, nil
 	}
 

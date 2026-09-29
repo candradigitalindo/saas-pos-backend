@@ -42,6 +42,10 @@ const HalamanUtangPemasok = muat(() => import('@/fitur/stok/halaman/halaman-utan
 const HalamanPemasok = muat(() => import('@/fitur/pemasok/halaman/halaman-pemasok'), 'HalamanPemasok')
 const HalamanRincianPemasok = muat(() => import('@/fitur/pemasok/halaman/halaman-rincian-pemasok'), 'HalamanRincianPemasok')
 const HalamanPelanggan = muat(() => import('@/fitur/pelanggan/halaman/halaman-pelanggan'), 'HalamanPelanggan')
+const HalamanRincianPelanggan = muat(
+  () => import('@/fitur/pelanggan/halaman/halaman-rincian-pelanggan'),
+  'HalamanRincianPelanggan',
+)
 const HalamanKasbon = muat(() => import('@/fitur/pelanggan/halaman/halaman-kasbon'), 'HalamanKasbon')
 const HalamanPengaturan = muat(() => import('@/fitur/pengaturan/halaman/halaman-pengaturan'), 'HalamanPengaturan')
 const HalamanToko = muat(() => import('@/fitur/pengaturan/halaman/halaman-toko'), 'HalamanToko')
@@ -368,6 +372,16 @@ const router = createBrowserRouter([
           <ButuhIzin izin={[IZIN.customerView]}>
             <Tunggu>
               <HalamanPelanggan />
+            </Tunggu>
+          </ButuhIzin>
+        ),
+      },
+      {
+        path: '/pelanggan/:id',
+        element: (
+          <ButuhIzin izin={[IZIN.customerView]}>
+            <Tunggu>
+              <HalamanRincianPelanggan />
             </Tunggu>
           </ButuhIzin>
         ),

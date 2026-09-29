@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"candra/backend-api/helpers"
 	"candra/backend-api/internal/reqctx"
@@ -27,7 +28,7 @@ func ListCustomers(c *gin.Context) {
 	for i, r := range rows {
 		items[i] = customerToResponse(r)
 	}
-	if err := lampirkanStatistikPelanggan(c.Request.Context(), items); err != nil {
+	if err := lampirkanStatistikPelanggan(c.Request.Context(), items, hariUsahaOutlet(c, c.Query("outlet_id"))); err != nil {
 		respondServiceError(c, err)
 		return
 	}
@@ -42,8 +43,9 @@ func ListCustomers(c *gin.Context) {
 //
 // Pelanggan yang belum pernah belanja tetap mendapat Stats bernilai nol:
 // "belum pernah belanja" adalah informasi, bukan data yang hilang. Sisa kasbon
-// hanya dihitung & dikirim bila pengguna memegang receivable.manage.
-func lampirkanStatistikPelanggan(ctx context.Context, items []structs.CustomerResponse) error {
+// hanya dihitung & dikirim bila pengguna memegang receivable.manage; yang
+// lewat jatuh tempo dibanding `hariIni` (tanggal usaha toko).
+func lampirkanStatistikPelanggan(ctx context.Context, items []structs.CustomerResponse, hariIni time.Time) error {
 	ids := make([]string, len(items))
 	for i, it := range items {
 		ids[i] = it.ID
@@ -52,10 +54,10 @@ func lampirkanStatistikPelanggan(ctx context.Context, items []structs.CustomerRe
 	if err != nil {
 		return err
 	}
-	var kasbon map[string]int64
+	var kasbon map[string]repositories.CustomerOutstanding
 	bolehKasbon := reqctx.HasPermission(ctx, "receivable.manage")
 	if bolehKasbon {
-		if kasbon, err = repositories.CustomerReceivableOutstanding(ctx, ids); err != nil {
+		if kasbon, err = repositories.CustomerReceivableOutstanding(ctx, ids, hariIni); err != nil {
 			return err
 		}
 	}
@@ -66,23 +68,29 @@ func lampirkanStatistikPelanggan(ctx context.Context, items []structs.CustomerRe
 			st.LastVisitAt = b.LastVisit.UTC().Format(timeLayout)
 		}
 		if bolehKasbon {
-			sisa := kasbon[items[i].ID]
-			st.ReceivableOutstanding = &sisa
+			k := kasbon[items[i].ID]
+			st.ReceivableOutstanding, st.ReceivableOverdue = &k.Outstanding, &k.Overdue
 		}
 		items[i].Stats = st
 	}
 	return nil
 }
 
-// GetCustomer mengembalikan satu pelanggan tenant.
+// GetCustomer mengembalikan satu pelanggan tenant, dengan ringkasan belanja
+// & kasbonnya (sama dengan satu baris daftar).
 func GetCustomer(c *gin.Context) {
 	var row models.Customer
 	if err := repositories.FindCustomerVisible(c.Request.Context(), c.Param("id"), &row); err != nil {
 		notFoundOr(c, err, repositories.ErrCustomerNotFound, "Pelanggan tidak ditemukan")
 		return
 	}
+	items := []structs.CustomerResponse{customerToResponse(row)}
+	if err := lampirkanStatistikPelanggan(c.Request.Context(), items, hariUsahaOutlet(c, c.Query("outlet_id"))); err != nil {
+		respondServiceError(c, err)
+		return
+	}
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.CustomerResponse]{
-		Success: true, Message: "Berhasil mengambil data pelanggan", Data: customerToResponse(row),
+		Success: true, Message: "Berhasil mengambil data pelanggan", Data: items[0],
 	})
 }
 
@@ -112,6 +120,8 @@ func CreateCustomer(c *gin.Context) {
 		OwnerID:     nilIfEmpty(ownerID), // lapis 3: pemilik data CRM (§6, blueprint E.5)
 		CreditLimit: req.CreditLimit,
 		Note:        req.Note,
+
+		CreditTermDays: req.CreditTermDays,
 	}
 	if err := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
 		return repositories.CreateCustomer(ctx, tx, &row)
@@ -169,6 +179,9 @@ func UpdateCustomer(c *gin.Context) {
 	if req.CreditLimit != nil {
 		row.CreditLimit = *req.CreditLimit
 	}
+	if req.CreditTermDays != nil {
+		row.CreditTermDays = *req.CreditTermDays
+	}
 	if req.Note != nil {
 		row.Note = *req.Note
 	}
@@ -197,4 +210,29 @@ func DeleteCustomer(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, structs.SuccessResponse[any]{Success: true, Message: "Pelanggan berhasil dihapus", Data: nil})
+}
+
+// CustomerTopProducts: 5 barang yang paling sering dibeli pelanggan.
+func CustomerTopProducts(c *gin.Context) {
+	ctx := c.Request.Context()
+	var row models.Customer
+	if err := repositories.FindCustomerVisible(ctx, c.Param("id"), &row); err != nil {
+		notFoundOr(c, err, repositories.ErrCustomerNotFound, "Pelanggan tidak ditemukan")
+		return
+	}
+	rows, err := repositories.CustomerTopProducts(ctx, row.ID, 5)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	out := make([]structs.CustomerTopProduct, len(rows))
+	for i, r := range rows {
+		out[i] = structs.CustomerTopProduct{
+			ProductID: r.ProductID, ProductName: r.ProductName, UnitName: r.UnitName, Times: r.Times,
+			Qty: r.Qty.String(), LastAt: r.LastAt.UTC().Format(timeLayout),
+		}
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[[]structs.CustomerTopProduct]{
+		Success: true, Message: "Barang yang sering dibeli", Data: out,
+	})
 }

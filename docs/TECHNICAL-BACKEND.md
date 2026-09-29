@@ -954,6 +954,22 @@ CREATE TABLE receivable_payments (
 );
 ```
 
+Migrasi 000052 menambah:
+
+- `customers.credit_term_days` (0–365) — tempo kasbon; checkout mengisi
+  `receivables.due_date` = tanggal usaha + tempo (0 = tanpa jatuh tempo).
+  Jatuh tempo satu kasbon bisa diubah (`PUT /receivables/:id`, "janji bayar").
+- `receivable_payments.cash_movement_id` (+ `note`) — setoran TUNAI yang
+  masuk laci kasir menunjuk SATU uang masuk (`cash_movements`, direction
+  `in`) pada shift yang buka; `CHECK (cash_movement_id IS NULL OR method =
+  'cash')`. Setoran per pelanggan (`POST /customers/:id/receivable-payments`)
+  mengunci seluruh kasbon belum lunas pelanggan itu (terlama dulu) lalu
+  melunasinya berurutan — satu baris `receivable_payments` per kasbon yang
+  tersentuh, berbagi gerakan kas yang sama.
+
+"Belum lunas" = status `open` DAN `partial`: kasbon yang sudah dicicil
+berstatus `partial`, jadi saringan `open` saja menghilangkannya.
+
 ### 5.9 CRM tenant (Bagian E blueprint)
 
 ```sql

@@ -128,6 +128,8 @@ export interface StatistikPelanggan {
   last_visit_at?: string
   /** Hanya dikirim kepada pemegang izin receivable.manage. */
   receivable_outstanding?: number
+  /** Bagian sisa kasbon yang sudah lewat jatuh tempo (izin sama). */
+  receivable_overdue?: number
 }
 
 export interface Pelanggan {
@@ -139,6 +141,8 @@ export interface Pelanggan {
   address?: string
   type: string
   credit_limit: number
+  /** Tempo kasbon (hari); 0 = tanpa jatuh tempo. */
+  credit_term_days?: number
   note?: string
   /** Daftar harga khusus (member/reseller); kosong = harga umum. */
   price_list_id?: string
