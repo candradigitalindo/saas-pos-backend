@@ -1,0 +1,9 @@
+node_modules/
+dist/
+tangkapan/
+*.local
+.DS_Store
+
+# Cache inkremental TypeScript — hasil build, berubah tiap kali `tsc` jalan.
+# Terlacak, ia menambah derau di hampir setiap commit tanpa memberi apa pun.
+tsconfig.tsbuildinfo

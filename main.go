@@ -12,15 +12,23 @@ import (
 	"candra/backend-api/config"
 	"candra/backend-api/database"
 	"candra/backend-api/helpers"
+	"candra/backend-api/middlewares"
 	"candra/backend-api/routes"
 )
 
+// version diisi saat build lewat -ldflags "-X main.version=<tag>" (lihat
+// Dockerfile / Makefile). "dev" saat `go run`.
+var version = "dev"
+
 func main() {
-	config.LoadEnv()        // Muat konfigurasi dari .env
-	helpers.InitLogger()    // Pasang logger terstruktur (slog) sebagai default proses
-	helpers.InitJWT()       // Inisialisasi JWT Secret Key (fatal bila tidak aman)
-	database.InitDatabase() // Koneksi + connection pool (TIDAK menjalankan migrasi)
-	database.SeedData()     // Seeder data awal (idempoten, non-fatal)
+	config.LoadEnv()              // Muat konfigurasi dari .env
+	helpers.InitLogger()          // Pasang logger terstruktur (slog) sebagai default proses
+	helpers.InitJWT()             // Inisialisasi JWT Secret Key (fatal bila tidak aman)
+	middlewares.InitRateLimiter() // Pilih backend pembatas laju (memori / Redis)
+	database.InitDatabase()       // Koneksi + connection pool (TIDAK menjalankan migrasi)
+	database.SeedData()           // Seeder data awal (idempoten, non-fatal)
+
+	log.Printf("pos-server %s — APP_ENV=%s", version, config.GetEnv("APP_ENV", "development"))
 
 	r := routes.SetupRouter() // Setup router
 

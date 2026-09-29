@@ -1,0 +1,269 @@
+package structs
+
+// ── Category ────────────────────────────────────────────────────────────────
+
+type CategoryCreateRequest struct {
+	Name      string `json:"name" binding:"required,min=1,max=100"`
+	ParentID  string `json:"parent_id" binding:"omitempty,ulid"`
+	SortOrder int    `json:"sort_order" binding:"omitempty"`
+}
+
+type CategoryUpdateRequest struct {
+	Name      *string `json:"name" binding:"omitempty,min=1,max=100"`
+	ParentID  *string `json:"parent_id" binding:"omitempty"` // "" mengosongkan induk; ulid dicek di controller
+	SortOrder *int    `json:"sort_order" binding:"omitempty"`
+}
+
+type CategoryResponse struct {
+	ID        string `json:"id"`
+	ParentID  string `json:"parent_id,omitempty"`
+	Name      string `json:"name"`
+	SortOrder int    `json:"sort_order"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+// ── Unit ────────────────────────────────────────────────────────────────────
+
+type UnitCreateRequest struct {
+	Name         string `json:"name" binding:"required,min=1,max=50"`
+	BaseUnitID   string `json:"base_unit_id" binding:"omitempty,ulid"`
+	Conversion   string `json:"conversion" binding:"omitempty"` // desimal string, default "1"
+	AllowDecimal *bool  `json:"allow_decimal" binding:"omitempty"`
+}
+
+type UnitUpdateRequest struct {
+	Name         *string `json:"name" binding:"omitempty,min=1,max=50"`
+	BaseUnitID   *string `json:"base_unit_id" binding:"omitempty"`
+	Conversion   *string `json:"conversion" binding:"omitempty"`
+	AllowDecimal *bool   `json:"allow_decimal" binding:"omitempty"`
+}
+
+type UnitResponse struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	BaseUnitID   string `json:"base_unit_id,omitempty"`
+	Conversion   string `json:"conversion"`
+	AllowDecimal bool   `json:"allow_decimal"`
+	CreatedAt    string `json:"created_at"`
+	UpdatedAt    string `json:"updated_at"`
+}
+
+// ── Supplier ────────────────────────────────────────────────────────────────
+
+type SupplierCreateRequest struct {
+	Name    string `json:"name" binding:"required,min=1,max=150"`
+	Phone   string `json:"phone" binding:"omitempty,max=30"`
+	Address string `json:"address" binding:"omitempty,max=255"`
+	Note    string `json:"note" binding:"omitempty,max=500"`
+}
+
+type SupplierUpdateRequest struct {
+	Name    *string `json:"name" binding:"omitempty,min=1,max=150"`
+	Phone   *string `json:"phone" binding:"omitempty,max=30"`
+	Address *string `json:"address" binding:"omitempty,max=255"`
+	Note    *string `json:"note" binding:"omitempty,max=500"`
+}
+
+type SupplierResponse struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Phone     string `json:"phone,omitempty"`
+	Address   string `json:"address,omitempty"`
+	Note      string `json:"note,omitempty"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+// ── Product ─────────────────────────────────────────────────────────────────
+
+type ProductCreateRequest struct {
+	Name       string `json:"name" binding:"required,min=1,max=200"`
+	CategoryID string `json:"category_id" binding:"omitempty,ulid"`
+	SupplierID string `json:"supplier_id" binding:"omitempty,ulid"` // pemasok utama
+	UnitID     string `json:"unit_id" binding:"required,ulid"`
+	SKU        string `json:"sku" binding:"omitempty,max=60"`
+	Barcode    string `json:"barcode" binding:"omitempty,max=60"`
+	SellPrice  int64  `json:"sell_price" binding:"omitempty,gte=0"`
+	CostPrice  int64  `json:"cost_price" binding:"omitempty,gte=0"`
+	TrackStock *bool  `json:"track_stock" binding:"omitempty"`
+	MinStock   string `json:"min_stock" binding:"omitempty"` // desimal string
+	IsActive   *bool  `json:"is_active" binding:"omitempty"`
+	ImageURL   string `json:"image_url" binding:"omitempty,max=500"`
+	// Description: untuk menu aplikasi antar (GoFood menampilkan 250 karakter).
+	Description string `json:"description" binding:"omitempty,max=500"`
+	// WholesalePrices: harga grosir per jumlah (maks. 5 tingkat).
+	WholesalePrices []WholesalePriceRequest `json:"wholesale_prices" binding:"omitempty,max=5,dive"`
+	// SpecialPrices: harga khusus per daftar harga (member, reseller).
+	SpecialPrices []SpecialPriceRequest `json:"special_prices" binding:"omitempty,dive"`
+	// Packagings: kemasan jual/beli (dus isi 40, pak isi 10).
+	Packagings []PackagingRequest `json:"packagings" binding:"omitempty,max=5,dive"`
+}
+
+// PackagingRequest: satu kemasan barang. Conversion = isinya dalam satuan
+// dasar barang (> 1). SellPrice kosong = isi × harga jual.
+type PackagingRequest struct {
+	UnitID     string `json:"unit_id" binding:"required,ulid"`
+	Conversion string `json:"conversion" binding:"required"`
+	SellPrice  *int64 `json:"sell_price" binding:"omitempty,gt=0"`
+	Barcode    string `json:"barcode" binding:"omitempty,max=60"`
+}
+
+type PackagingResponse struct {
+	ID         string `json:"id"`
+	UnitID     string `json:"unit_id"`
+	UnitName   string `json:"unit_name"`
+	Conversion string `json:"conversion"`
+	SellPrice  *int64 `json:"sell_price,omitempty"`
+	// Price: harga jual kemasan yang berlaku (tersendiri, atau isi × harga jual).
+	Price   int64  `json:"price"`
+	Barcode string `json:"barcode,omitempty"`
+}
+
+// WholesalePriceRequest: satu tingkat harga grosir — beli minimal MinQty
+// (total barang itu dalam satu transaksi), harga satuannya Price.
+type WholesalePriceRequest struct {
+	MinQty string `json:"min_qty" binding:"required"` // desimal string, > 1
+	Price  int64  `json:"price" binding:"required,gt=0"`
+}
+
+type WholesalePriceResponse struct {
+	MinQty string `json:"min_qty"`
+	Price  int64  `json:"price"`
+}
+
+type ProductUpdateRequest struct {
+	Name        *string `json:"name" binding:"omitempty,min=1,max=200"`
+	CategoryID  *string `json:"category_id" binding:"omitempty"`
+	SupplierID  *string `json:"supplier_id" binding:"omitempty"` // "" = hapus pemasok utama
+	UnitID      *string `json:"unit_id" binding:"omitempty,ulid"`
+	SKU         *string `json:"sku" binding:"omitempty,max=60"`
+	Barcode     *string `json:"barcode" binding:"omitempty,max=60"`
+	SellPrice   *int64  `json:"sell_price" binding:"omitempty,gte=0"`
+	CostPrice   *int64  `json:"cost_price" binding:"omitempty,gte=0"`
+	TrackStock  *bool   `json:"track_stock" binding:"omitempty"`
+	MinStock    *string `json:"min_stock" binding:"omitempty"`
+	IsActive    *bool   `json:"is_active" binding:"omitempty"`
+	ImageURL    *string `json:"image_url" binding:"omitempty,max=500"`
+	Description *string `json:"description" binding:"omitempty,max=500"`
+	// WholesalePrices: nil = tidak diubah; [] = semua tingkat dihapus.
+	WholesalePrices *[]WholesalePriceRequest `json:"wholesale_prices" binding:"omitempty,dive"`
+	// SpecialPrices: nil = tidak diubah; [] = semua harga khusus dihapus.
+	SpecialPrices *[]SpecialPriceRequest `json:"special_prices" binding:"omitempty,dive"`
+	// Packagings: nil = tidak diubah; [] = semua kemasan dihapus.
+	Packagings *[]PackagingRequest `json:"packagings" binding:"omitempty,dive"`
+}
+
+type ProductResponse struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	CategoryID   string `json:"category_id,omitempty"`
+	CategoryName string `json:"category_name,omitempty"`
+	SupplierID   string `json:"supplier_id,omitempty"` // pemasok utama
+	SupplierName string `json:"supplier_name,omitempty"`
+	UnitID       string `json:"unit_id"`
+	UnitName     string `json:"unit_name,omitempty"`
+	SKU          string `json:"sku,omitempty"`
+	Barcode      string `json:"barcode,omitempty"`
+	SellPrice    int64  `json:"sell_price"`
+	CostPrice    int64  `json:"cost_price"`
+	TrackStock   bool   `json:"track_stock"`
+	MinStock     string `json:"min_stock"`
+	IsActive     bool   `json:"is_active"`
+	ImageURL     string `json:"image_url,omitempty"`
+	Description  string `json:"description,omitempty"`
+	// WholesalePrices hanya di GET satu barang & balasan buat/ubah.
+	WholesalePrices []WholesalePriceResponse `json:"wholesale_prices,omitempty"`
+	SpecialPrices   []SpecialPriceResponse   `json:"special_prices,omitempty"`
+	Packagings      []PackagingResponse      `json:"packagings,omitempty"`
+	CreatedAt       string                   `json:"created_at"`
+	UpdatedAt       string                   `json:"updated_at"`
+}
+
+// ProductVariantRequest: satu varian (PUT = ganti utuh).
+type ProductVariantRequest struct {
+	Name       string `json:"name" binding:"required,min=1,max=60"`
+	PriceDelta int64  `json:"price_delta"` // selisih terhadap harga jual barang; boleh negatif
+	SKU        string `json:"sku" binding:"omitempty,max=60"`
+	Barcode    string `json:"barcode" binding:"omitempty,max=60"`
+	IsActive   *bool  `json:"is_active"`
+}
+
+type ProductVariantResponse struct {
+	ID         string `json:"id"`
+	ProductID  string `json:"product_id"`
+	Name       string `json:"name"`
+	PriceDelta int64  `json:"price_delta"`
+	Price      int64  `json:"price"` // harga jual barang + selisih
+	SKU        string `json:"sku,omitempty"`
+	Barcode    string `json:"barcode,omitempty"`
+	IsActive   bool   `json:"is_active"`
+}
+
+// ── Impor produk ────────────────────────────────────────────────────────────
+
+// ProductImportRowError menjelaskan satu baris CSV yang gagal divalidasi.
+type ProductImportRowError struct {
+	Row     int    `json:"row"`   // nomor baris data (1 = baris pertama setelah header)
+	Field   string `json:"field"` // kolom yang bermasalah, "" bila umum
+	Message string `json:"message"`
+}
+
+// ProductImportResult adalah ringkasan hasil impor.
+type ProductImportResult struct {
+	DryRun   bool                    `json:"dry_run"`
+	Total    int                     `json:"total"`    // baris data terbaca
+	Imported int                     `json:"imported"` // baris yang berhasil (atau akan berhasil bila dry-run)
+	Failed   int                     `json:"failed"`
+	Errors   []ProductImportRowError `json:"errors"`
+}
+
+// ── Daftar harga khusus (member, reseller) ──────────────────────────────────
+
+type PriceListRequest struct {
+	Name string `json:"name" binding:"required,min=1,max=60"`
+}
+
+type PriceListResponse struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Kind      string `json:"kind"`
+	IsDefault bool   `json:"is_default"`
+}
+
+// SpecialPriceRequest: harga barang pada satu daftar harga khusus.
+type SpecialPriceRequest struct {
+	PriceListID string `json:"price_list_id" binding:"required,ulid"`
+	Price       int64  `json:"price" binding:"required,gt=0"`
+}
+
+type SpecialPriceResponse struct {
+	PriceListID string `json:"price_list_id"`
+	Price       int64  `json:"price"`
+}
+
+// SupplierStatResponse: GET /supplier-stats — angka belanja satu pemasok.
+type SupplierStatResponse struct {
+	SupplierID     string `json:"supplier_id"`
+	PurchaseCount  int64  `json:"purchase_count"`
+	Spent30d       int64  `json:"spent_30d"`
+	LastPurchaseAt string `json:"last_purchase_at,omitempty"`
+	Outstanding    int64  `json:"outstanding"`
+	OverdueCount   int64  `json:"overdue_count"`
+}
+
+// SupplierProductResponse: GET /suppliers/:id/products — satu barang yang
+// pernah dibeli dari pemasok, dengan pembelian terakhirnya.
+type SupplierProductResponse struct {
+	ProductID      string `json:"product_id"`
+	ProductName    string `json:"product_name"`
+	BaseUnitName   string `json:"base_unit_name"`
+	UnitCost       int64  `json:"unit_cost"`       // per satuan beli terakhir
+	UnitName       string `json:"unit_name"`       // satuan beli terakhir (kemasan bila dus)
+	UnitConversion string `json:"unit_conversion"` // isi satuan beli terakhir (satuan dasar)
+	ProductUnitID  string `json:"product_unit_id,omitempty"`
+	LastBoughtAt   string `json:"last_bought_at,omitempty"` // kosong = belum pernah dibeli dari sini
+	Times          int64  `json:"times"`                    // jumlah nota yang memuatnya
+	Qty90d         string `json:"qty_90d"`                  // satuan dasar, 90 hari terakhir
+	Main           bool   `json:"main"`                     // pemasok ini pemasok utama barangnya
+}

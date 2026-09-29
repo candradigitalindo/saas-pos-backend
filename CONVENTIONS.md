@@ -136,7 +136,15 @@ c.JSON(http.StatusOK, structs.SuccessResponse[structs.UserResponse]{
 
 Selalu petakan ke struct di `structs/`. Model `User` punya `Password`; membocorkannya lewat response adalah insiden keamanan, bukan sekadar kerapian.
 
-Format waktu yang dipakai: `Format("2006-01-02 15:04:05")`.
+Format waktu yang dipakai: **RFC 3339 dalam UTC**, `t.UTC().Format(time.RFC3339)`
+→ `"2026-09-26T00:22:10Z"` (konstanta `timeLayout`). Tanggal tanpa jam
+(`business_date`, `joined_at`) tetap `"2006-01-02"`.
+
+Jangan kembali ke `"2006-01-02 15:04:05"`. Format tanpa zona itu ditafsirkan
+browser sebagai jam **lokal perangkat**, dan nilai `time.Time` di Go bisa UTC
+(dibuat `time.Now().UTC()`) atau zona lokal proses (dibaca dari database) —
+di server produksi ber-TZ UTC, seluruh jam di layar WIB mundur 7 jam dan token
+portal mitra dianggap kedaluwarsa sesaat setelah login.
 
 ---
 

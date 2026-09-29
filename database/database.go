@@ -117,12 +117,13 @@ func InitDatabase() {
 	// "parameter injection" pada DSN.
 	dsn := DSNFromEnv()
 
-	// Konfigurasi Logger GORM
+	// Logger GORM verbose HANYA di development (semua query dicetak). Di
+	// production & test cukup warning/error agar log tidak banjir.
 	var gormLogger logger.Interface
-	if config.GetEnv("APP_ENV", "development") == "production" {
-		gormLogger = logger.Default.LogMode(logger.Warn) // Hanya log warning & error di production
+	if config.GetEnv("APP_ENV", "development") == "development" {
+		gormLogger = logger.Default.LogMode(logger.Info)
 	} else {
-		gormLogger = logger.Default.LogMode(logger.Info) // Log semua query di development
+		gormLogger = logger.Default.LogMode(logger.Warn)
 	}
 
 	// Koneksi ke database

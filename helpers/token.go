@@ -34,6 +34,13 @@ func GenerateRefreshToken() (raw, hash string, err error) {
 // HashRefreshToken menghitung SHA-256 hex dari refresh token mentah. Dipakai
 // saat menukar/mencabut token: cari baris berdasarkan hash ini.
 func HashRefreshToken(raw string) string {
-	sum := sha256.Sum256([]byte(raw))
+	return SHA256Hex([]byte(raw))
+}
+
+// SHA256Hex mengembalikan SHA-256 dari b sebagai string heksadesimal.
+// Dipakai antara lain untuk request_hash idempotensi (§8): kunci sama + body
+// beda → hash beda → 409.
+func SHA256Hex(b []byte) string {
+	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:])
 }

@@ -1,0 +1,351 @@
+/* Token desain — sumber kebenaran tunggal.
+   Nilainya diambil apa adanya dari ui/02-SISTEM-DESAIN.md, termasuk rasio
+   kontras yang sudah diverifikasi di sana. Jangan mengubah angka di sini tanpa
+   memperbarui dokumen itu lebih dulu. */
+
+@import 'tailwindcss';
+@import '@fontsource-variable/plus-jakarta-sans';
+
+@theme {
+  /* ── Hijau Tumbuh — warna utama ─────────────────────────────────────── */
+  --color-hijau-50: #ecfdf5;
+  --color-hijau-100: #d1fae5;
+  --color-hijau-500: #10b981;
+  --color-hijau-600: #059669;
+  --color-hijau-700: var(--warna-hijau-teks); /* isian tombol utama — 5.48:1 dgn teks putih */
+  --color-hijau-800: var(--warna-hijau-teks-pekat);
+
+  /* ── Jingga Semangat — aksen, SELALU teks gelap di atasnya ──────────── */
+  --color-jingga-100: #fef3c7;
+  --color-jingga-400: #fbbf24;
+  /* Teks di atas Jingga Semangat SELALU gelap, di mode terang maupun gelap
+     (ui/02 — "Jingga tidak pernah memakai teks putih"). `teks-utama` tidak
+     bisa dipakai: ia berubah jadi putih di mode gelap, dan putih di atas
+     #FBBF24 hanya 1,8:1. */
+  --color-teks-di-jingga: #1c1917;
+
+  /* Bingkai perangkat (tablet/HP) di etalase halaman masuk. Gelap TETAP di
+     kedua mode: bingkai perangkat sungguhan tidak ikut berganti tema, dan
+     tangkapan layar di dalamnya juga selalu mode terang. Hanya hiasan — tidak
+     pernah menjadi latar teks. */
+  --color-bingkai: #1c1917;
+  --color-jingga-600: #d97706;
+  --color-jingga-700: var(--warna-jingga-teks);
+
+  /* ── Semantik ───────────────────────────────────────────────────────── */
+  --color-bahaya: #dc2626; /* isian, teks putih 4.83:1 */
+  --color-bahaya-teks: var(--warna-bahaya-teks);
+  --color-info: #2563eb; /* isian, teks putih 5.17:1 */
+  --color-info-teks: var(--warna-info-teks);
+
+  /* ── Netral hangat (batu), bukan abu kebiruan ───────────────────────── */
+  --color-latar: var(--warna-latar);
+  --color-permukaan: var(--warna-permukaan);
+  --color-permukaan-2: var(--warna-permukaan-2);
+  --color-garis: var(--warna-garis);
+  --color-teks-redup: var(--warna-teks-redup);
+  --color-teks-sekunder: var(--warna-teks-sekunder);
+  --color-teks-utama: var(--warna-teks-utama);
+  --color-utama: var(--warna-utama);
+  --color-utama-teks: var(--warna-utama-teks);
+  --color-sorot: var(--warna-sorot);
+
+  /* ── Warna kategori grafik (tetap terbedakan oleh buta warna) ───────── */
+  --color-grafik-1: #047857;
+  --color-grafik-2: #2563eb;
+  --color-grafik-3: #b45309;
+  --color-grafik-4: #7c3aed;
+  --color-grafik-5: #0891b2;
+  --color-grafik-6: #be185d;
+
+  /* Petak barang tanpa foto — satu rona per kategori (lihat warna-kategori.ts).
+     Pasangan latar/teks di bawah, per tema; semuanya diukur ≥ 6,3:1. */
+  --color-petak-1-latar: var(--warna-petak-1-latar);
+  --color-petak-1-teks: var(--warna-petak-1-teks);
+  --color-petak-2-latar: var(--warna-petak-2-latar);
+  --color-petak-2-teks: var(--warna-petak-2-teks);
+  --color-petak-3-latar: var(--warna-petak-3-latar);
+  --color-petak-3-teks: var(--warna-petak-3-teks);
+  --color-petak-4-latar: var(--warna-petak-4-latar);
+  --color-petak-4-teks: var(--warna-petak-4-teks);
+  --color-petak-5-latar: var(--warna-petak-5-latar);
+  --color-petak-5-teks: var(--warna-petak-5-teks);
+  --color-petak-6-latar: var(--warna-petak-6-latar);
+  --color-petak-6-teks: var(--warna-petak-6-teks);
+
+  /* ── Tipografi ──────────────────────────────────────────────────────── */
+  --font-sans: 'Plus Jakarta Sans Variable', -apple-system, 'Segoe UI', Roboto,
+    sans-serif;
+
+  --text-keterangan: 0.8125rem; /* 13px — minimum absolut */
+  --text-keterangan--line-height: 1.125rem;
+  --text-label: 0.875rem; /* 14px */
+  --text-label--line-height: 1.25rem;
+  --text-isi: 1rem; /* 16px — jangan lebih kecil */
+  --text-isi--line-height: 1.5rem;
+  --text-judul-kartu: 1.125rem; /* 18px */
+  --text-judul-kartu--line-height: 1.625rem;
+  --text-judul: 1.5rem; /* 24px */
+  --text-judul--line-height: 2rem;
+  --text-angka: 2.5rem; /* 40px — angka sorotan */
+  --text-angka--line-height: 2.75rem;
+
+  /* ── Sudut ──────────────────────────────────────────────────────────── */
+  --radius-kontrol: 8px;
+  --radius-kartu: 12px;
+  --radius-dialog: 16px;
+
+  /* ── Bayangan — hanya tiga tingkat ──────────────────────────────────── */
+  --shadow-kartu: 0 1px 2px rgb(0 0 0 / 0.05);
+  --shadow-melayang: 0 4px 12px rgb(0 0 0 / 0.08);
+  --shadow-dialog: 0 16px 40px rgb(0 0 0 / 0.16);
+
+  /* ── Tinggi kontrol — target sentuh jari, bukan kursor ──────────────── */
+  --spacing-padat: 40px;
+  --spacing-normal: 48px; /* minimum target sentuh */
+  --spacing-kasir: 64px; /* tombol utama layar kasir */
+}
+
+/* Tinggi bilah yang menempel di bawah layar (navigasi bawah, bilah keranjang
+   kasir). Toast mengambang DI ATAS-nya, bukan menimpanya: notifikasi "barang
+   ditambahkan" yang menutupi tombol bayar justru menyembunyikan hal yang ingin
+   ditekan pengguna berikutnya. Layar yang memasang bilah tambahan menaikkan
+   nilai ini; bawaannya nol. */
+:root {
+  --sela-bilah-bawah: 0px;
+}
+@media (max-width: 63.99rem) {
+  :root {
+    /* Navigasi bawah hanya ada di bawah lg. */
+    --sela-bilah-bawah: 68px;
+  }
+}
+
+/* Palet terang (bawaan). */
+:root {
+  --warna-latar: #fafaf9;
+  --warna-permukaan: #ffffff;
+  --warna-permukaan-2: #f5f5f4;
+  --warna-garis: #e7e5e4;
+  --warna-teks-redup: #6f6963; /* 4.59:1 */
+  --warna-teks-sekunder: #57534e; /* 7.30:1 */
+  --warna-teks-utama: #1c1917; /* 16.74:1 */
+  --warna-utama: #047857;
+  --warna-utama-teks: #ffffff;
+  --warna-sorot: #ecfdf5;
+  /* Teks semantik untuk latar terang — nilai terverifikasi di ui/02. */
+  --warna-bahaya-teks: #b91c1c; /* 6,47:1 */
+  --warna-info-teks: #1d4ed8; /* 6,70:1 */
+  /* 5,02:1 di atas putih — LULUS, tapi tipis. Akibatnya nyata: lencana
+     jingga di atas TINTA jingga (bahkan 10%) jatuh ke 4,35:1 dan gagal.
+     Jingga dipakai sebagai TEKS + GARIS TEPI di atas `permukaan-2` (7,86:1),
+     bukan di atas tintanya sendiri. */
+  --warna-jingga-teks: #b45309;
+  --warna-hijau-teks: #047857; /* 5,48:1 */
+  --warna-hijau-teks-pekat: #065f46; /* 7,68:1 */
+  /* Petak barang: tinta pucat + teks pekat serona (rasio pasangan). */
+  --warna-petak-1-latar: #d1fae5; --warna-petak-1-teks: #065f46; /* hijau 6,78:1 */
+  --warna-petak-2-latar: #dbeafe; --warna-petak-2-teks: #1e40af; /* biru 7,15:1 */
+  --warna-petak-3-latar: #fef3c7; --warna-petak-3-teks: #92400e; /* amber 6,37:1 */
+  --warna-petak-4-latar: #ede9fe; --warna-petak-4-teks: #5b21b6; /* ungu 7,57:1 */
+  --warna-petak-5-latar: #cffafe; --warna-petak-5-teks: #155e75; /* sian 6,49:1 */
+  --warna-petak-6-latar: #fce7f3; --warna-petak-6-teks: #9d174d; /* merah muda 6,71:1 */
+    color-scheme: light;
+}
+
+/* Palet gelap — dipakai kasir malam hari. Bukan pembalikan warna: hitam murni
+   #000 sengaja dihindari karena melelahkan mata saat dipakai berjam-jam. */
+:root[data-tema='gelap'] {
+  --warna-latar: #1c1917;
+  --warna-permukaan: #292524;
+  --warna-permukaan-2: #33302d;
+  --warna-garis: #44403c;
+  --warna-teks-redup: #a8a29e;
+  --warna-teks-sekunder: #d6d3d1;
+  --warna-teks-utama: #fafaf9;
+  --warna-utama: #34d399; /* lebih terang agar tetap terbaca di latar gelap */
+  --warna-utama-teks: #1c1917;
+  --warna-sorot: #064e3b;
+  /* Teks semantik versi gelap. Nilai terangnya GAGAL TOTAL di sini — merah
+     #B91C1C di atas #292524 cuma 2,34:1, jadi lencana "HABIS" praktis tak
+     terbaca kasir malam hari. Nilai berikut sudah diukur ≥ 4,5:1 terhadap
+     permukaan MAUPUN permukaan-2. */
+  --warna-bahaya-teks: #f87171; /* 5,48:1 */
+  --warna-info-teks: #60a5fa; /* 5,97:1 */
+  --warna-jingga-teks: #fbbf24; /* 9,09:1 */
+  --warna-hijau-teks: #34d399; /* 7,89:1 */
+  --warna-hijau-teks-pekat: #6ee7b7; /* 9,95:1 */
+  /* Petak barang versi gelap: latar pekat + teks pucat serona. */
+  --warna-petak-1-latar: #064e3b; --warna-petak-1-teks: #a7f3d0; /* 7,58:1 */
+  --warna-petak-2-latar: #1e3a8a; --warna-petak-2-teks: #bfdbfe; /* 7,29:1 */
+  --warna-petak-3-latar: #78350f; --warna-petak-3-teks: #fde68a; /* 7,28:1 */
+  --warna-petak-4-latar: #4c1d95; --warna-petak-4-teks: #ddd6fe; /* 7,89:1 */
+  --warna-petak-5-latar: #164e63; --warna-petak-5-teks: #a5f3fc; /* 7,30:1 */
+  --warna-petak-6-latar: #831843; --warna-petak-6-teks: #fbcfe8; /* 6,98:1 */
+    color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema='terang']) {
+    --warna-latar: #1c1917;
+    --warna-permukaan: #292524;
+    --warna-permukaan-2: #33302d;
+    --warna-garis: #44403c;
+    --warna-teks-redup: #a8a29e;
+    --warna-teks-sekunder: #d6d3d1;
+    --warna-teks-utama: #fafaf9;
+    --warna-utama: #34d399;
+    --warna-utama-teks: #1c1917;
+    --warna-sorot: #064e3b;
+    /* Teks semantik versi gelap. Nilai terangnya GAGAL TOTAL di sini — merah
+       #B91C1C di atas #292524 cuma 2,34:1, jadi lencana "HABIS" praktis tak
+       terbaca kasir malam hari. Nilai berikut sudah diukur ≥ 4,5:1 terhadap
+       permukaan MAUPUN permukaan-2. */
+    --warna-bahaya-teks: #f87171; /* 5,48:1 */
+    --warna-info-teks: #60a5fa; /* 5,97:1 */
+    --warna-jingga-teks: #fbbf24; /* 9,09:1 */
+    --warna-hijau-teks: #34d399; /* 7,89:1 */
+    --warna-hijau-teks-pekat: #6ee7b7; /* 9,95:1 */
+    /* Petak barang versi gelap: latar pekat + teks pucat serona. */
+    --warna-petak-1-latar: #064e3b; --warna-petak-1-teks: #a7f3d0; /* 7,58:1 */
+    --warna-petak-2-latar: #1e3a8a; --warna-petak-2-teks: #bfdbfe; /* 7,29:1 */
+    --warna-petak-3-latar: #78350f; --warna-petak-3-teks: #fde68a; /* 7,28:1 */
+    --warna-petak-4-latar: #4c1d95; --warna-petak-4-teks: #ddd6fe; /* 7,89:1 */
+    --warna-petak-5-latar: #164e63; --warna-petak-5-teks: #a5f3fc; /* 7,30:1 */
+    --warna-petak-6-latar: #831843; --warna-petak-6-teks: #fbcfe8; /* 6,98:1 */
+        color-scheme: dark;
+  }
+}
+
+@layer base {
+  * {
+    border-color: var(--warna-garis);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--warna-latar);
+    color: var(--warna-teks-utama);
+    font-family: var(--font-sans);
+    font-size: var(--text-isi);
+    line-height: var(--text-isi--line-height);
+    -webkit-font-smoothing: antialiased;
+    /* Ruang aman untuk navigasi bawah di HP berponi. */
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Semua angka lurus dan tidak "bergoyang" saat berubah. */
+  :is(input, td, th, .angka, [data-angka]) {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Fokus selalu terlihat — kasir sering memakai papan tik eksternal. */
+  :focus-visible {
+    outline: 2px solid var(--warna-utama);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Hormati permintaan pengguna untuk mengurangi gerak. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  /**
+   * Permukaan sorotan: hijau berlapis untuk kartu angka utama.
+   *
+   * Kedua ujung gradiennya adalah token yang rasio kontrasnya SUDAH diverifikasi
+   * terhadap `utama-teks` — pekat 7,68:1 dan utama 5,48:1 di mode terang,
+   * 9,95:1 dan 7,89:1 di mode gelap. Jadi kedalaman ini didapat tanpa
+   * memunculkan satu pun pasangan warna baru yang perlu diukur ulang.
+   *
+   * Arahnya 135deg (kiri-atas ke kanan-bawah): sisi tergelap berada di belakang
+   * label, sisi terterang di belakang grafik — bukan sebaliknya.
+   */
+  .permukaan-sorotan {
+    background-image: linear-gradient(
+      135deg,
+      var(--warna-hijau-teks-pekat) 0%,
+      var(--warna-utama) 100%
+    );
+  }
+  /**
+   * Permukaan portal mitra: biru, sama di kedua tema (seperti bingkai
+   * perangkat). Teks putih: #1e3a8a 10,36:1 · #2563eb 5,17:1.
+   */
+  .permukaan-mitra {
+    background-image: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+  }
+}
+
+@layer components {
+  /**
+   * Gerak dialog — nilai-nilainya dari ui/02-SISTEM-DESAIN.md §Gerak:
+   * 150–200ms, ease-out, naik dari bawah di HP, memudar di layar besar.
+   *
+   * Di layar besar SENGAJA hanya memudar, tanpa geser. Dialognya dipusatkan
+   * dengan `translate(-50%, -50%)`, jadi keyframe yang ikut menyentuh
+   * `transform` akan membatalkan pemusatan itu dan dialognya melompat ke pojok
+   * saat animasi mulai.
+   */
+  @keyframes pudar-masuk {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes pudar-keluar {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+  @keyframes lembar-naik {
+    from { opacity: 0; transform: translateY(100%); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes lembar-turun {
+    from { opacity: 1; transform: translateY(0); }
+    to { opacity: 0; transform: translateY(100%); }
+  }
+
+  .gerak-lapis {
+    animation: pudar-masuk 180ms ease-out;
+  }
+  .gerak-lapis[data-state='closed'] {
+    animation: pudar-keluar 150ms ease-out;
+  }
+
+  .gerak-dialog {
+    animation: lembar-naik 180ms ease-out;
+  }
+  .gerak-dialog[data-state='closed'] {
+    animation: lembar-turun 150ms ease-out;
+  }
+  @media (min-width: 40rem) {
+    .gerak-dialog {
+      animation: pudar-masuk 180ms ease-out;
+    }
+    .gerak-dialog[data-state='closed'] {
+      animation: pudar-keluar 150ms ease-out;
+    }
+  }
+
+  /* Wajib dihormati (ui/02 §Gerak). Tanpa animasi, Radix melepas dialognya
+     seketika — itu memang yang diminta pengguna yang menyalakan setelan ini. */
+  @media (prefers-reduced-motion: reduce) {
+    .gerak-lapis,
+    .gerak-lapis[data-state='closed'],
+    .gerak-dialog,
+    .gerak-dialog[data-state='closed'] {
+      animation: none;
+    }
+  }
+}

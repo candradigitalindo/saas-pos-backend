@@ -191,7 +191,7 @@ menentukan margin.
 
 | Paket | Harga/bulan | Untuk siapa |
 |---|---|---|
-| Gratis | Rp0 | Coba-coba; batas 1 pengguna, 50 produk, 300 transaksi/bulan |
+| Gratis | Rp0 selamanya | Usaha yang baru mulai. Yang dibatasi hanya **fitur** (QRIS, kanal online, CRM, sales lapangan, banyak cabang) — tanpa batas pengguna, produk, maupun transaksi. Pendaftar baru langsung di paket ini, tanpa masa coba otomatis *(diputuskan 2026-09-27; menggantikan asumsi awal "1 pengguna, 50 produk, 300 transaksi/bulan")* |
 | Basic | Rp79.000 /outlet | Toko 1 outlet yang sudah serius |
 | Pro | Rp199.000 /outlet | Butuh laporan penuh + integrasi QRIS |
 | Multi-Outlet | Rp399.000 (3 outlet) + Rp99.000/outlet tambahan | Usaha bercabang |

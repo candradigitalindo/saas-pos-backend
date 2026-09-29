@@ -1,0 +1,85 @@
+import { describe, expect, it } from 'vitest'
+import {
+  bacaQty,
+  bandingQty,
+  formatQty,
+  formatSisaStok,
+  kurangQty,
+  qtyKosong,
+  stokPerluDicocokkan,
+  tambahQty,
+} from './desimal'
+
+describe('aritmetika qty', () => {
+  it('menjumlah tanpa galat pecahan biner', () => {
+    // 0.1 + 0.2 dengan Number menghasilkan 0.30000000000000004
+    expect(tambahQty('0.1', '0.2')).toBe('0.3')
+    expect(tambahQty('44', 1)).toBe('45')
+  })
+
+  it('mengurangi tanpa menembus batas bawah', () => {
+    expect(kurangQty('2', 1)).toBe('1')
+    expect(kurangQty('1', 5)).toBe('0')
+    expect(kurangQty('1', 5, '-99')).toBe('-4')
+  })
+
+  it('membandingkan sebagai angka, bukan sebagai teks', () => {
+    expect(bandingQty('10', '9')).toBe(1) // "10" < "9" bila dibanding teks
+    expect(bandingQty('0.5', '0.50')).toBe(0)
+  })
+
+  it('mengenali qty habis', () => {
+    expect(qtyKosong('0')).toBe(true)
+    expect(qtyKosong('0.000')).toBe(true)
+    expect(qtyKosong('-3')).toBe(true)
+    expect(qtyKosong('0.5')).toBe(false)
+  })
+})
+
+describe('formatQty', () => {
+  it('membuang nol berlebih dan memakai koma desimal', () => {
+    expect(formatQty('44.000')).toBe('44')
+    expect(formatQty('1.5')).toBe('1,5')
+  })
+})
+
+describe('formatSisaStok', () => {
+  it('menyebut sisa bila stok masih ada', () => {
+    expect(formatSisaStok('44', 'pcs')).toBe('sisa 44 pcs')
+  })
+
+  it('stok nol dan MINUS sama-sama disebut "habis"', () => {
+    // "sisa −2 pcs" tidak berarti apa-apa bagi pemilik warung; yang ia butuh
+    // tahu adalah barangnya habis.
+    expect(formatSisaStok('0', 'pcs')).toBe('habis')
+    expect(formatSisaStok('-2', 'pcs')).toBe('habis')
+  })
+
+  it('tetap pendek supaya tidak menggencet nama barang di layar HP', () => {
+    // Versi sebelumnya memuat "catatan perlu dicocokkan (−2 pcs)" dan membuat
+    // "Air Mineral 600ml" tersisa jadi "Air …".
+    expect(formatSisaStok('-2', 'pcs').length).toBeLessThanOrEqual(12)
+  })
+
+  it('stok minus ditandai terpisah untuk layar yang punya ruang', () => {
+    expect(stokPerluDicocokkan('-2')).toBe(true)
+    expect(stokPerluDicocokkan('0')).toBe(false)
+    expect(stokPerluDicocokkan('5')).toBe(false)
+  })
+})
+
+describe('bacaQty — jumlah yang diketik', () => {
+  it.each([
+    ['12', '12'],
+    [' 7 ', '7'],
+    ['1,5', '1.5'],
+    ['1.5', '1.5'],
+    ['0', '0'],
+    ['2,0004', '2'],
+  ])('%s → %s', (teks, mau) => {
+    expect(bacaQty(teks)).toBe(mau)
+  })
+  it.each(['', 'abc', '-3', '1,2,3', '1e3'])('%s ditolak', (teks) => {
+    expect(bacaQty(teks)).toBeNull()
+  })
+})

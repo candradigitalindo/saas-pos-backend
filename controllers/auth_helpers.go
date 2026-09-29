@@ -19,10 +19,20 @@ func userToResponse(user models.User) structs.UserResponse {
 		Name:      user.Name,
 		Username:  user.Username,
 		Email:     user.Email,
+		RoleID:    user.RoleID,
 		RoleName:  user.Role.Name,
-		CreatedAt: user.CreatedAt.Format("2006-01-02 15:04:05"),
-		UpdatedAt: user.UpdatedAt.Format("2006-01-02 15:04:05"),
+		IsActive:  user.IsActive,
+		CreatedAt: user.CreatedAt.UTC().Format(timeLayout),
+		UpdatedAt: user.UpdatedAt.UTC().Format(timeLayout),
 	}
+}
+
+// userToResponseWithRoles sama seperti userToResponse, ditambah SELURUH peran
+// yang dipegang user (peran utama + tambahan, migrasi 000034).
+func userToResponseWithRoles(user models.User, roleIDs []string) structs.UserResponse {
+	r := userToResponse(user)
+	r.RoleIDs = roleIDs
+	return r
 }
 
 // newRefreshTokenRow membuat baris refresh token baru (belum disimpan) beserta

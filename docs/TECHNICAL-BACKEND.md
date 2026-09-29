@@ -344,6 +344,7 @@ CREATE SEQUENCE sync_version_seq AS BIGINT START 1;
 PLATFORM (tanpa tenant_id)
   plans ──< subscriptions >── tenants
   subscriptions ──< subscription_invoices ──< subscription_payments
+                                         └──< subscription_payment_claims (tenant, RLS)
                 └──< deferred_revenue_entries
   partners ──< partner_users
            ├──< partner_leads
@@ -828,6 +829,10 @@ CREATE TABLE stock_opname_items (
   counted_qty NUMERIC(14,3) NOT NULL,
   diff_qty NUMERIC(14,3) NOT NULL,
   UNIQUE (tenant_id, id),
+  -- Satu baris per barang per opname; hitung ulang MENIMPA. NULLS NOT DISTINCT
+  -- wajib (PostgreSQL ≥ 15): tanpa itu variant_id NULL tak pernah bentrok dan
+  -- tiap koreksi hitungan menambah baris yang ikut diposting (migrasi 000037).
+  UNIQUE NULLS NOT DISTINCT (tenant_id, opname_id, product_id, variant_id),
   FOREIGN KEY (tenant_id, opname_id)  REFERENCES stock_opnames (tenant_id, id) ON DELETE CASCADE,
   FOREIGN KEY (tenant_id, product_id) REFERENCES products      (tenant_id, id) ON DELETE RESTRICT
 );
@@ -948,6 +953,22 @@ CREATE TABLE receivable_payments (
   FOREIGN KEY (tenant_id, receivable_id) REFERENCES receivables (tenant_id, id) ON DELETE RESTRICT
 );
 ```
+
+Migrasi 000052 menambah:
+
+- `customers.credit_term_days` (0–365) — tempo kasbon; checkout mengisi
+  `receivables.due_date` = tanggal usaha + tempo (0 = tanpa jatuh tempo).
+  Jatuh tempo satu kasbon bisa diubah (`PUT /receivables/:id`, "janji bayar").
+- `receivable_payments.cash_movement_id` (+ `note`) — setoran TUNAI yang
+  masuk laci kasir menunjuk SATU uang masuk (`cash_movements`, direction
+  `in`) pada shift yang buka; `CHECK (cash_movement_id IS NULL OR method =
+  'cash')`. Setoran per pelanggan (`POST /customers/:id/receivable-payments`)
+  mengunci seluruh kasbon belum lunas pelanggan itu (terlama dulu) lalu
+  melunasinya berurutan — satu baris `receivable_payments` per kasbon yang
+  tersentuh, berbagi gerakan kas yang sama.
+
+"Belum lunas" = status `open` DAN `partial`: kasbon yang sudah dicicil
+berstatus `partial`, jadi saringan `open` saja menghilangkannya.
 
 ### 5.9 CRM tenant (Bagian E blueprint)
 
@@ -1804,7 +1825,91 @@ CREATE TABLE deferred_revenue_entries (  -- uang di muka BUKAN pendapatan bulan 
   UNIQUE (subscription_invoice_id, recognition_month)
 );
 CREATE INDEX idx_deferred_pending ON deferred_revenue_entries (recognition_month) WHERE recognized_at IS NULL;
+
+-- 000039: tenant MENGONFIRMASI, staf keuangan platform MEMUTUS. subscription_payments hanya
+-- dibuat saat persetujuan — tenant tidak lagi bisa mencatat pembayarannya sendiri.
+CREATE TABLE subscription_payment_claims (
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+  subscription_invoice_id CHAR(26) NOT NULL REFERENCES subscription_invoices(id) ON DELETE RESTRICT,
+  amount BIGINT NOT NULL CHECK (amount > 0),
+  method TEXT NOT NULL CHECK (method IN ('transfer','qris','ewallet','card','cash')),
+  reference TEXT NOT NULL DEFAULT '',    -- nama pengirim / nomor referensi transfer
+  note TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+  submitted_by CHAR(26),                 -- FK komposit (tenant_id, submitted_by) → users, SET NULL (submitted_by)
+  reviewed_by CHAR(26) REFERENCES platform_admins(id) ON DELETE SET NULL,
+  reviewed_at TIMESTAMPTZ, reject_reason TEXT NOT NULL DEFAULT '',
+  subscription_payment_id CHAR(26) REFERENCES subscription_payments(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- satu konfirmasi menunggu per tagihan: staf tidak menyetujui dua klaim atas uang yang sama
+CREATE UNIQUE INDEX uq_sub_claims_pending_invoice
+  ON subscription_payment_claims (subscription_invoice_id) WHERE status = 'pending';
 ```
+
+Persetujuan mengunci baris klaim (`FOR UPDATE`) lalu memeriksa `status = 'pending'` di dalam
+transaksi yang sama dengan pencatatan pembayaran — dua staf yang menekan "Setujui" bersamaan
+menghasilkan tepat satu pembayaran; yang kalah mendapat 409.
+
+```sql
+-- 000040: tagihan membawa paket yang DIBAYARNYA; pindah paket berlaku saat lunas.
+ALTER TABLE subscription_invoices
+  ADD COLUMN plan_id CHAR(26) REFERENCES plans(id),
+  ADD COLUMN kind TEXT NOT NULL DEFAULT 'regular' CHECK (kind IN ('regular','plan_change')),
+  ADD COLUMN credit_amount BIGINT NOT NULL DEFAULT 0 CHECK (credit_amount >= 0),
+  ADD COLUMN credit_from_invoice_id CHAR(26) REFERENCES subscription_invoices(id);
+```
+
+Aturan pindah paket (`services.ChangePlan` → `lunaskan`):
+
+- Tagihan `plan_change` TIDAK memindahkan langganan saat terbit. Saat lunas: paket, masa, dan tarif
+  diskon berpindah, periode mulai hari pelunasan, dan tagihan lama (`credit_from_invoice_id`) baru
+  saat itu diselesaikan pengakuannya menjadi `dibayar − credit_amount`.
+- Kredit = sisa bulan × harga bulanan normal paket lama, dibatasi `paid_amount + credit_amount`
+  tagihan lama (tagihan prabayar berdiskon tidak boleh menghasilkan kredit melebihi uangnya).
+- Pengakuan tagihan baru = `total_amount + credit_amount` — nilai berpindah, tidak hilang.
+  Pembatalan setelahnya mengembalikan tunai saja; kreditnya tetap diakui.
+- Ke paket harga 0 → 422; kredit > biaya paket baru → 422 (bukan menghanguskan sisanya diam-diam);
+  kredit = biaya → tagihan Rp0 langsung lunas.
+- Kirim konfirmasi, persetujuan, dan pembatalan tagihan mengunci baris tagihan (`FOR UPDATE`) —
+  tidak ada konfirmasi menunggu yang tertinggal pada tagihan batal.
+- Masa coba sekali per tenant: `StartSubscription` untuk langganan `canceled`/`expired`
+  mempertahankan `trial_ends_at` lama.
+
+```sql
+-- 000041: pengingat terkirim sekali; pengembalian dana menjadi antrean.
+CREATE TABLE subscription_notices (
+  id CHAR(26) PRIMARY KEY,
+  tenant_id CHAR(26) NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('trial_ending','invoice_overdue','grace_ending')),
+  ref TEXT NOT NULL,                       -- id tagihan / tanggal yang diingatkan
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (tenant_id, kind, ref)
+);
+ALTER TABLE subscription_refunds
+  ADD COLUMN status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','paid','not_needed')),
+  ADD COLUMN destination_bank TEXT NOT NULL DEFAULT '', ADD COLUMN destination_account TEXT NOT NULL DEFAULT '',
+  ADD COLUMN destination_holder TEXT NOT NULL DEFAULT '', ADD COLUMN paid_at TIMESTAMPTZ,
+  ADD COLUMN paid_by CHAR(26) REFERENCES platform_admins(id) ON DELETE SET NULL,
+  ADD COLUMN payout_reference TEXT NOT NULL DEFAULT '';
+```
+
+Pekerjaan harian `cmd/subscription-renewals` (`services.RunSubscriptionRenewals`), idempoten:
+
+1. Langganan `active`/`past_due` + `auto_renew` yang berakhir ≤ `SUBSCRIPTION_RENEWAL_LEAD_DAYS`
+   lagi dan belum punya tagihan terbuka → `GenerateInvoice` (baris langganan dikunci `FOR UPDATE`;
+   pemilik yang menekan "Bayar sekarang" bersamaan tidak menerbitkan tagihan kedua).
+2. Tagihan `open` lewat `due_date` → `overdue` + pengingat.
+3. `active` yang periodenya lewat → `past_due` (hak paket tetap dari waktu + tenggang).
+4. Pengingat masa coba (`SUBSCRIPTION_TRIAL_REMINDER_DAYS`) dan masa tenggang
+   (`SUBSCRIPTION_GRACE_REMINDER_DAYS`, hanya bila perpanjangan belum lunas).
+
+Setiap pengingat = satu baris `subscription_notices` + satu pesan outbox di transaksi yang sama.
+Kegagalan satu tenant dicatat dan dilewati (kode keluar 2), tenant lain tetap diproses.
+
+Periode perpanjangan: tagihan yang terbit selama masih dalam tenggang bersambung dari akhir periode
+lama (hari tenggang ikut terbayar); yang dibayar setelah tenggang habis mulai hari pembayaran.
 
 ### 5.14 Tabel sistem
 
@@ -2087,8 +2192,15 @@ var (
     ErrInsufficient  = errors.New("stok tidak mencukupi")
     ErrForbidden     = errors.New("tidak punya akses")
     ErrValidation    = errors.New("input tidak valid")
+    ErrUnauthorized  = errors.New("kredensial tidak valid")
+    ErrPlanRequired  = errors.New("butuh paket lebih tinggi") // → 402
 )
 ```
+
+`ErrPlanRequired` (402) dibedakan dari `ErrForbidden` (403): yang pertama berarti fitur/kuota di luar
+paket langganan yang berlaku (jalan keluarnya naik paket), yang kedua berarti izin PERAN (jalan
+keluarnya minta izin). Middleware `RequireFeatureForWrites` dipasang SETELAH `Require`, sehingga
+orang tanpa izin mendapat 403, bukan ajakan naik paket yang tidak bisa ia putuskan.
 
 Service mengembalikan error sentinel; controller memetakannya ke kode HTTP. **Detail error internal
 tidak pernah dikirim ke klien** — sesuai CONVENTIONS bagian 4; yang dikirim adalah pesan yang sudah
@@ -2125,7 +2237,8 @@ disiapkan, sedangkan detailnya masuk log bersama request ID.
 
 Wajib pada semua endpoint yang menciptakan uang atau memindahkan stok:
 `POST /sales`, `POST /sales/:id/refund`, `POST /stock-adjustments`, `POST /purchases`,
-`POST /invoice-payments`, `POST /subscription-payments`.
+`POST /receivable-payments`, `POST /invoice-payments`, `POST /subscription-payment-claims`.
+(Retur idempoten lewat `return_of_sale_id` — satu retur per penjualan.)
 
 ```
 Idempotency-Key: 01J9Z8Y7X6W5V4U3T2S1R0Q9P8
@@ -2143,7 +2256,7 @@ Perilaku server:
 
 ```
 POST   /api/v1/auth/register           daftar tenant + outlet + owner + peran bawaan (1 transaksi)
-POST   /api/v1/auth/login              → access token (15 mnt) + refresh token (30 hari)
+POST   /api/v1/auth/login              username ATAU email → access token (15 mnt) + refresh token (30 hari)
 POST   /api/v1/auth/refresh            tukar refresh token, rotasi
 POST   /api/v1/auth/logout             cabut refresh token
 POST   /api/v1/auth/pin-login          ganti kasir cepat di perangkat yang sama
@@ -2159,16 +2272,35 @@ POST   /api/v1/sales/:id/refund        retur sebagian/penuh
 
 POST   /api/v1/shifts/open             buka kas
 POST   /api/v1/shifts/:id/close        tutup kas + hitung fisik + selisih
+POST   /api/v1/shifts/:id/handover           serah terima: tutup + buka, SATU transaksi
+       # Ada batasan satu shift terbuka per outlet, jadi urutannya wajib tutup
+       # dulu — dan bila urutan itu dijalankan klien, gagal di tengah
+       # meninggalkan kasir TANPA shift terbuka: uang laci sudah dibukukan tapi
+       # tidak ada tempat mencatat penjualan berikutnya.
+       # counted_cash wajib; opening_cash opsional (uang yang DITINGGAL di laci,
+       # sisanya dianggap disetor) dan tidak boleh melebihi counted_cash.
 POST   /api/v1/cash-movements          kas masuk/keluar non-penjualan
 
-GET    /api/v1/stocks?outlet_id=&low=true
+GET    /api/v1/stocks?outlet_id=&low=true&q=&product_ids=
+       # q: cari nama/SKU/barcode; product_ids: dipisah koma.
+GET    /api/v1/stocks/summary?outlet_id=
+       # hitungan atas SELURUH barang: safe (qty > min), low (0 < qty ≤ min),
+       # out (qty = 0), negative (qty < 0), stock_value = Σ max(qty,0)×modal.
 POST   /api/v1/stock-adjustments       penyesuaian + alasan wajib
 GET    /api/v1/stock-movements?product_id=   kartu stok
 POST   /api/v1/purchases               stok masuk
 POST   /api/v1/stock-opnames/:id/post  posting hasil hitung fisik
 
 GET    /api/v1/reports/dashboard?outlet_id=&date=      dari daily_sales_summaries
-GET    /api/v1/reports/sales?from=&to=&group_by=channel|cashier|payment
+GET    /api/v1/reports/sales?from=&to=&group_by=day|hour|channel|cashier|payment|product
+       # group_by=hour: jam dinding DI ZONA OUTLET (key "00".."23"), bukan UTC.
+       # group_by=product: key = product_id + label/unit/qty; void tidak ikut,
+       #   retur mengurangi qty & uang; net_amount = Σ line_total (sebelum
+       #   diskon nota & biaya layanan); urut uang masuk terbesar.
+       #   occurred_at disimpan UTC (§3.2) dan Indonesia di UTC+7..+9, jadi
+       #   dibaca mentah penjualan 07.00 WIB tercatat 00.00 dan grafik "jam
+       #   teramai" menunjuk tengah malam. Zona diambil per-outlet lewat join,
+       #   karena satu tenant boleh punya cabang di zona berbeda.
 GET    /api/v1/reports/profit?from=&to=
 GET    /api/v1/reports/export?type=&format=csv|xlsx|pdf
 
@@ -2215,7 +2347,23 @@ tenantScoped.POST("/sales", middlewares.Require("sale.create"), controllers.Crea
 ```
 
 `middlewares.Require(codes ...string)` memeriksa permission efektif user. Untuk sumber daya per outlet,
-tambahkan `middlewares.RequireOutletAccess()` yang memeriksa `user_outlets`.
+akses diperiksa terhadap `user_outlets` — pemegang `outlet.manage` bebas di semua outlet.
+
+Pemeriksaan outlet dilakukan **di layanan** (`services.ensureOutletAccess`), bukan di middleware:
+kebanyakan pintu tulis membawa `outlet_id` di badan JSON (checkout, buka shift, kas), sebagian hanya
+lewat id dokumen (void, tutup shift, posting opname), dan `/sync/push` membawa banyak operasi dalam satu
+permintaan. Hanya layanan yang tahu outlet mana yang sebenarnya disentuh. Pintu yang dijaga: checkout
+(termasuk lewat sync), buka/tutup/serah-terima shift, kas laci, void & retur, penyesuaian stok,
+pembelian, opname, dan transfer (outlet asal saat membuat & mengirim, outlet tujuan saat menerima).
+
+Staf yang dibuat tanpa `outlet_ids` otomatis mendapat semua outlet aktif (migrasi `000036` memberi staf
+lama perlakuan yang sama).
+
+Batas yang sama berlaku untuk **membaca**. `TenantScope` memuat daftar outlet user tanpa
+`outlet.manage` ke context (`reqctx.OutletScope`); repositori daftar & laporan menyaringnya lewat
+`scopeOutlet`/`whereOutlet` (penjualan, shift, kas, stok, kartu stok, pembelian, opname, transfer —
+asal atau tujuan —, ringkasan & laporan, `sync/pull`), dan endpoint detail membalas 404 untuk dokumen
+cabang lain (`repositories.OutletVisible`), sama seperti lapis 3 CRM.
 
 ### PIN kasir
 
@@ -2318,6 +2466,11 @@ rows := SELECT * FROM outbox_events
 
 - **Backoff bertahap:** `available_at = now() + (2^attempts) menit`, maksimal 6 jam.
 - **Dead letter:** setelah 10 percobaan → `status='dead'`, muncul di panel admin untuk ditinjau manusia.
+- **Kegagalan permanen langsung `dead`,** tanpa menunggu jatah percobaan habis: nomor tujuan
+  tidak terdaftar di WhatsApp, alamat cacat, template tidak ada. Mencoba ulang tidak mengubah
+  hasilnya, dan menundanya sepuluh kali hanya membuat operator baru tahu berjam-jam kemudian —
+  saat ia sudah lupa tagihan mana yang bermasalah. Pengirim menandainya dengan
+  `services.ErrNotifPermanen`.
 - **`FOR UPDATE SKIP LOCKED`** membuat beberapa pekerja bisa berjalan tanpa saling menunggu.
 
 ### Daftar pekerjaan terjadwal
@@ -2461,6 +2614,12 @@ untuk setiap partner_referrals berstatus 'active':
 ```
 
 ### 13.4 Pengakuan pendapatan diterima di muka
+
+Periode tagihan (`services.awalPeriodeBerbayar`): perpanjangan langganan aktif mulai tepat di akhir
+periode berjalan; tagihan di masa coba mulai saat **masa coba berakhir** dan dihitung ulang saat
+lunas (dibayar setelah masa coba habis → mulai hari bayar). Membayar lebih awal tidak menghanguskan
+sisa masa coba, dan pengakuan pendapatannya ikut mulai di bulan masa berbayar — bukan bulan uangnya
+masuk. Berhenti sebelum masa berbayar dimulai = 0 bulan terpakai (bukan minimal 1).
 
 ```
 Saat subscription_invoice berstatus 'paid' untuk term_months = N:

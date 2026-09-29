@@ -708,6 +708,14 @@ Ini bagian yang paling sering salah dan paling mahal akibatnya.
 
 ### F.9 Kenyataan kemitraan API — mulai dari jalur manual
 
+> **Keputusan 2026-09-27 — kredensial milik tenant.** Platform tidak mengurus izin atau kemitraan
+> dengan penyedia. Setiap tenant mendaftar sendiri (Meta/WhatsApp, GoBiz, Grab, Shopee, TikTok Shop,
+> Lazada) dan menempelkan kredensialnya di dialog "Sambungan API"; platform menyimpannya terenkripsi,
+> memberi alamat webhook per kanal yang diverifikasi tanda tangannya, dan menerjemahkan payload ke
+> pipeline kanal (`services/channel_provider.go`, satu `ProviderAdapter` per penyedia). Adaptor
+> pertama: WhatsApp Cloud API (pesanan dari keranjang katalog). Jalur manual/CSV tetap untuk penyedia
+> yang adaptornya belum ada.
+
 Akses API kanal tidak terbuka bebas. Marketplace umumnya menyediakan program open platform yang bisa
 didaftari, sedangkan aplikator layanan antar cenderung membuka integrasi hanya untuk mitra terpilih,
 dengan proses persetujuan yang panjang dan syarat yang berubah-ubah. **Verifikasi ketersediaan sebelum

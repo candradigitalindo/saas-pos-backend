@@ -3,42 +3,133 @@ package database
 import (
 	"log/slog"
 
+	"candra/backend-api/internal/ulid"
 	"candra/backend-api/models"
 
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm/clause"
 )
 
-// SeedData menjalankan semua seeder data awal. Aman dijalankan berulang
-// (idempoten). Tidak fatal bila gagal: kegagalan paling umum adalah tabel belum
-// ada karena migrasi belum dijalankan — dan itu sudah diperingatkan terpisah
-// oleh WarnIfMigrationsPending. Server tetap boleh naik agar /health bisa
-// dipakai untuk diagnosa.
+// SeedData menjalankan semua seeder data awal. Idempoten (aman dijalankan
+// berulang). Tidak fatal bila gagal: kegagalan paling umum adalah tabel belum
+// ada karena migrasi belum dijalankan — sudah diperingatkan oleh
+// WarnIfMigrationsPending. Server tetap boleh naik agar /health bisa dipakai
+// untuk diagnosa.
 func SeedData() {
-	if err := seedRoles(); err != nil {
-		slog.Error("seeder roles gagal — sudah menjalankan `go run ./cmd/migrate up`?", slog.Any("error", err))
+	if err := seedPermissions(); err != nil {
+		slog.Error("seeder permissions gagal — sudah `go run ./cmd/migrate up`?", slog.Any("error", err))
+		return
+	}
+	if err := seedPlans(); err != nil {
+		slog.Error("seeder plans gagal — sudah `go run ./cmd/migrate up`?", slog.Any("error", err))
+		return
+	}
+	if err := seedPartnerTiers(); err != nil {
+		slog.Error("seeder partner_tiers gagal — sudah `go run ./cmd/migrate up`?", slog.Any("error", err))
+		return
+	}
+	if err := seedNotificationTemplates(); err != nil {
+		slog.Error("seeder notification_templates gagal — sudah `go run ./cmd/migrate up`?", slog.Any("error", err))
 		return
 	}
 	slog.Info("seeding database selesai")
 }
 
-// seedRoles memastikan peran default ('admin', 'user') ada.
+// seedPermissions mengisi katalog `permissions` dari permissionCatalog.
 //
-// ON CONFLICT (name) WHERE deleted_at IS NULL DO NOTHING dipilih agar:
-//   - idempoten & bebas race saat beberapa instance start bersamaan;
-//   - cocok dengan partial unique index uq_roles_name (yang juga ber-predikat
-//     deleted_at IS NULL) — ON CONFLICT tanpa predikat akan ditolak PostgreSQL;
-//   - satu query untuk semua role, bukan satu per role.
-//
-// ID di-generate hook BeforeCreate tiap model.
-func seedRoles() error {
-	roles := []models.Role{
-		{Name: "admin"},
-		{Name: "user"},
+// ON CONFLICT (code) DO NOTHING → idempoten & bebas race saat beberapa instance
+// start bersamaan. `permissions` bukan tabel bertenant, jadi tidak terkena RLS.
+// ULID di-generate lewat hook BeforeCreate tiap baris.
+func seedPermissions() error {
+	rows := make([]models.Permission, 0, len(permissionCatalog))
+	for _, p := range permissionCatalog {
+		rows = append(rows, models.Permission{
+			Code:        p.Code,
+			GroupName:   p.Group,
+			Description: p.Description,
+		})
 	}
 
 	return DB.Clauses(clause.OnConflict{
-		Columns:     []clause.Column{{Name: "name"}},
-		TargetWhere: clause.Where{Exprs: []clause.Expression{clause.Expr{SQL: "deleted_at IS NULL"}}},
-		DoNothing:   true,
-	}).Create(&roles).Error
+		Columns:   []clause.Column{{Name: "code"}},
+		DoNothing: true,
+	}).Create(&rows).Error
+}
+
+// seedPlans mengisi katalog `plans` & tangga `plan_term_discounts` (§5.13).
+//
+// ON CONFLICT DO NOTHING → idempoten & bebas race. Tabel platform, tanpa RLS.
+// Harga yang sudah diubah admin TIDAK ditimpa (DO NOTHING, bukan upsert).
+func seedPlans() error {
+	plans := make([]models.Plan, 0, len(planCatalog))
+	for _, p := range planCatalog {
+		plans = append(plans, models.Plan{
+			Code: p.Code, Name: p.Name, MonthlyPrice: p.Monthly,
+			Features: []byte(p.Features), IsActive: true,
+		})
+	}
+	if err := DB.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "code"}},
+		DoNothing: true,
+	}).Create(&plans).Error; err != nil {
+		return err
+	}
+
+	discounts := make([]models.PlanTermDiscount, 0, len(termDiscountCatalog))
+	for _, d := range termDiscountCatalog {
+		rate, err := decimal.NewFromString(d.Rate)
+		if err != nil {
+			return err
+		}
+		discounts = append(discounts, models.PlanTermDiscount{
+			TermMonths: d.Term, DiscountRate: rate, IsActive: true,
+		})
+	}
+	return DB.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "term_months"}},
+		DoNothing: true,
+	}).Create(&discounts).Error
+}
+
+// seedPartnerTiers mengisi katalog `partner_tiers` (Fase 12, blueprint G.1/G.2).
+// ON CONFLICT (code) DO NOTHING → idempoten; angka yang sudah diubah admin tidak
+// ditimpa. Tabel platform, tanpa RLS.
+func seedPartnerTiers() error {
+	rows := make([]models.PartnerTier, 0, len(partnerTierCatalog))
+	for _, t := range partnerTierCatalog {
+		rate, err := decimal.NewFromString(t.Rate)
+		if err != nil {
+			return err
+		}
+		rows = append(rows, models.PartnerTier{
+			Name: t.Name, Kind: t.Kind, RecurringRate: rate,
+			RecurringMonths: t.RecurringMonths,
+			ActivationBonus: t.ActivationBonus, MinActiveMerchants: t.MinActiveMerchants,
+			ActivationMinTxn: t.ActMinTxn, ActivationMinDays: t.ActMinDays,
+			AttributionDays: t.AttributionDays, ClawbackDays: t.ClawbackDays,
+		})
+	}
+	return DB.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "name"}},
+		DoNothing: true,
+	}).Create(&rows).Error
+}
+
+// seedNotificationTemplates mengisi template pesan bawaan sistem (§5.14).
+//
+// Memakai SQL mentah karena index uniknya berbentuk EKSPRESI
+// berbasis COALESCE atas tenant_id yang NULL — daftar kolom biasa tidak akan
+// dikenali PostgreSQL sebagai target ON CONFLICT. DO NOTHING: teks yang sudah
+// diubah operator tidak ditimpa.
+func seedNotificationTemplates() error {
+	for _, t := range notifTemplateCatalog {
+		if err := DB.Exec(`
+			INSERT INTO notification_templates (id, tenant_id, code, channel, subject, body)
+			VALUES (?, NULL, ?, ?, ?, ?)
+			ON CONFLICT (COALESCE(tenant_id, ''), code, channel) DO NOTHING`,
+			ulid.New(), t.Code, t.Channel, t.Subject, t.Body).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -1,0 +1,234 @@
+import { api, type Halaman } from '@/lib/api-client'
+import type { VarianProduk } from '@/bersama/tipe/katalog'
+
+/** Kinerja kanal dalam `days` hari terakhir (hanya pesanan selesai; batal terpisah). */
+export interface StatistikKanal {
+  days: number
+  order_count: number
+  /** Sebelum komisi. */
+  gross_amount: number
+  fee_amount: number
+  /** Yang benar-benar diterima toko. */
+  net_amount: number
+  canceled_count: number
+  last_order_at?: string
+}
+
+export interface Kanal {
+  id: string
+  outlet_id: string
+  kind: 'pos' | 'marketplace' | 'delivery_app' | 'conversation'
+  provider: string
+  name: string
+  merchant_ref?: string
+  /** Tarif komisi kanal, string desimal: "0.20" = 20%. */
+  commission_rate: string
+  price_list_id?: string
+  integration_mode: 'manual' | 'csv' | 'api'
+  is_active: boolean
+  created_at: string
+  /** Sambungan API milik tenant: none | connected | error. */
+  connection_status: 'none' | 'connected' | 'error'
+  /** Hanya pada daftar kanal. */
+  stats?: StatistikKanal
+}
+
+export interface PesananKanal {
+  id: string
+  channel_id: string
+  sale_id: string
+  external_order_id: string
+  external_status?: string
+  buyer_name?: string
+  buyer_phone?: string
+  shipping_address?: string
+  courier?: string
+  tracking_no?: string
+  gross_amount: number
+  fee_amount: number
+  net_amount: number
+  created_at: string
+  /** Kapan toko menandai makanan siap diambil (GoFood/GrabFood). */
+  ready_at?: string
+  /** Hanya pada daftar pesanan (dari penjualannya). */
+  receipt_no?: string
+  sale_status?: string
+  occurred_at?: string
+  items?: { product_name: string; qty: string; unit_name: string; line_total: number }[]
+}
+
+/** Penyedia yang bisa disambungkan dengan kredensial milik tenant sendiri. */
+export interface PenyediaKanal {
+  code: string
+  name: string
+  kind: string
+  /** false = adaptornya belum dibuat; tetap bisa manual/CSV. */
+  available: boolean
+  docs_url: string
+  steps: string[]
+  fields: {
+    key: string
+    label: string
+    help?: string
+    secret: boolean
+    optional?: boolean
+    /** Isian pilihan (mis. Sandbox/Produksi); nilai pertama = bawaan. */
+    options?: { label: string; value: string }[]
+  }[]
+  capabilities: string[]
+  note?: string
+  /** Nama alamat webhook utama di konsol penyedia (bawaan "Callback URL"). */
+  webhook_label?: string
+  /** Toko harus memberi izin lewat peramban (OAuth) setelah kredensial disimpan — mis. Shopee. */
+  requires_authorization?: boolean
+  /** Stok toko bisa dikirim ke penyedia ini (setelah barang dicocokkan). */
+  stock_sync?: boolean
+  /** Pesanan bisa ditandai "siap diambil" ke penyedia (GoFood, GrabFood). */
+  mark_ready?: boolean
+  /** Menu dikelola di POS lalu dikirim ke penyedia (aplikasi antar). */
+  menu_sync?: boolean
+}
+
+/** Satu barang aktif di layar "Menu {aplikasi antar}". */
+export interface ItemMenuKanal {
+  product_id: string
+  name: string
+  category: string
+  sku?: string
+  /** Harga kanal bila diisi, selain itu harga jual. */
+  price: number
+  image_url?: string
+  in_menu: boolean
+  available: boolean
+  /** false = tidak dilacak stoknya → selalu tersedia di aplikasi antar. */
+  track_stock: boolean
+}
+
+/** GET/PUT /channels/:id/menu. */
+export interface MenuKanal {
+  supported: boolean
+  published_at?: string
+  published_count: number
+  items: ItemMenuKanal[]
+}
+
+/** GET /channels/:id/stock-status — ringkasan kiriman stok ke marketplace. */
+export interface StatusStokKanal {
+  /** Penyedia menerima stok DAN kanal tersambung ke API-nya. */
+  supported: boolean
+  /** Pemetaan barang di kanal ini. */
+  mapped: number
+  /** … yang sudah bertaut ke listing penyedia (yang dikirimi stok). */
+  linked: number
+  pending: number
+  /** Barang yang kiriman terakhirnya gagal. */
+  failed: number
+  last_sent_at?: string
+  last_error?: string
+  last_error_sku?: string
+}
+
+/** POST /channels/:id/products/match. */
+export interface HasilCocokBarang {
+  /** SKU unik di penyedia. */
+  listings: number
+  matched: number
+  created: number
+  without_sku: number
+  /** SKU penyedia tanpa pasangan (maks 20). */
+  unmatched: string[]
+  unmatched_count: number
+}
+
+/** GET /channels/:id/connection — rahasia hanya pratinjau 4 karakter terakhir. */
+export interface SambunganKanal {
+  provider?: string
+  status: 'none' | 'connected' | 'error'
+  checked_at?: string
+  error?: string
+  fields: Record<string, { set: boolean; value?: string; preview?: string }>
+  webhook_url?: string
+  webhook_values?: { label: string; value: string }[]
+  last_event_at?: string
+  /** Dari tes yang baru dijalankan, mis. nama bisnis & nomor. */
+  info?: string
+  /** Penyedia ini butuh izin toko lewat peramban (Otorisasi Toko). */
+  needs_authorization?: boolean
+  /** Toko yang sudah memberi izin; kosong = belum. */
+  authorized?: string
+}
+
+/** Hasil impor CSV laporan kanal (services.ChannelOrderImportResult). */
+export interface HasilImporKanal {
+  imported: number
+  /** Sudah tercatat pada impor sebelumnya — dilewati, tidak dobel. */
+  skipped: number
+  failed: number
+  errors?: string[]
+}
+
+export const kanalApi = {
+  /** Server mengirim seluruh kanal sebagai larik biasa, BUKAN halaman. */
+  daftar: () => api.get<Kanal[]>('/channels'),
+
+  buat: (input: {
+    outlet_id: string
+    kind: string
+    provider: string
+    name: string
+    commission_rate?: string
+    integration_mode?: string
+  }) => api.post<Kanal>('/channels', input),
+
+  ubah: (id: string, input: Record<string, unknown>) => api.put<Kanal>(`/channels/${id}`, input),
+
+  daftarPesanan: (channel_id?: string, page = 1, limit = 20) =>
+    api.get<Halaman<PesananKanal>>('/channel-orders', { query: { channel_id, page, limit } }),
+
+  /**
+   * Entri pesanan manual — untuk kanal yang tidak disambungkan ke API (chat
+   * Instagram, WhatsApp pribadi, penyedia yang adaptornya belum ada). Bagi
+   * kanal seperti itu inilah jalur utamanya, bukan jalan darurat.
+   */
+  catatPesanan: (input: {
+    channel_id: string
+    external_order_id: string
+    buyer_name?: string
+    buyer_phone?: string
+    items: { product_id: string; variant_id?: string; qty: string; unit_price?: number }[]
+  }) => api.post<PesananKanal>('/channel-orders', input),
+
+  /** Varian satu barang — daftar barang tidak memuatnya. */
+  varianBarang: (productId: string) => api.get<VarianProduk[]>(`/products/${productId}/variants`),
+
+  /** Beri tahu aplikasi antar bahwa makanan siap diambil (idempoten). */
+  tandaiSiap: (id: string) => api.post<PesananKanal>(`/channel-orders/${id}/ready`),
+
+  batalkan: (id: string, reason: string) =>
+    api.post<PesananKanal>(`/channel-orders/${id}/cancel`, { reason }),
+
+  penyedia: () => api.get<PenyediaKanal[]>('/channel-providers'),
+  sambungan: (id: string) => api.get<SambunganKanal>(`/channels/${id}/connection`),
+  /** Isian rahasia yang dikosongkan = tetap memakai nilai tersimpan. */
+  simpanSambungan: (id: string, provider: string, fields: Record<string, string>) =>
+    api.put<SambunganKanal>(`/channels/${id}/connection`, { provider, fields }),
+  tesSambungan: (id: string) => api.post<SambunganKanal>(`/channels/${id}/connection/test`),
+  putusSambungan: (id: string) => api.hapus<null>(`/channels/${id}/connection`),
+  /** Alamat halaman izin toko di penyedia; setiap panggilan membuat state baru. */
+  otorisasi: (id: string) => api.post<{ url: string }>(`/channels/${id}/connection/authorize`),
+  statusStok: (id: string) => api.get<StatusStokKanal>(`/channels/${id}/stock-status`),
+  menu: (id: string) => api.get<MenuKanal>(`/channels/${id}/menu`),
+  /** Isi menu kanal (belum dikirim). */
+  simpanMenu: (id: string, product_ids: string[]) => api.put<MenuKanal>(`/channels/${id}/menu`, { product_ids }),
+  /** Kirim menu ke aplikasi antar — MENGGANTI menu di sana; confirm wajib true. */
+  kirimMenu: (id: string) =>
+    api.post<{ items: number; categories: number; published_at: string }>(`/channels/${id}/menu/publish`, {
+      confirm: true,
+    }),
+  /** Cocokkan listing penyedia dengan barang toko (SKU/barcode), lalu kirim stok pertama. */
+  cocokkanBarang: (id: string) => api.post<HasilCocokBarang>(`/channels/${id}/products/match`),
+
+  /** Impor laporan harian dari marketplace sebagai CSV. */
+  imporPesanan: (channelId: string, csv: string) =>
+    api.postMentah<HasilImporKanal>(`/channels/${channelId}/orders/import`, csv, 'text/csv'),
+}

@@ -18,3 +18,6 @@ tmp/
 
 # Logs
 *.log
+
+# Foto barang hasil unggahan — bukan bagian dari kode.
+uploads/

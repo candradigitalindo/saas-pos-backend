@@ -1,6 +1,10 @@
 package repositories
 
-import "strings"
+import (
+	"strings"
+
+	"gorm.io/gorm/clause"
+)
 
 // escapeLike meng-escape karakter wildcard LIKE/ILIKE ('%', '_') dan backslash
 // dari input pencarian pengguna.
@@ -15,4 +19,27 @@ func escapeLike(search string) string {
 		`%`, `\%`,
 		`_`, `\_`,
 	).Replace(search)
+}
+
+// onConflictDoNothing membuat klausa "ON CONFLICT (cols) DO NOTHING" untuk
+// insert idempoten pada tabel dengan unique/primary key di kolom-kolom tsb.
+func onConflictDoNothing(cols ...string) clause.OnConflict {
+	columns := make([]clause.Column, len(cols))
+	for i, c := range cols {
+		columns[i] = clause.Column{Name: c}
+	}
+	return clause.OnConflict{Columns: columns, DoNothing: true}
+}
+
+// lockForUpdate mengembalikan klausa "FOR UPDATE" untuk mengunci baris terpilih
+// sampai akhir transaksi. Dipakai penomoran struk & penguncian saldo stok.
+func lockForUpdate() clause.Locking {
+	return clause.Locking{Strength: "UPDATE"}
+}
+
+// lockNoKeyUpdate: FOR NO KEY UPDATE — tetap saling mengantre, tetapi TIDAK
+// menahan baris anak yang merujuknya lewat foreign key (KEY SHARE). Dipakai
+// saat baris dikunci lama sementara baris anak disisipkan dari koneksi lain.
+func lockNoKeyUpdate() clause.Locking {
+	return clause.Locking{Strength: "NO KEY UPDATE"}
 }
