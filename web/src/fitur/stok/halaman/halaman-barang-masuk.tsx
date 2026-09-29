@@ -16,14 +16,17 @@ import { useKategori, usePemasok } from '@/bersama/hooks/use-katalog'
 import { GalatAPI } from '@/lib/api-client'
 import { formatRupiah, pratinjauBaris } from '@/bersama/util/uang'
 import { formatQty, formatQtySatuan } from '@/bersama/util/desimal'
+import { tanggalISO } from '@/bersama/util/tanggal'
 import { kelasPetak, petaWarnaKategori } from '@/bersama/util/warna-kategori'
 import { cn } from '@/bersama/util/cn'
 import type { Kemasan, Produk } from '@/bersama/tipe/katalog'
 import { PemilihBarang } from '../komponen/pemilih-barang'
 import { SaranBelanja } from '../komponen/saran-belanja'
 import { DialogRiwayatMasuk } from '../komponen/dialog-riwayat-masuk'
-import { stokApi } from '../api'
+import { PilihSumberBayar } from '../komponen/pilih-sumber-bayar'
+import { stokApi, type SumberBayar } from '../api'
 import { produkDariSaldo } from '../keadaan-stok'
+import { tambahHari } from '../utang'
 
 interface BarisMasuk {
   produk: Produk
@@ -70,6 +73,12 @@ export function HalamanBarangMasuk() {
   // menambah beberapa berturut-turut; mengisi lewat pemilih → saran dilipat.
   const [pakaiSaran, setPakaiSaran] = useState(false)
   const [galat, setGalat] = useState<string | null>(null)
+  // Pembayaran (000047): lunas / sebagian / belum bayar. Sisanya jadi utang
+  // pemasok; sumber uang yang dibayar dipilih tiap kali (laci atau uang lain).
+  const [cara, setCara] = useState<'lunas' | 'sebagian' | 'utang'>('lunas')
+  const [dibayar, setDibayar] = useState(0)
+  const [sumber, setSumber] = useState<SumberBayar>('other')
+  const [jatuhTempo, setJatuhTempo] = useState('')
 
   // Kunci idempotensi dibuat sekali per formulir: barang masuk menciptakan
   // stok DAN utang ke pemasok, jadi tidak boleh tercatat dua kali.
@@ -85,6 +94,10 @@ export function HalamanBarangMasuk() {
   const sisa = new Map((saldo.data?.data ?? []).map((s) => [s.product_id, s.qty]))
 
   const total = baris.reduce((j, b) => j + pratinjauBaris(b.hargaBeli, b.qty), 0)
+  const terbayar = cara === 'lunas' ? total : cara === 'sebagian' ? Math.min(Math.max(dibayar, 0), total) : 0
+  const sisaUtang = total - terbayar
+  const namaPemasok = pemasok.data?.data.find((p) => p.id === pemasokId)?.name
+  const pembayaranSah = cara !== 'sebagian' || (dibayar > 0 && dibayar < total)
   const modalBerubah = baris.filter((b) => b.produk.cost_price > 0 && modalBaru(b) !== b.produk.cost_price).length
 
   const simpan = useMutation({
@@ -94,6 +107,9 @@ export function HalamanBarangMasuk() {
           outlet_id: tokoAktif!,
           supplier_id: pemasokId || undefined,
           invoice_no: noNota.trim() || undefined,
+          paid_amount: terbayar,
+          payment_source: terbayar > 0 ? sumber : undefined,
+          due_date: sisaUtang > 0 && jatuhTempo ? jatuhTempo : undefined,
           items: baris.map((b) => ({
             product_id: b.produk.id,
             ...(b.kemasan ? { product_unit_id: b.kemasan.id } : {}),
@@ -110,11 +126,19 @@ export function HalamanBarangMasuk() {
       qc.invalidateQueries({ queryKey: ['kartu-stok'] })
       qc.invalidateQueries({ queryKey: ['produk'] })
       qc.invalidateQueries({ queryKey: ['pembelian'] })
+      qc.invalidateQueries({ queryKey: ['utang'] })
+      if (terbayar > 0 && sumber === 'drawer') {
+        qc.invalidateQueries({ queryKey: ['shift-aktif'] })
+        qc.invalidateQueries({ queryKey: ['gerakan-kas'] })
+      }
 
       const ringkas = baris
         .map((b) => `${b.qty} ${b.kemasan?.unit_name ?? b.produk.unit_name ?? ''} ${b.produk.name}`.trim())
         .join(', ')
-      toast.berhasil(`${ringkas} masuk. Harga modal diperbarui otomatis.`)
+      toast.berhasil(
+        `${ringkas} masuk. Harga modal diperbarui otomatis.` +
+          (sisaUtang > 0 ? ` Sisa ${formatRupiah(sisaUtang)} dicatat sebagai utang${namaPemasok ? ` ke ${namaPemasok}` : ''}.` : ''),
+      )
       navigate('/stok')
     },
     onError: (e) => setGalat(e instanceof GalatAPI ? e.pesan : 'Terjadi kesalahan. Coba lagi.'),
@@ -254,6 +278,79 @@ export function HalamanBarangMasuk() {
             <span className="text-judul font-extrabold tabular-nums text-teks-utama">{formatRupiah(total)}</span>
           </div>
 
+          <div className="flex flex-col gap-3 border-t border-garis pt-3">
+            <div className="flex flex-col gap-1.5">
+              <span className="text-label font-medium text-teks-sekunder">Pembayaran</span>
+              <SegmenPilihan
+                label="Pembayaran"
+                nilai={cara}
+                onPilih={setCara}
+                pilihan={[
+                  ['lunas', 'Lunas'],
+                  ['sebagian', 'Sebagian'],
+                  ['utang', 'Belum bayar'],
+                ]}
+              />
+            </div>
+            {cara === 'sebagian' && (
+              <KolomUang
+                label="Dibayar sekarang"
+                nilai={dibayar}
+                onNilai={setDibayar}
+                galat={dibayar >= total && total > 0 ? 'Sama dengan total — pilih "Lunas".' : undefined}
+              />
+            )}
+            {terbayar > 0 && <PilihSumberBayar nilai={sumber} onPilih={setSumber} />}
+            {sisaUtang > 0 && (
+              <div className="flex flex-col gap-2 rounded-kontrol bg-permukaan-2/60 p-3">
+                <p className="text-label text-teks-utama">
+                  Sisa <strong className="tabular-nums">{formatRupiah(sisaUtang)}</strong> dicatat sebagai utang
+                  {namaPemasok ? ` ke ${namaPemasok}` : ''}.
+                </p>
+                {!pemasokId && (
+                  <p className="text-keterangan text-jingga-700">Pilih pemasok di atas supaya jelas utang ke siapa.</p>
+                )}
+                <Kolom
+                  label="Jatuh tempo"
+                  type="date"
+                  value={jatuhTempo}
+                  min={tanggalISO()}
+                  onChange={(e) => setJatuhTempo(e.target.value)}
+                />
+                <div className="flex flex-wrap gap-1.5" role="group" aria-label="Jatuh tempo cepat">
+                  {([7, 14, 30] as const).map((n) => {
+                    const tgl = tambahHari(tanggalISO(), n)
+                    return (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => setJatuhTempo(tgl)}
+                        aria-pressed={jatuhTempo === tgl}
+                        className={cn(
+                          'min-h-9 rounded-full border px-3 text-keterangan font-medium',
+                          jatuhTempo === tgl
+                            ? 'border-utama bg-sorot text-hijau-800'
+                            : 'border-garis bg-permukaan text-teks-sekunder hover:bg-permukaan-2',
+                        )}
+                      >
+                        {n} hari
+                      </button>
+                    )
+                  })}
+                  {jatuhTempo && (
+                    <button
+                      type="button"
+                      onClick={() => setJatuhTempo('')}
+                      className="min-h-9 px-2 text-keterangan font-medium text-teks-sekunder hover:underline"
+                    >
+                      Tanpa jatuh tempo
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
           <p className="flex items-start gap-2 rounded-kontrol bg-info-teks/10 px-3 py-2 text-keterangan text-info-teks">
             <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
             {modalBerubah > 0
@@ -271,6 +368,7 @@ export function HalamanBarangMasuk() {
             lebarPenuh
             memuat={simpan.isPending}
             labelMemuat="Menyimpan…"
+            disabled={!pembayaranSah}
             onClick={() => {
               setGalat(null)
               simpan.mutate()

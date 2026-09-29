@@ -37,6 +37,9 @@ type PurchaseInput struct {
 	DiscountAmount int64
 	TaxAmount      int64
 	PaidAmount     int64
+	// PaymentSource: sumber uang PaidAmount — SumberLaci (uang keluar shift
+	// yang sedang buka) atau SumberLain (bawaan). Diabaikan bila PaidAmount 0.
+	PaymentSource  string
 	DueDate        *time.Time
 	Items          []PurchaseItemInput
 	IdempotencyKey string
@@ -52,6 +55,15 @@ func ReceivePurchase(ctx context.Context, in PurchaseInput) (int, []byte, error)
 	}
 	if len(in.Items) == 0 {
 		return 0, nil, fmt.Errorf("%w: tidak ada item", helpers.ErrValidation)
+	}
+	if in.PaidAmount < 0 {
+		return 0, nil, fmt.Errorf("%w: nominal terbayar tidak boleh minus", helpers.ErrValidation)
+	}
+	if in.PaymentSource == "" {
+		in.PaymentSource = SumberLain
+	}
+	if in.PaidAmount > 0 && !SumberBayarSah(in.PaymentSource) {
+		return 0, nil, fmt.Errorf("%w: sumber pembayaran harus drawer atau other", helpers.ErrValidation)
 	}
 	for _, it := range in.Items {
 		if it.Qty.LessThanOrEqual(decimal.Zero) || it.UnitCost < 0 {
@@ -175,9 +187,19 @@ func ReceivePurchase(ctx context.Context, in PurchaseInput) (int, []byte, error)
 			modalDasar[it.ProductID] = biayaDasar
 		}
 		p.Total = p.Subtotal - p.DiscountAmount + p.TaxAmount
+		if p.PaidAmount > p.Total {
+			return fmt.Errorf("%w: nominal terbayar Rp %d melebihi total Rp %d", helpers.ErrValidation, p.PaidAmount, p.Total)
+		}
 
 		if err := repositories.CreatePurchase(ctx, tx, &p); err != nil {
 			return err
+		}
+		// Yang dibayar saat barang datang ikut tercatat sebagai pembayaran —
+		// dan bila dari laci, sebagai uang keluar shift.
+		if p.PaidAmount > 0 {
+			if _, err := catatBayarTx(ctx, tx, &p, p.PaidAmount, in.PaymentSource, "", supplierName(ctx, tx, in.SupplierID), now, bizDate); err != nil {
+				return err
+			}
 		}
 		if _, err := repositories.ApplyStockDeltas(ctx, tx, in.OutletID, deltas, repositories.MovementMeta{
 			Kind: "purchase", RefTable: "purchases", RefID: p.ID, OccurredAt: now, BusinessDate: bizDate,
@@ -220,4 +242,16 @@ func uniqueProductIDs(items []PurchaseItemInput) []string {
 		out = append(out, id)
 	}
 	return out
+}
+
+// supplierName: nama pemasok ("" bila kosong/tidak ditemukan).
+func supplierName(ctx context.Context, tx *gorm.DB, id string) string {
+	if id == "" {
+		return ""
+	}
+	var sup models.Supplier
+	if err := repositories.FindSupplierInTenant(ctx, tx, id, &sup); err != nil {
+		return ""
+	}
+	return sup.Name
 }

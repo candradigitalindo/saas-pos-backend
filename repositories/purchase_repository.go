@@ -32,13 +32,39 @@ func FindPurchaseInTenant(ctx context.Context, tx *gorm.DB, id string, out *mode
 	return err
 }
 
-// ListPurchases mengembalikan satu halaman pembelian (opsional per outlet).
-func ListPurchases(ctx context.Context, outletID string, limit, offset int) ([]models.Purchase, int64, error) {
-	where, args := "", []any(nil)
-	if outletID != "" {
-		where, args = "outlet_id = ?", []any{outletID}
+// PurchaseFilter menyaring daftar pembelian.
+type PurchaseFilter struct {
+	OutletID string
+	// Unpaid: hanya yang belum lunas (paid_amount < total) — daftar utang.
+	Unpaid bool
+	// SupplierID: satu pemasok; "-" = pembelian tanpa pemasok.
+	SupplierID string
+}
+
+// ListPurchases mengembalikan satu halaman pembelian (lihat PurchaseFilter).
+// Daftar utang diurut jatuh tempo terdekat dulu (tanpa jatuh tempo di
+// belakang), riwayat biasa terbaru dulu.
+func ListPurchases(ctx context.Context, f PurchaseFilter, limit, offset int) ([]models.Purchase, int64, error) {
+	var conds []string
+	var args []any
+	if f.OutletID != "" {
+		conds, args = append(conds, "outlet_id = ?"), append(args, f.OutletID)
 	}
+	if f.Unpaid {
+		conds = append(conds, "status = 'received' AND paid_amount < total")
+	}
+	switch f.SupplierID {
+	case "":
+	case "-":
+		conds = append(conds, "supplier_id IS NULL")
+	default:
+		conds, args = append(conds, "supplier_id = ?"), append(args, f.SupplierID)
+	}
+	where := strings.Join(conds, " AND ")
 	where, args = whereOutlet(ctx, where, args, "outlet_id")
+	if f.Unpaid {
+		return paginateTenant[models.Purchase](ctx, where, args, "due_date ASC NULLS LAST, occurred_at ASC, id ASC", limit, offset)
+	}
 	return paginateTenant[models.Purchase](ctx, where, args, "occurred_at DESC, id DESC", limit, offset)
 }
 

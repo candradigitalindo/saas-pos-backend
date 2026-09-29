@@ -37,6 +37,7 @@ const HalamanKoreksiStok = muat(() => import('@/fitur/stok/halaman/halaman-korek
 const HalamanBarangMasuk = muat(() => import('@/fitur/stok/halaman/halaman-barang-masuk'), 'HalamanBarangMasuk')
 const HalamanOpname = muat(() => import('@/fitur/stok/halaman/halaman-opname'), 'HalamanOpname')
 const HalamanTransfer = muat(() => import('@/fitur/stok/halaman/halaman-transfer'), 'HalamanTransfer')
+const HalamanUtangPemasok = muat(() => import('@/fitur/stok/halaman/halaman-utang-pemasok'), 'HalamanUtangPemasok')
 const HalamanPelanggan = muat(() => import('@/fitur/pelanggan/halaman/halaman-pelanggan'), 'HalamanPelanggan')
 const HalamanKasbon = muat(() => import('@/fitur/pelanggan/halaman/halaman-kasbon'), 'HalamanKasbon')
 const HalamanPengaturan = muat(() => import('@/fitur/pengaturan/halaman/halaman-pengaturan'), 'HalamanPengaturan')
@@ -324,6 +325,16 @@ const router = createBrowserRouter([
           <ButuhIzin izin={[IZIN.stockTransfer]}>
             <Tunggu>
               <HalamanTransfer />
+            </Tunggu>
+          </ButuhIzin>
+        ),
+      },
+      {
+        path: '/stok/utang',
+        element: (
+          <ButuhIzin izin={[IZIN.stockView]}>
+            <Tunggu>
+              <HalamanUtangPemasok />
             </Tunggu>
           </ButuhIzin>
         ),

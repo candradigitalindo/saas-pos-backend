@@ -48,11 +48,48 @@ export interface Pembelian {
   business_date: string
   items?: ItemPembelian[]
   created_at: string
+  /** YYYY-MM-DD, bila ada. */
+  due_date?: string
+  /** Sisa utang = total − paid_amount. */
+  outstanding: number
+  /** GET /purchases/:id — terlama dulu. */
+  payments?: PembayaranPembelian[]
   supplier_name?: string
   created_by_name?: string
   item_count: number
   /** Paling banyak tiga nama barang pertama. */
   item_names?: string[]
+}
+
+/** Sumber uang pembayaran pemasok: laci kasir (uang keluar shift) atau uang lain. */
+export type SumberBayar = 'drawer' | 'other'
+
+export interface PembayaranPembelian {
+  id: string
+  amount: number
+  source: SumberBayar
+  note?: string
+  paid_at: string
+  created_by_name?: string
+}
+
+/** GET /payables/summary */
+export interface RingkasanUtang {
+  outstanding: number
+  count: number
+  overdue_count: number
+  /** Tanggal usaha outlet hari ini, YYYY-MM-DD. */
+  today: string
+  suppliers: {
+    /** Kosong = pembelian tanpa pemasok. */
+    supplier_id?: string
+    supplier_name?: string
+    outstanding: number
+    count: number
+    overdue_count: number
+    nearest_due?: string
+    oldest_at: string
+  }[]
 }
 
 export interface ItemOpname {
@@ -215,15 +252,39 @@ export const stokApi = {
       outlet_id: string
       supplier_id?: string
       invoice_no?: string
+      /** Yang dibayar saat barang datang; sisanya jadi utang pemasok. */
       paid_amount?: number
+      payment_source?: SumberBayar
+      /** YYYY-MM-DD */
+      due_date?: string
       /** product_unit_id: kemasan yang dibeli (dus); qty & unit_cost per kemasan. */
       items: { product_id: string; product_unit_id?: string; qty: string; unit_cost: number }[]
     },
     kunci: string,
   ) => api.post<Pembelian>('/purchases', input, { idempotencyKey: kunci }),
 
-  daftarPembelian: (outlet_id: string, page = 1, limit = 20) =>
-    api.get<Halaman<Pembelian>>('/purchases', { query: { outlet_id, page, limit } }),
+  /** belumLunas: daftar utang (jatuh tempo terdekat dulu). pemasok "-" = tanpa pemasok. */
+  daftarPembelian: (
+    outlet_id: string,
+    page = 1,
+    limit = 20,
+    opsi: { belumLunas?: boolean; pemasok?: string } = {},
+  ) =>
+    api.get<Halaman<Pembelian>>('/purchases', {
+      query: {
+        outlet_id,
+        page,
+        limit,
+        unpaid: opsi.belumLunas ? 'true' : undefined,
+        supplier_id: opsi.pemasok || undefined,
+      },
+    }),
+
+  ringkasanUtang: (outlet_id: string) => api.get<RingkasanUtang>('/payables/summary', { query: { outlet_id } }),
+
+  /** Bayar utang satu pembelian. Wajib Idempotency-Key: memindahkan uang. */
+  bayarPembelian: (id: string, input: { amount: number; source: SumberBayar; note?: string }, kunci: string) =>
+    api.post<Pembelian>(`/purchases/${id}/payments`, input, { idempotencyKey: kunci }),
 
   pembelian: (id: string) => api.get<Pembelian>(`/purchases/${id}`),
 

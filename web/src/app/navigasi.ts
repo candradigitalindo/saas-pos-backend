@@ -17,6 +17,7 @@ import {
   Store,
   Tags,
   Truck,
+  HandCoins,
   UserCog,
   Users,
   Wallet,
@@ -80,6 +81,7 @@ export const MENU_LAINNYA: ItemMenu[] = [
   { ke: '/kasbon', label: 'Kasbon', ikon: NotebookPen, izin: [IZIN.receivableManage] },
   { ke: '/stok/opname', label: 'Hitung Fisik', ikon: ClipboardList, izin: [IZIN.stockOpname] },
   { ke: '/stok/transfer', label: 'Kirim Antar Toko', ikon: Truck, izin: [IZIN.stockTransfer] },
+  { ke: '/stok/utang', label: 'Utang Pemasok', ikon: HandCoins, izin: [IZIN.stockView] },
   { ke: '/kanal', label: 'Kanal Online', ikon: Store, izin: [IZIN.channelManage, IZIN.channelOrderAccept], fitur: FITUR.kanalOnline },
   { ke: '/crm', label: 'Prospek', ikon: Building2, izin: [IZIN.crmLeadViewOwn, IZIN.crmLeadViewAll], fitur: FITUR.crmFreelance },
   { ke: '/crm/kunjungan', label: 'Kunjungan', ikon: MapPin, izin: [IZIN.crmVisitCheckin], fitur: FITUR.salesLapangan },
@@ -149,6 +151,10 @@ export const KELOMPOK_SAMPING: KelompokMenu[] = [
       { ke: '/barang/master', label: 'Kategori & Satuan', ikon: Tags, izin: [IZIN.productEdit], kataKunci: ['satuan', 'unit', 'pemasok', 'supplier'] },
       { ke: '/stok/opname', label: 'Hitung Fisik', ikon: ClipboardList, izin: [IZIN.stockOpname], kataKunci: ['opname', 'hitung stok'] },
       { ke: '/stok/transfer', label: 'Kirim Antar Toko', ikon: Truck, izin: [IZIN.stockTransfer], kataKunci: ['transfer', 'mutasi', 'cabang'] },
+      {
+        ke: '/stok/utang', label: 'Utang Pemasok', ikon: HandCoins, izin: [IZIN.stockView],
+        kataKunci: ['hutang', 'utang', 'supplier', 'pemasok', 'bayar pemasok', 'jatuh tempo', 'belum lunas'],
+      },
     ],
   },
   {

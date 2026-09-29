@@ -632,6 +632,10 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 	t.POST("/purchases", middlewares.Require("stock.adjust"), controllers.ReceivePurchase)
 	t.GET("/purchases", middlewares.Require("stock.view"), controllers.ListPurchases)
 	t.GET("/purchases/:id", middlewares.Require("stock.view"), controllers.GetPurchase)
+	// Utang pemasok (000047): bayar = izin barang masuk; dari laci juga butuh
+	// cash.movement (diperiksa service).
+	t.POST("/purchases/:id/payments", middlewares.Require("stock.adjust"), controllers.PayPurchase)
+	t.GET("/payables/summary", middlewares.Require("stock.view"), controllers.PayablesSummary)
 
 	// Stok opname.
 	op := t.Group("/stock-opnames")

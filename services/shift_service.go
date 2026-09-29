@@ -215,45 +215,55 @@ func CreateCashMovement(ctx context.Context, outletID, shiftID, direction string
 	}
 	var mv models.CashMovement
 	err := repositories.WithTenant(ctx, func(tx *gorm.DB) error {
-		var sh models.Shift
-		if shiftID != "" {
-			if err := repositories.FindShiftInTenant(ctx, tx, shiftID, &sh); err != nil {
-				return err
-			}
-			if sh.OutletID != outletID || sh.Status != "open" {
-				return fmt.Errorf("%w: shift tidak terbuka untuk outlet ini", helpers.ErrValidation)
-			}
-		} else if err := repositories.FindOpenShift(ctx, tx, outletID, &sh); err != nil {
-			if errors.Is(err, repositories.ErrNoOpenShift) {
-				return fmt.Errorf("%w: belum ada shift terbuka untuk outlet ini", helpers.ErrValidation)
-			}
-			return err
-		}
-
-		var outlet models.Outlet
-		if err := repositories.FindOutletByID(ctx, tx, outletID, &outlet); err != nil {
-			return err
-		}
-		now := time.Now().UTC()
-		bizDate, err := timez.BusinessDate(now, outlet.Timezone, outlet.DayStartOffset())
-		if err != nil {
-			return err
-		}
-
-		mv = models.CashMovement{
-			OutletID:     outletID,
-			ShiftID:      sh.ID,
-			Direction:    direction,
-			Amount:       amount,
-			Reason:       reason,
-			OccurredAt:   now,
-			BusinessDate: bizDate,
-			CreatedBy:    reqctx.UserID(ctx),
-		}
-		return repositories.CreateCashMovement(ctx, tx, &mv)
+		var err error
+		mv, err = catatKasTx(ctx, tx, outletID, shiftID, direction, amount, reason)
+		return err
 	})
 	if err != nil {
 		return nil, err
 	}
 	return &mv, nil
+}
+
+// catatKasTx mencatat satu gerakan kas laci DI DALAM tx pemanggil: pada shift
+// yang diberikan, atau shift yang sedang buka di outlet itu. Dipakai juga
+// oleh pembayaran pemasok "dari laci", supaya pembayaran & uang keluarnya
+// tercatat bersama atau tidak sama sekali.
+func catatKasTx(ctx context.Context, tx *gorm.DB, outletID, shiftID, direction string, amount int64, reason string) (models.CashMovement, error) {
+	var sh models.Shift
+	if shiftID != "" {
+		if err := repositories.FindShiftInTenant(ctx, tx, shiftID, &sh); err != nil {
+			return models.CashMovement{}, err
+		}
+		if sh.OutletID != outletID || sh.Status != "open" {
+			return models.CashMovement{}, fmt.Errorf("%w: shift tidak terbuka untuk outlet ini", helpers.ErrValidation)
+		}
+	} else if err := repositories.FindOpenShift(ctx, tx, outletID, &sh); err != nil {
+		if errors.Is(err, repositories.ErrNoOpenShift) {
+			return models.CashMovement{}, fmt.Errorf("%w: belum ada shift terbuka untuk outlet ini", helpers.ErrValidation)
+		}
+		return models.CashMovement{}, err
+	}
+
+	var outlet models.Outlet
+	if err := repositories.FindOutletByID(ctx, tx, outletID, &outlet); err != nil {
+		return models.CashMovement{}, err
+	}
+	now := time.Now().UTC()
+	bizDate, err := timez.BusinessDate(now, outlet.Timezone, outlet.DayStartOffset())
+	if err != nil {
+		return models.CashMovement{}, err
+	}
+
+	mv := models.CashMovement{
+		OutletID:     outletID,
+		ShiftID:      sh.ID,
+		Direction:    direction,
+		Amount:       amount,
+		Reason:       reason,
+		OccurredAt:   now,
+		BusinessDate: bizDate,
+		CreatedBy:    reqctx.UserID(ctx),
+	}
+	return mv, repositories.CreateCashMovement(ctx, tx, &mv)
 }

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { ChevronDown, PackageOpen } from 'lucide-react'
 import { Dialog, IsiDialog } from '@/bersama/ui/dialog'
@@ -20,8 +21,8 @@ const PER_HALAMAN = 20
  * pemasok, nomor nota, cuplikan barang, total, kapan & siapa yang mencatat.
  * Ketuk untuk membuka rinciannya (jumlah, satuan, harga beli per baris).
  *
- * Status bayar SENGAJA tidak ditampilkan: belum ada layar utang pemasok, dan
- * "belum lunas" yang tidak bisa dilunasi dari mana pun hanya membingungkan.
+ * Tiap nota menyebut status bayarnya ("Lunas" / "Sisa Rp X"); rinciannya
+ * memuat riwayat pembayaran. Pelunasan dilakukan di layar Utang Pemasok.
  */
 export function DialogRiwayatMasuk({ terbuka, onTutup }: { terbuka: boolean; onTutup: () => void }) {
   const { tokoAktif } = useSesi()
@@ -105,7 +106,13 @@ function BarisNota({ p, terbuka, onKlik }: { p: Pembelian; terbuka: boolean; onK
         <span className="flex shrink-0 items-center gap-1">
           <span className="text-right">
             <span className="block font-bold tabular-nums text-teks-utama">{formatRupiah(p.total)}</span>
-            <span className="block text-keterangan text-teks-redup">{p.item_count} barang</span>
+            {p.outstanding > 0 ? (
+              <span className="block text-keterangan font-semibold tabular-nums text-jingga-700">
+                sisa {formatRupiah(p.outstanding)}
+              </span>
+            ) : (
+              <span className="block text-keterangan text-teks-redup">{p.item_count} barang · lunas</span>
+            )}
           </span>
           <ChevronDown
             className={cn('h-4 w-4 text-teks-redup transition-transform', terbuka && 'rotate-180')}
@@ -122,25 +129,51 @@ function RincianNota({ id }: { id: string }) {
   const q = useQuery({ queryKey: ['pembelian', 'rinci', id], queryFn: () => stokApi.pembelian(id) })
   if (q.isLoading) return <Kerangka className="mb-3 h-16 w-full" />
   if (q.isError || !q.data) return <p className="pb-3 text-label text-bahaya-teks">Rincian belum bisa dimuat.</p>
+  const d = q.data
   return (
-    <ul className="mb-3 flex flex-col gap-1.5 rounded-kontrol bg-permukaan-2/60 px-3 py-2.5">
-      {(q.data.items ?? []).map((it) => {
-        const isi = Number.parseFloat(it.unit_conversion ?? '1')
-        const kemasan = isi > 1
-        return (
-          <li key={it.id} className="flex items-baseline justify-between gap-3 text-label">
-            <span className="min-w-0 text-teks-utama">
-              {it.product_name}
-              {it.variant_name && ` (${it.variant_name})`}
-              <span className="block text-keterangan text-teks-redup">
-                {formatQtySatuan(it.qty, it.unit_name || it.base_unit_name)}
-                {kemasan && ` isi ${formatQty(String(isi))}`} @ {formatRupiah(it.unit_cost)}
+    <div className="mb-3 flex flex-col gap-2 rounded-kontrol bg-permukaan-2/60 px-3 py-2.5">
+      <ul className="flex flex-col gap-1.5">
+        {(d.items ?? []).map((it) => {
+          const isi = Number.parseFloat(it.unit_conversion ?? '1')
+          const kemasan = isi > 1
+          return (
+            <li key={it.id} className="flex items-baseline justify-between gap-3 text-label">
+              <span className="min-w-0 text-teks-utama">
+                {it.product_name}
+                {it.variant_name && ` (${it.variant_name})`}
+                <span className="block text-keterangan text-teks-redup">
+                  {formatQtySatuan(it.qty, it.unit_name || it.base_unit_name)}
+                  {kemasan && ` isi ${formatQty(String(isi))}`} @ {formatRupiah(it.unit_cost)}
+                </span>
               </span>
-            </span>
-            <span className="shrink-0 font-medium tabular-nums text-teks-utama">{formatRupiah(it.line_total)}</span>
-          </li>
-        )
-      })}
-    </ul>
+              <span className="shrink-0 font-medium tabular-nums text-teks-utama">{formatRupiah(it.line_total)}</span>
+            </li>
+          )
+        })}
+      </ul>
+      {/* Pembayaran: kapan, berapa, dari mana, siapa. */}
+      {(d.payments?.length ?? 0) > 0 && (
+        <ul className="flex flex-col gap-1 border-t border-garis pt-2 text-keterangan text-teks-sekunder">
+          {d.payments!.map((b) => (
+            <li key={b.id} className="flex items-baseline justify-between gap-3">
+              <span className="min-w-0">
+                Dibayar {b.source === 'drawer' ? 'dari laci' : 'uang lain'} · {formatTanggalJam(b.paid_at)}
+                {b.created_by_name && ` · ${b.created_by_name}`}
+                {b.note && ` · ${b.note}`}
+              </span>
+              <span className="shrink-0 font-medium tabular-nums text-teks-utama">{formatRupiah(b.amount)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {d.outstanding > 0 && (
+        <p className="flex items-baseline justify-between gap-3 border-t border-garis pt-2 text-label">
+          <span className="font-semibold text-jingga-700">Sisa utang {formatRupiah(d.outstanding)}</span>
+          <Link to="/stok/utang" className="font-medium text-utama hover:underline">
+            Bayar di Utang Pemasok
+          </Link>
+        </p>
+      )}
+    </div>
   )
 }

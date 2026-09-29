@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"candra/backend-api/helpers"
+	"candra/backend-api/internal/timez"
 	"candra/backend-api/models"
 	"candra/backend-api/repositories"
 	"candra/backend-api/services"
@@ -35,13 +36,17 @@ func ReceivePurchase(c *gin.Context) {
 		DiscountAmount: req.DiscountAmount,
 		TaxAmount:      req.TaxAmount,
 		PaidAmount:     req.PaidAmount,
+		PaymentSource:  req.PaymentSource,
 		IdempotencyKey: c.GetHeader("Idempotency-Key"),
 		RequestHash:    helpers.SHA256Hex(raw),
 	}
 	if req.DueDate != "" {
-		if d, e := time.Parse("2006-01-02", req.DueDate); e == nil {
-			in.DueDate = &d
+		d, e := time.Parse("2006-01-02", req.DueDate)
+		if e != nil {
+			badRequest(c, "due_date", "Tanggal jatuh tempo harus YYYY-MM-DD")
+			return
 		}
+		in.DueDate = &d
 	}
 	for _, it := range req.Items {
 		q, e := decimal.NewFromString(it.Qty)
@@ -65,7 +70,11 @@ func ReceivePurchase(c *gin.Context) {
 // ListPurchases mengembalikan daftar pembelian.
 func ListPurchases(c *gin.Context) {
 	page, limit, offset := helpers.ParsePaginationParams(c)
-	rows, total, err := repositories.ListPurchases(c.Request.Context(), c.Query("outlet_id"), limit, offset)
+	rows, total, err := repositories.ListPurchases(c.Request.Context(), repositories.PurchaseFilter{
+		OutletID:   c.Query("outlet_id"),
+		Unpaid:     c.Query("unpaid") == "true" || c.Query("unpaid") == "1",
+		SupplierID: c.Query("supplier_id"),
+	}, limit, offset)
 	if err != nil {
 		respondServiceError(c, err)
 		return
@@ -112,8 +121,19 @@ func GetPurchase(c *gin.Context) {
 		respondServiceError(c, err)
 		return
 	}
+	bayar, err := repositories.ListPurchasePayments(ctx, p.ID)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
 	r := services.PurchaseToResponse(&p)
 	isiExtra(&r, extras[p.ID])
+	for _, b := range bayar {
+		r.Payments = append(r.Payments, structs.PurchasePaymentResponse{
+			ID: b.ID, Amount: b.Amount, Source: b.Source, Note: b.Note,
+			PaidAt: b.PaidAt.UTC().Format(timeLayout), CreatedByName: b.CreatedByName,
+		})
+	}
 	for i := range r.Items {
 		n := nama[r.Items[i].ID]
 		r.Items[i].ProductName, r.Items[i].VariantName, r.Items[i].BaseUnitName = n.ProductName, n.VariantName, n.BaseUnitName
@@ -127,4 +147,67 @@ func GetPurchase(c *gin.Context) {
 func isiExtra(r *structs.PurchaseResponse, e repositories.PurchaseExtra) {
 	r.SupplierName, r.CreatedByName = e.SupplierName, e.CreatedByName
 	r.ItemCount, r.ItemNames = e.ItemCount, e.ItemNames
+}
+
+// PayPurchase mencatat pelunasan (sebagian/penuh) utang satu pembelian. Wajib
+// header Idempotency-Key: ini memindahkan uang.
+func PayPurchase(c *gin.Context) {
+	raw, err := io.ReadAll(io.LimitReader(c.Request.Body, checkoutMaxBodyBytes))
+	if err != nil {
+		badRequest(c, "body", "Gagal membaca body")
+		return
+	}
+	var req structs.PurchasePayRequest
+	if err := bindJSONBytes(raw, &req); err != nil {
+		validationFailed(c, err)
+		return
+	}
+	status, body, err := services.PayPurchase(c.Request.Context(), services.PayPurchaseInput{
+		PurchaseID: c.Param("id"), Amount: req.Amount, Source: req.Source, Note: req.Note,
+		IdempotencyKey: c.GetHeader("Idempotency-Key"), RequestHash: helpers.SHA256Hex(raw),
+	})
+	if err != nil {
+		notFoundOr(c, err, repositories.ErrPurchaseNotFound, "Pembelian tidak ditemukan")
+		return
+	}
+	c.Data(status, "application/json; charset=utf-8", body)
+}
+
+// PayablesSummary merangkum utang pemasok satu outlet (atau semua yang
+// boleh): total, jumlah nota, yang lewat jatuh tempo, dan per pemasok.
+func PayablesSummary(c *gin.Context) {
+	ctx := c.Request.Context()
+	outletID := c.Query("outlet_id")
+	hariIni := time.Now().UTC()
+	if outletID != "" {
+		var o models.Outlet
+		if err := repositories.FindOutletByID(ctx, nil, outletID, &o); err == nil {
+			if d, e := timez.BusinessDate(hariIni, o.Timezone, o.DayStartOffset()); e == nil {
+				hariIni = d
+			}
+		}
+	}
+	hariIni = time.Date(hariIni.Year(), hariIni.Month(), hariIni.Day(), 0, 0, 0, 0, time.UTC)
+	rows, err := repositories.PayablesSummary(ctx, outletID, hariIni)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	out := structs.PayablesSummaryResponse{Today: hariIni.Format("2006-01-02"), Suppliers: []structs.PayablesSupplierResponse{}}
+	for _, r := range rows {
+		s := structs.PayablesSupplierResponse{
+			SupplierID: r.SupplierID, SupplierName: r.SupplierName, Outstanding: r.Outstanding,
+			Count: r.Count, OverdueCount: r.OverdueCount, OldestAt: r.OldestAt.UTC().Format(timeLayout),
+		}
+		if r.NearestDue != nil {
+			s.NearestDue = r.NearestDue.Format("2006-01-02")
+		}
+		out.Outstanding += r.Outstanding
+		out.Count += r.Count
+		out.OverdueCount += r.OverdueCount
+		out.Suppliers = append(out.Suppliers, s)
+	}
+	c.JSON(http.StatusOK, structs.SuccessResponse[structs.PayablesSummaryResponse]{
+		Success: true, Message: "Ringkasan utang pemasok", Data: out,
+	})
 }

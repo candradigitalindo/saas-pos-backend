@@ -19,10 +19,13 @@ func PurchaseToResponse(p *models.Purchase) structs.PurchaseResponse {
 		ID: p.ID, OutletID: p.OutletID, SupplierID: ptrStr(p.SupplierID),
 		InvoiceNo: p.InvoiceNo, Status: p.Status,
 		Subtotal: p.Subtotal, DiscountAmount: p.DiscountAmount, TaxAmount: p.TaxAmount,
-		Total: p.Total, PaidAmount: p.PaidAmount,
+		Total: p.Total, PaidAmount: p.PaidAmount, Outstanding: p.Total - p.PaidAmount,
 		OccurredAt:   p.OccurredAt.UTC().Format(saleTimeLayout),
 		BusinessDate: p.BusinessDate.Format("2006-01-02"),
 		CreatedAt:    p.CreatedAt.UTC().Format(saleTimeLayout),
+	}
+	if p.DueDate != nil {
+		r.DueDate = p.DueDate.Format("2006-01-02")
 	}
 	for _, it := range p.Items {
 		r.Items = append(r.Items, structs.PurchaseItemResponse{

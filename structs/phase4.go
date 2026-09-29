@@ -12,14 +12,17 @@ type PurchaseItemRequest struct {
 }
 
 type PurchaseRequest struct {
-	OutletID       string                `json:"outlet_id" binding:"required,ulid"`
-	SupplierID     string                `json:"supplier_id" binding:"omitempty,ulid"`
-	InvoiceNo      string                `json:"invoice_no" binding:"omitempty,max=100"`
-	DiscountAmount int64                 `json:"discount_amount" binding:"omitempty,gte=0"`
-	TaxAmount      int64                 `json:"tax_amount" binding:"omitempty,gte=0"`
-	PaidAmount     int64                 `json:"paid_amount" binding:"omitempty,gte=0"`
-	DueDate        string                `json:"due_date" binding:"omitempty"` // YYYY-MM-DD
-	Items          []PurchaseItemRequest `json:"items" binding:"required,min=1,dive"`
+	OutletID       string `json:"outlet_id" binding:"required,ulid"`
+	SupplierID     string `json:"supplier_id" binding:"omitempty,ulid"`
+	InvoiceNo      string `json:"invoice_no" binding:"omitempty,max=100"`
+	DiscountAmount int64  `json:"discount_amount" binding:"omitempty,gte=0"`
+	TaxAmount      int64  `json:"tax_amount" binding:"omitempty,gte=0"`
+	PaidAmount     int64  `json:"paid_amount" binding:"omitempty,gte=0"`
+	// Sumber uang paid_amount: drawer (laci kasir → uang keluar shift) atau
+	// other (bawaan; dompet/rekening).
+	PaymentSource string                `json:"payment_source" binding:"omitempty,oneof=drawer other"`
+	DueDate       string                `json:"due_date" binding:"omitempty"` // YYYY-MM-DD
+	Items         []PurchaseItemRequest `json:"items" binding:"required,min=1,dive"`
 }
 
 type PurchaseItemResponse struct {
@@ -53,6 +56,12 @@ type PurchaseResponse struct {
 	BusinessDate   string                 `json:"business_date"`
 	Items          []PurchaseItemResponse `json:"items,omitempty"`
 	CreatedAt      string                 `json:"created_at"`
+
+	DueDate     string `json:"due_date,omitempty"` // YYYY-MM-DD
+	Outstanding int64  `json:"outstanding"`        // sisa utang = total − paid_amount
+
+	// Pembayaran (GET /purchases/:id), terlama dulu.
+	Payments []PurchasePaymentResponse `json:"payments,omitempty"`
 
 	// Keterangan tampilan (GET /purchases & /purchases/:id).
 	SupplierName  string   `json:"supplier_name,omitempty"`
@@ -176,4 +185,41 @@ type RecipeResponse struct {
 	ProductID string               `json:"product_id"`
 	YieldQty  string               `json:"yield_qty"`
 	Items     []RecipeItemResponse `json:"items"`
+}
+
+// PurchasePaymentResponse: satu pembayaran pembelian.
+type PurchasePaymentResponse struct {
+	ID            string `json:"id"`
+	Amount        int64  `json:"amount"`
+	Source        string `json:"source"` // drawer | other
+	Note          string `json:"note,omitempty"`
+	PaidAt        string `json:"paid_at"`
+	CreatedByName string `json:"created_by_name,omitempty"`
+}
+
+// PurchasePayRequest: POST /purchases/:id/payments.
+type PurchasePayRequest struct {
+	Amount int64  `json:"amount" binding:"required,gt=0"`
+	Source string `json:"source" binding:"required,oneof=drawer other"`
+	Note   string `json:"note" binding:"omitempty,max=255"`
+}
+
+// PayablesSupplierResponse: utang ke satu pemasok.
+type PayablesSupplierResponse struct {
+	SupplierID   string `json:"supplier_id,omitempty"` // kosong = tanpa pemasok
+	SupplierName string `json:"supplier_name,omitempty"`
+	Outstanding  int64  `json:"outstanding"`
+	Count        int64  `json:"count"`
+	OverdueCount int64  `json:"overdue_count"`
+	NearestDue   string `json:"nearest_due,omitempty"`
+	OldestAt     string `json:"oldest_at"`
+}
+
+// PayablesSummaryResponse: GET /payables/summary.
+type PayablesSummaryResponse struct {
+	Outstanding  int64                      `json:"outstanding"`
+	Count        int64                      `json:"count"`
+	OverdueCount int64                      `json:"overdue_count"`
+	Today        string                     `json:"today"` // tanggal usaha outlet
+	Suppliers    []PayablesSupplierResponse `json:"suppliers"`
 }
