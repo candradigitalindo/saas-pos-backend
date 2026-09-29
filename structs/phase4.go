@@ -128,6 +128,9 @@ type TransferItemResponse struct {
 	ProductID string `json:"product_id"`
 	VariantID string `json:"variant_id,omitempty"`
 	Qty       string `json:"qty"`
+	// Diisi GET /stock-transfers/:id — baris hanya menyimpan product_id.
+	ProductName string `json:"product_name,omitempty"`
+	UnitName    string `json:"unit_name,omitempty"`
 }
 
 type TransferResponse struct {
@@ -141,6 +144,13 @@ type TransferResponse struct {
 	BusinessDate string                 `json:"business_date"`
 	Items        []TransferItemResponse `json:"items,omitempty"`
 	CreatedAt    string                 `json:"created_at"`
+
+	// Keterangan tampilan (GET /stock-transfers & /:id).
+	FromOutletName string   `json:"from_outlet_name,omitempty"`
+	ToOutletName   string   `json:"to_outlet_name,omitempty"`
+	CreatedByName  string   `json:"created_by_name,omitempty"`
+	ItemCount      int64    `json:"item_count"`
+	ItemNames      []string `json:"item_names,omitempty"` // maks 3 nama pertama
 }
 
 // ── Recipe ─────────────────────────────────────────────────────────────────

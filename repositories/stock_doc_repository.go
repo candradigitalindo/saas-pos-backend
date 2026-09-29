@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"candra/backend-api/internal/reqctx"
 	"candra/backend-api/models"
@@ -207,6 +208,85 @@ func OpnameItemInfos(ctx context.Context, opnameID string) (map[string]OpnameIte
 		JOIN products p ON p.tenant_id = i.tenant_id AND p.id = i.product_id
 		LEFT JOIN units un ON un.tenant_id = p.tenant_id AND un.id = p.unit_id
 		WHERE i.tenant_id = ? AND i.opname_id = ?`, reqctx.TenantID(ctx), opnameID).Scan(&rows).Error
+	out := make(map[string]OpnameItemInfo, len(rows))
+	for _, r := range rows {
+		out[r.ID] = r.OpnameItemInfo
+	}
+	return out, err
+}
+
+// TransferExtra: keterangan tampilan satu transfer untuk daftar pengiriman.
+type TransferExtra struct {
+	FromOutletName string
+	ToOutletName   string
+	CreatedByName  string
+	ItemCount      int64
+	ItemNames      []string // maks 3 nama pertama
+}
+
+// TransferExtras mengambil TransferExtra untuk banyak transfer sekaligus.
+func TransferExtras(ctx context.Context, ids []string) (map[string]TransferExtra, error) {
+	out := make(map[string]TransferExtra, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	tid := reqctx.TenantID(ctx)
+	var kepala []struct {
+		ID             string
+		FromOutletName string
+		ToOutletName   string
+		CreatedByName  string
+	}
+	if err := tenantDB(ctx, nil).Raw(`
+		SELECT t.id, COALESCE(fo.name, '') AS from_outlet_name, COALESCE(tou.name, '') AS to_outlet_name,
+			COALESCE(u.name, '') AS created_by_name
+		FROM stock_transfers t
+		LEFT JOIN outlets fo ON fo.tenant_id = t.tenant_id AND fo.id = t.from_outlet_id
+		LEFT JOIN outlets tou ON tou.tenant_id = t.tenant_id AND tou.id = t.to_outlet_id
+		LEFT JOIN users u ON u.tenant_id = t.tenant_id AND u.id = t.created_by
+		WHERE t.tenant_id = ? AND t.id IN ?`, tid, ids).Scan(&kepala).Error; err != nil {
+		return nil, err
+	}
+	for _, k := range kepala {
+		out[k.ID] = TransferExtra{FromOutletName: k.FromOutletName, ToOutletName: k.ToOutletName, CreatedByName: k.CreatedByName}
+	}
+	var barang []struct {
+		TransferID string
+		ItemCount  int64
+		Names      string
+	}
+	if err := tenantDB(ctx, nil).Raw(`
+		SELECT i.transfer_id, COUNT(*) AS item_count,
+			array_to_string((array_agg(p.name ORDER BY i.id))[1:3], ?) AS names
+		FROM stock_transfer_items i
+		JOIN products p ON p.tenant_id = i.tenant_id AND p.id = i.product_id
+		WHERE i.tenant_id = ? AND i.transfer_id IN ?
+		GROUP BY i.transfer_id`, namaSep, tid, ids).Scan(&barang).Error; err != nil {
+		return nil, err
+	}
+	for _, b := range barang {
+		e := out[b.TransferID]
+		e.ItemCount = b.ItemCount
+		if b.Names != "" {
+			e.ItemNames = strings.Split(b.Names, namaSep)
+		}
+		out[b.TransferID] = e
+	}
+	return out, nil
+}
+
+// TransferItemNames: nama barang & satuan dasar per id baris transfer.
+func TransferItemNames(ctx context.Context, transferID string) (map[string]OpnameItemInfo, error) {
+	var rows []struct {
+		ID string
+		OpnameItemInfo
+	}
+	err := tenantDB(ctx, nil).Raw(`
+		SELECT i.id, p.name AS product_name, COALESCE(un.name, '') AS unit_name, p.cost_price
+		FROM stock_transfer_items i
+		JOIN products p ON p.tenant_id = i.tenant_id AND p.id = i.product_id
+		LEFT JOIN units un ON un.tenant_id = p.tenant_id AND un.id = p.unit_id
+		WHERE i.tenant_id = ? AND i.transfer_id = ?`, reqctx.TenantID(ctx), transferID).Scan(&rows).Error
 	out := make(map[string]OpnameItemInfo, len(rows))
 	for _, r := range rows {
 		out[r.ID] = r.OpnameItemInfo

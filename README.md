@@ -372,6 +372,7 @@ menyebut paket termurah yang membukanya.
 | `POST /api/v1/stock-opnames` · `/:id/items` · `/:id/post` | `stock.opname` | Hitung fisik → posting selisih |
 | `GET  /api/v1/stock-opnames?outlet_id=` · `/:id` | `stock.view` | Riwayat hitung fisik; tiap sesi membawa `created_by_name`, `item_count`, `changed_count`, `value_diff` (≈ perubahan nilai stok: Σ (dihitung − max(catatan, 0)) × harga modal sekarang). Rincian: baris membawa `product_name`, `unit_name`, `cost_price` |
 | `POST /api/v1/stock-transfers` · `/:id/send` · `/:id/receive` | `stock.transfer` | Transfer antar outlet |
+| `GET  /api/v1/stock-transfers?outlet_id=` · `/:id` | `stock.view` | Kiriman keluar MAUPUN masuk outlet itu, terbaru dulu; tiap kiriman membawa `from_outlet_name`, `to_outlet_name`, `created_by_name`, `item_count`, `item_names` (≤3). Rincian: baris membawa `product_name`, `unit_name` |
 | `GET/PUT /api/v1/products/:id/recipe` | `product.view` / `product.edit` | Resep menu F&B |
 | `GET  /api/v1/receivables` · `POST /api/v1/receivable-payments` | `receivable.manage` | Piutang & pelunasan. Setoran wajib `Idempotency-Key` |
 | `GET/POST/PUT/DELETE /api/v1/users[/:id]` | `user.manage` | CRUD user staf. `outlet_ids` membatasi cabang tempat staf boleh bekerja (tidak dikirim saat membuat = semua cabang aktif). Ganti password / nonaktifkan / hapus mencabut seluruh sesinya |

@@ -90,6 +90,9 @@ export interface ItemTransfer {
   product_id: string
   variant_id?: string
   qty: string
+  /** Diisi GET /stock-transfers/:id. */
+  product_name?: string
+  unit_name?: string
 }
 
 export interface Transfer {
@@ -103,6 +106,12 @@ export interface Transfer {
   business_date: string
   items?: ItemTransfer[]
   created_at: string
+  from_outlet_name?: string
+  to_outlet_name?: string
+  created_by_name?: string
+  item_count: number
+  /** Paling banyak tiga nama barang pertama. */
+  item_names?: string[]
 }
 
 /** Satu koreksi stok (GET /stock-adjustments) — termasuk stok awal. */
@@ -250,8 +259,9 @@ export const stokApi = {
 
   terimaTransfer: (id: string) => api.post<Transfer>(`/stock-transfers/${id}/receive`, {}),
 
-  daftarTransfer: (page = 1, limit = 20) =>
-    api.get<Halaman<Transfer>>('/stock-transfers', { query: { page, limit } }),
+  /** Kiriman keluar MAUPUN masuk toko ini, terbaru dulu. */
+  daftarTransfer: (outlet_id: string, page = 1, limit = 20) =>
+    api.get<Halaman<Transfer>>('/stock-transfers', { query: { outlet_id, page, limit } }),
 
   transfer: (id: string) => api.get<Transfer>(`/stock-transfers/${id}`),
 }

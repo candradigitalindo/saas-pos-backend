@@ -188,9 +188,19 @@ func ListTransfers(c *gin.Context) {
 		respondServiceError(c, err)
 		return
 	}
+	ids := make([]string, len(rows))
+	for i := range rows {
+		ids[i] = rows[i].ID
+	}
+	extras, err := repositories.TransferExtras(c.Request.Context(), ids)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
 	items := make([]structs.TransferResponse, len(rows))
 	for i := range rows {
 		items[i] = services.TransferToResponse(&rows[i])
+		isiTransferExtra(&items[i], extras[rows[i].ID])
 	}
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.PaginatedResponse[structs.TransferResponse]]{
 		Success: true, Message: "Daftar transfer",
@@ -209,9 +219,32 @@ func GetTransfer(c *gin.Context) {
 		notFound(c, "Transfer tidak ditemukan")
 		return
 	}
+	ctx := c.Request.Context()
+	extras, err := repositories.TransferExtras(ctx, []string{tr.ID})
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	nama, err := repositories.TransferItemNames(ctx, tr.ID)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	r := services.TransferToResponse(&tr)
+	isiTransferExtra(&r, extras[tr.ID])
+	for i := range r.Items {
+		n := nama[r.Items[i].ID]
+		r.Items[i].ProductName, r.Items[i].UnitName = n.ProductName, n.UnitName
+	}
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.TransferResponse]{
-		Success: true, Message: "Detail transfer", Data: services.TransferToResponse(&tr),
+		Success: true, Message: "Detail transfer", Data: r,
 	})
+}
+
+// isiTransferExtra menempelkan nama toko, pencatat, dan ringkasan barang.
+func isiTransferExtra(r *structs.TransferResponse, e repositories.TransferExtra) {
+	r.FromOutletName, r.ToOutletName, r.CreatedByName = e.FromOutletName, e.ToOutletName, e.CreatedByName
+	r.ItemCount, r.ItemNames = e.ItemCount, e.ItemNames
 }
 
 // ── Rekonsiliasi ──────────────────────────────────────────────────────────
