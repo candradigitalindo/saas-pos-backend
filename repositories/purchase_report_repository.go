@@ -138,3 +138,70 @@ func PurchaseReportTopProducts(ctx context.Context, outletID, from, to string, n
 		Scan(&rows).Error
 	return rows, err
 }
+
+// PurchaseLineRow: satu baris barang pada satu nota — untuk ekspor.
+type PurchaseLineRow struct {
+	BusinessDate string
+	InvoiceNo    string
+	SupplierName string
+	ProductName  string
+	VariantName  string
+	Qty          decimal.Decimal
+	UnitName     string
+	UnitCost     int64
+	LineTotal    int64
+	NotaTotal    int64
+	NotaPaid     int64
+	DueDate      string
+}
+
+// PurchaseLines: semua baris barang nota di rentang, urut tanggal lalu nota.
+func PurchaseLines(ctx context.Context, outletID, from, to string) ([]PurchaseLineRow, error) {
+	var rows []PurchaseLineRow
+	err := purchaseRange(ctx, outletID, from, to).
+		Joins("JOIN purchase_items pi ON pi.tenant_id = pu.tenant_id AND pi.purchase_id = pu.id").
+		Joins("JOIN products p ON p.tenant_id = pi.tenant_id AND p.id = pi.product_id").
+		Joins("LEFT JOIN product_variants v ON v.tenant_id = pi.tenant_id AND v.id = pi.variant_id").
+		Joins("LEFT JOIN units un ON un.tenant_id = p.tenant_id AND un.id = p.unit_id").
+		Joins("LEFT JOIN suppliers s ON s.tenant_id = pu.tenant_id AND s.id = pu.supplier_id").
+		Select(`to_char(pu.business_date, 'YYYY-MM-DD') AS business_date, COALESCE(pu.invoice_no, '') AS invoice_no,
+			COALESCE(s.name, '') AS supplier_name, p.name AS product_name, COALESCE(v.name, '') AS variant_name,
+			pi.qty, COALESCE(NULLIF(pi.unit_name, ''), un.name, '') AS unit_name, pi.unit_cost, pi.line_total,
+			pu.total AS nota_total, pu.paid_amount AS nota_paid,
+			COALESCE(to_char(pu.due_date, 'YYYY-MM-DD'), '') AS due_date`).
+		Order("pu.business_date, pu.occurred_at, pu.id, pi.id").
+		Scan(&rows).Error
+	return rows, err
+}
+
+// PurchasePaymentExportRow: satu pembayaran ke pemasok — untuk ekspor.
+type PurchasePaymentExportRow struct {
+	BusinessDate  string
+	SupplierName  string
+	InvoiceNo     string
+	NotaDate      string
+	Amount        int64
+	Source        string
+	Note          string
+	CreatedByName string
+}
+
+// PurchasePaymentsInRange: pembayaran menurut tanggal usaha pembayarannya.
+func PurchasePaymentsInRange(ctx context.Context, outletID, from, to string) ([]PurchasePaymentExportRow, error) {
+	q := tenantDB(ctx, nil).Table("purchase_payments pp").
+		Joins("JOIN purchases pu ON pu.tenant_id = pp.tenant_id AND pu.id = pp.purchase_id").
+		Joins("LEFT JOIN suppliers s ON s.tenant_id = pu.tenant_id AND s.id = pu.supplier_id").
+		Joins("LEFT JOIN users u ON u.tenant_id = pp.tenant_id AND u.id = pp.created_by").
+		Where("pp.tenant_id = ? AND pp.business_date BETWEEN ?::date AND ?::date", reqctx.TenantID(ctx), from, to)
+	if outletID != "" {
+		q = q.Where("pp.outlet_id = ?", outletID)
+	}
+	var rows []PurchasePaymentExportRow
+	err := scopeOutlet(ctx, q, "pp.outlet_id").
+		Select(`to_char(pp.business_date, 'YYYY-MM-DD') AS business_date, COALESCE(s.name, '') AS supplier_name,
+			COALESCE(pu.invoice_no, '') AS invoice_no, to_char(pu.business_date, 'YYYY-MM-DD') AS nota_date,
+			pp.amount, pp.source, COALESCE(pp.note, '') AS note, COALESCE(u.name, '') AS created_by_name`).
+		Order("pp.business_date, pp.paid_at, pp.id").
+		Scan(&rows).Error
+	return rows, err
+}

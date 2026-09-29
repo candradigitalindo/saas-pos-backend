@@ -1,6 +1,9 @@
 package tests
 
 import (
+	"encoding/csv"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -70,6 +73,41 @@ func TestLaporanBelanja(t *testing.T) {
 		t.Fatalf("per hari: %v", hari)
 	}
 
+	// Ekspor untuk pembukuan: baris barang per nota, dan pembayaran.
+	baca := func(tipe string) [][]string {
+		t.Helper()
+		code, ctype, body := rawResponse(t, "/api/v1/reports/export?type="+tipe+"&format=csv&outlet_id="+f.outletID+
+			"&from="+dari+"&to="+sampai, f.token)
+		if code != 200 || !strings.HasPrefix(ctype, "text/csv") {
+			t.Fatalf("ekspor %s: %d %q %s", tipe, code, ctype, body)
+		}
+		rows, err := csv.NewReader(strings.NewReader(body)).ReadAll()
+		if err != nil {
+			t.Fatalf("csv %s: %v", tipe, err)
+		}
+		return rows
+	}
+	nota := baca("purchases")
+	if len(nota) != 4 || nota[0][0] != "Tanggal" || nota[0][10] != "Sisa Nota" {
+		t.Fatalf("ekspor nota: %v", nota)
+	}
+	var sisaSatu string
+	for _, r := range nota[1:] {
+		if r[2] == "Grosir Satu" {
+			sisaSatu = r[10]
+		}
+	}
+	if sisaSatu != "40000" {
+		t.Fatalf("sisa nota Grosir Satu di ekspor: %q, mau 40000", sisaSatu)
+	}
+	bayar := baca("purchase_payments")
+	if len(bayar) != 5 || bayar[4][0] != "TOTAL" || bayar[4][4] != "36000" {
+		t.Fatalf("ekspor pembayaran: %v", bayar)
+	}
+	if !strings.Contains(fmt.Sprint(bayar), "Laci kasir") {
+		t.Fatalf("sumber laci tidak tertulis: %v", bayar)
+	}
+
 	// Kedua izin wajib.
 	for _, izin := range [][]string{{"report.view"}, {"stock.view"}} {
 		rid := call(t, "POST", "/api/v1/roles", f.token, map[string]any{
@@ -77,5 +115,13 @@ func TestLaporanBelanja(t *testing.T) {
 		}).mustCode(t, "peran", 201).data(t)["id"].(string)
 		tok := staffToken(t, f.tenantFixture, rid, "lapbelanja_"+izin[0][:4])
 		call(t, "GET", "/api/v1/reports/purchases?from="+dari+"&to="+sampai, tok, nil).mustCode(t, "hanya "+izin[0], 403)
+	}
+	// Izin ekspor saja tidak cukup untuk berkas belanja.
+	rid := call(t, "POST", "/api/v1/roles", f.token, map[string]any{
+		"name": "Uji ekspor saja", "permission_codes": []string{"report.export"},
+	}).mustCode(t, "peran ekspor", 201).data(t)["id"].(string)
+	tok := staffToken(t, f.tenantFixture, rid, "lapbelanja_ekspor")
+	if code, _, _ := rawResponse(t, "/api/v1/reports/export?type=purchases&format=csv&from="+dari+"&to="+sampai, tok); code != 403 {
+		t.Fatalf("ekspor belanja tanpa stock.view: %d, mau 403", code)
 	}
 }

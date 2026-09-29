@@ -83,7 +83,8 @@ export const laporanApi = {
    * api-client — tetapi tetap memakai token dari penyimpanan yang sama.
    */
   async unduhCSV(
-    type: 'sales' | 'profit' | 'dashboard',
+    /** purchases = baris barang per nota belanja; purchase_payments = pembayaran ke pemasok. */
+    type: 'sales' | 'profit' | 'dashboard' | 'purchases' | 'purchase_payments',
     q: { from?: string; to?: string; group_by?: string; outlet_id?: string; date?: string },
   ): Promise<void> {
     const p = new URLSearchParams({ type, format: 'csv' })

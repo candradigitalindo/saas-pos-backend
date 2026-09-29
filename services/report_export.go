@@ -8,6 +8,8 @@ import (
 	"strconv"
 
 	"candra/backend-api/helpers"
+	"candra/backend-api/internal/reqctx"
+	"candra/backend-api/repositories"
 	"candra/backend-api/structs"
 )
 
@@ -22,7 +24,8 @@ func i64(v int64) string { return strconv.FormatInt(v, 10) }
 // ExportReportCSV menjalankan laporan yang diminta lalu men-serialisasi hasilnya
 // ke CSV. Mengembalikan nama berkas yang disarankan + isi berkas.
 //
-// reportType: "sales" | "profit" | "dashboard".
+// reportType: "sales" | "profit" | "dashboard" | "purchases" (baris barang
+// per nota belanja) | "purchase_payments" (pembayaran ke pemasok).
 func ExportReportCSV(ctx context.Context, reportType, outletID, from, to, groupBy, date string) (string, []byte, error) {
 	var buf bytes.Buffer
 	w := csv.NewWriter(&buf)
@@ -101,8 +104,56 @@ func ExportReportCSV(ctx context.Context, reportType, outletID, from, to, groupB
 			row("channel:"+c.ChannelID, c.SummaryTotals)
 		}
 
+	case "purchases", "purchase_payments":
+		// Nilai pembelian: selain report.export (rute), butuh juga stock.view —
+		// sama dengan GET /reports/purchases.
+		if !reqctx.HasPermission(ctx, "stock.view") {
+			return "", nil, fmt.Errorf("%w: ekspor belanja butuh izin melihat stok", helpers.ErrForbidden)
+		}
+		f, t, err := parseRange(from, to)
+		if err != nil {
+			return "", nil, err
+		}
+		dari, sampai := f.Format(dateLayout), t.Format(dateLayout)
+		// Judul kolom berbahasa Indonesia: berkas ini dibuka pemilik & akuntan
+		// di spreadsheet, bukan dibaca program.
+		if reportType == "purchases" {
+			rows, err := repositories.PurchaseLines(ctx, outletID, dari, sampai)
+			if err != nil {
+				return "", nil, err
+			}
+			filename = fmt.Sprintf("laporan-belanja-%s_%s.csv", dari, sampai)
+			_ = w.Write([]string{"Tanggal", "No. Nota", "Pemasok", "Barang", "Jumlah", "Satuan", "Harga Satuan",
+				"Subtotal", "Total Nota", "Dibayar Nota", "Sisa Nota", "Jatuh Tempo"})
+			for _, r := range rows {
+				nama := r.ProductName
+				if r.VariantName != "" {
+					nama += " (" + r.VariantName + ")"
+				}
+				_ = w.Write([]string{r.BusinessDate, r.InvoiceNo, r.SupplierName, nama, r.Qty.String(), r.UnitName,
+					i64(r.UnitCost), i64(r.LineTotal), i64(r.NotaTotal), i64(r.NotaPaid), i64(r.NotaTotal - r.NotaPaid), r.DueDate})
+			}
+		} else {
+			rows, err := repositories.PurchasePaymentsInRange(ctx, outletID, dari, sampai)
+			if err != nil {
+				return "", nil, err
+			}
+			filename = fmt.Sprintf("pembayaran-pemasok-%s_%s.csv", dari, sampai)
+			_ = w.Write([]string{"Tanggal Bayar", "Pemasok", "No. Nota", "Tanggal Nota", "Jumlah", "Sumber Uang", "Catatan", "Dicatat Oleh"})
+			var total int64
+			for _, r := range rows {
+				sumber := "Uang lain"
+				if r.Source == SumberLaci {
+					sumber = "Laci kasir"
+				}
+				_ = w.Write([]string{r.BusinessDate, r.SupplierName, r.InvoiceNo, r.NotaDate, i64(r.Amount), sumber, r.Note, r.CreatedByName})
+				total += r.Amount
+			}
+			_ = w.Write([]string{"TOTAL", "", "", "", i64(total), "", "", ""})
+		}
+
 	default:
-		return "", nil, fmt.Errorf("%w: type harus salah satu dari sales, profit, dashboard", helpers.ErrValidation)
+		return "", nil, fmt.Errorf("%w: type harus salah satu dari sales, profit, dashboard, purchases, purchase_payments", helpers.ErrValidation)
 	}
 
 	w.Flush()

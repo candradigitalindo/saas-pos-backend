@@ -1,8 +1,10 @@
 import { lazy, Suspense, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronRight, CloudOff, HandCoins, PackageOpen, ShoppingBasket, Wallet } from 'lucide-react'
+import { ChevronRight, CloudOff, Download, HandCoins, PackageOpen, ShoppingBasket, Wallet } from 'lucide-react'
 import { Kartu } from '@/bersama/ui/kartu'
+import { Tombol } from '@/bersama/ui/tombol'
+import { useToast } from '@/bersama/komponen/toast'
 import { SegmenPilihan } from '@/bersama/ui/segmen'
 import { KartuAngka } from '@/bersama/komponen/kartu-angka'
 import { KeadaanGagal, KeadaanKosong } from '@/bersama/komponen/keadaan-kosong'
@@ -44,6 +46,18 @@ const GrafikHarian = lazy(async () => ({
 export function HalamanLaporanBelanja() {
   const { tokoAktif, boleh } = useSesi()
   const online = useOnline()
+  const toast = useToast()
+  const [mengunduh, setMengunduh] = useState<string | null>(null)
+  const unduh = async (tipe: 'purchases' | 'purchase_payments') => {
+    setMengunduh(tipe)
+    try {
+      await laporanApi.unduhCSV(tipe, { from: dari, to: sampai, outlet_id: tokoAktif })
+    } catch (e) {
+      toast.gagal(e instanceof Error ? e.message : 'Gagal mengunduh.')
+    } finally {
+      setMengunduh(null)
+    }
+  }
   const [rentang, setRentang] = useState<Rentang>('30-hari')
   const [dariPilih, setDariPilih] = useState(() => tanggalISO())
   const [sampaiPilih, setSampaiPilih] = useState(() => tanggalISO())
@@ -236,6 +250,21 @@ export function HalamanLaporanBelanja() {
               </Link>
             </Kartu>
           </div>
+
+          {/* Untuk pembukuan / akuntan: dua berkas, satu per pertanyaan —
+              "barang apa dibeli berapa" dan "uang apa keluar kapan". */}
+          {boleh(IZIN.reportExport) && (
+            <div className="flex flex-wrap gap-2">
+              <Tombol jenis="kedua" memuat={mengunduh === 'purchases'} onClick={() => unduh('purchases')}>
+                <Download className="h-5 w-5" aria-hidden />
+                Unduh nota belanja (Excel)
+              </Tombol>
+              <Tombol jenis="kedua" memuat={mengunduh === 'purchase_payments'} onClick={() => unduh('purchase_payments')}>
+                <Download className="h-5 w-5" aria-hidden />
+                Unduh pembayaran (Excel)
+              </Tombol>
+            </div>
+          )}
         </>
       )}
     </div>
