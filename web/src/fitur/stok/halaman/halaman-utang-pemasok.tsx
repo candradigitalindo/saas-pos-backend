@@ -86,12 +86,19 @@ export function HalamanUtangPemasok() {
                 {r.count} nota · {r.suppliers.length} pemasok
               </p>
             </div>
-            {r.overdue_count > 0 && (
-              <p className="flex items-center gap-1.5 rounded-full bg-bahaya-teks/10 px-3 py-1.5 text-label font-semibold text-bahaya-teks">
-                <TriangleAlert className="h-4 w-4" aria-hidden />
-                {r.overdue_count} lewat jatuh tempo
-              </p>
-            )}
+            <div className="flex flex-wrap gap-2">
+              {r.overdue_count > 0 && (
+                <p className="flex items-center gap-1.5 rounded-full bg-bahaya-teks/10 px-3 py-1.5 text-label font-semibold text-bahaya-teks">
+                  <TriangleAlert className="h-4 w-4" aria-hidden />
+                  {r.overdue_count} lewat · {formatRupiah(r.overdue_amount)}
+                </p>
+              )}
+              {r.due_soon_count > 0 && (
+                <p className="rounded-full bg-permukaan-2 px-3 py-1.5 text-label font-semibold text-jingga-700">
+                  {r.due_soon_count} jatuh tempo ≤ {r.due_soon_days} hari · {formatRupiah(r.due_soon_amount)}
+                </p>
+              )}
+            </div>
           </Kartu>
 
           <ul className="flex flex-col gap-3">

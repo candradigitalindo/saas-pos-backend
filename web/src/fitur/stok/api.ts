@@ -78,6 +78,11 @@ export interface RingkasanUtang {
   outstanding: number
   count: number
   overdue_count: number
+  overdue_amount: number
+  /** Jatuh tempo hari ini s.d. due_soon_days hari lagi (sama dengan pengingat WA). */
+  due_soon_count: number
+  due_soon_amount: number
+  due_soon_days: number
   /** Tanggal usaha outlet hari ini, YYYY-MM-DD. */
   today: string
   suppliers: {

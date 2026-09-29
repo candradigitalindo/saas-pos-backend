@@ -188,12 +188,15 @@ func PayablesSummary(c *gin.Context) {
 		}
 	}
 	hariIni = time.Date(hariIni.Year(), hariIni.Month(), hariIni.Day(), 0, 0, 0, 0, time.UTC)
-	rows, err := repositories.PayablesSummary(ctx, outletID, hariIni)
+	segera := services.PayableDueSoonDays()
+	rows, err := repositories.PayablesSummary(ctx, outletID, hariIni, segera)
 	if err != nil {
 		respondServiceError(c, err)
 		return
 	}
-	out := structs.PayablesSummaryResponse{Today: hariIni.Format("2006-01-02"), Suppliers: []structs.PayablesSupplierResponse{}}
+	out := structs.PayablesSummaryResponse{
+		Today: hariIni.Format("2006-01-02"), DueSoonDays: segera, Suppliers: []structs.PayablesSupplierResponse{},
+	}
 	for _, r := range rows {
 		s := structs.PayablesSupplierResponse{
 			SupplierID: r.SupplierID, SupplierName: r.SupplierName, Outstanding: r.Outstanding,
@@ -205,6 +208,9 @@ func PayablesSummary(c *gin.Context) {
 		out.Outstanding += r.Outstanding
 		out.Count += r.Count
 		out.OverdueCount += r.OverdueCount
+		out.OverdueAmount += r.OverdueAmount
+		out.DueSoonCount += r.DueSoonCount
+		out.DueSoonAmount += r.DueSoonAmount
 		out.Suppliers = append(out.Suppliers, s)
 	}
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.PayablesSummaryResponse]{

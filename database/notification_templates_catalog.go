@@ -12,6 +12,13 @@ type notifTemplateSeed struct {
 
 var notifTemplateCatalog = []notifTemplateSeed{
 	{
+		// Pengingat utang pemasok (cmd/payable-reminders): {{ringkasan}}
+		// disusun services.ringkasanUtang.
+		Code: "payable.due_digest", Channel: "whatsapp", Subject: "",
+		Body: "Halo {{nama_usaha}},\n\nPengingat utang ke pemasok:\n{{ringkasan}}\n\n" +
+			"Bayar lewat menu Utang Pemasok di aplikasi — sebagian atau sekaligus.",
+	},
+	{
 		Code: "invoice.issued", Channel: "whatsapp", Subject: "",
 		Body: "Halo {{nama_usaha}} 👋\n\nTagihan langganan {{nomor}} sudah terbit.\n" +
 			"Jumlah: {{total}}\nJatuh tempo: {{jatuh_tempo}}\n\n" +

@@ -217,9 +217,15 @@ type PayablesSupplierResponse struct {
 
 // PayablesSummaryResponse: GET /payables/summary.
 type PayablesSummaryResponse struct {
-	Outstanding  int64                      `json:"outstanding"`
-	Count        int64                      `json:"count"`
-	OverdueCount int64                      `json:"overdue_count"`
-	Today        string                     `json:"today"` // tanggal usaha outlet
-	Suppliers    []PayablesSupplierResponse `json:"suppliers"`
+	Outstanding  int64 `json:"outstanding"`
+	Count        int64 `json:"count"`
+	OverdueCount int64 `json:"overdue_count"`
+	// Nominal yang lewat jatuh tempo, dan yang jatuh tempo hari ini s.d.
+	// due_soon_days hari lagi (PAYABLE_DUE_SOON_DAYS — sama dengan pengingat WA).
+	OverdueAmount int64                      `json:"overdue_amount"`
+	DueSoonCount  int64                      `json:"due_soon_count"`
+	DueSoonAmount int64                      `json:"due_soon_amount"`
+	DueSoonDays   int                        `json:"due_soon_days"`
+	Today         string                     `json:"today"` // tanggal usaha outlet
+	Suppliers     []PayablesSupplierResponse `json:"suppliers"`
 }

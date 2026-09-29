@@ -211,6 +211,7 @@ koneksi DB; `GET /health` untuk liveness.
 |---|---|
 | harian, awal bulan | `/usr/local/bin/recognize-revenue` |
 | harian (mis. 07.00 WIB) | `/usr/local/bin/subscription-renewals` |
+| harian, pagi (mis. 07.00 WIB) | `/usr/local/bin/payable-reminders` — pengingat utang pemasok: satu ringkasan WhatsApp ke pemilik saat ada nota yang BARU lewat / segera jatuh tempo (`PAYABLE_DUE_SOON_DAYS`, bawaan 3; migrasi 000048) |
 | tiap ~30 detik (atau daemon `-loop`) | `/usr/local/bin/process-outbox` |
 | tiap ~10 detik (atau daemon `-loop`) | `/usr/local/bin/process-channel-events` |
 | bulanan, tanggal 1 | `/usr/local/bin/partner-commissions -approve -payout` |
@@ -371,7 +372,7 @@ menyebut paket termurah yang membukanya.
 | `GET  /api/v1/purchases?outlet_id=&unpaid=&supplier_id=` · `/:id` | `stock.view` | Riwayat barang masuk, terbaru dulu; tiap nota membawa `supplier_name`, `created_by_name`, `item_count`, `item_names` (≤3 nama pertama), `outstanding` (sisa utang), `due_date`. `unpaid=true` = daftar utang (jatuh tempo terdekat dulu); `supplier_id=-` = tanpa pemasok. Rincian: baris membawa `product_name`, `variant_name`, `base_unit_name`, plus `payments` |
 | `POST /api/v1/purchases` — `paid_amount`, `payment_source`, `due_date` | `stock.adjust` | Utang pemasok (migrasi 000047): `paid_amount` ≤ total (sisanya utang), `payment_source` = `other` (bawaan; dompet/rekening) atau `drawer` (laci kasir → uang keluar shift yang sedang buka; butuh juga `cash.movement`; ditolak bila kasir belum dibuka), `due_date` YYYY-MM-DD |
 | `POST /api/v1/purchases/:id/payments` (header `Idempotency-Key`) | `stock.adjust` (+ `cash.movement` bila `drawer`) | Bayar utang satu pembelian `{amount, source, note?}`; baris pembelian dikunci; melebihi sisa → 422, sudah lunas → 409 |
-| `GET  /api/v1/payables/summary?outlet_id=` | `stock.view` | Utang pemasok: `outstanding`, `count`, `overdue_count`, `today` (tanggal usaha), `suppliers[]` (per pemasok, terbesar dulu: sisa, jumlah nota, lewat jatuh tempo, jatuh tempo terdekat) |
+| `GET  /api/v1/payables/summary?outlet_id=` | `stock.view` | Utang pemasok: `outstanding`, `count`, `overdue_count`/`overdue_amount`, `due_soon_count`/`due_soon_amount` (jatuh tempo hari ini s.d. `due_soon_days` = `PAYABLE_DUE_SOON_DAYS` hari — sama dengan pengingat WA), `today` (tanggal usaha), `suppliers[]` (per pemasok, terbesar dulu: sisa, jumlah nota, lewat jatuh tempo, jatuh tempo terdekat) |
 | `POST /api/v1/stock-opnames` · `/:id/items` · `/:id/post` | `stock.opname` | Hitung fisik → posting selisih |
 | `GET  /api/v1/stock-opnames?outlet_id=` · `/:id` | `stock.view` | Riwayat hitung fisik; tiap sesi membawa `created_by_name`, `item_count`, `changed_count`, `value_diff` (≈ perubahan nilai stok: Σ (dihitung − max(catatan, 0)) × harga modal sekarang). Rincian: baris membawa `product_name`, `unit_name`, `cost_price` |
 | `POST /api/v1/stock-transfers` · `/:id/send` · `/:id/receive` | `stock.transfer` | Transfer antar outlet |

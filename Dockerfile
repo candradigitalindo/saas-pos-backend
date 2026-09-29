@@ -20,6 +20,7 @@ RUN go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/pos-s
     go build -trimpath -ldflags="-s -w" -o /out/migrate               ./cmd/migrate && \
     go build -trimpath -ldflags="-s -w" -o /out/recognize-revenue     ./cmd/recognize-revenue && \
     go build -trimpath -ldflags="-s -w" -o /out/subscription-renewals ./cmd/subscription-renewals && \
+    go build -trimpath -ldflags="-s -w" -o /out/payable-reminders     ./cmd/payable-reminders && \
     go build -trimpath -ldflags="-s -w" -o /out/process-channel-events ./cmd/process-channel-events && \
     go build -trimpath -ldflags="-s -w" -o /out/partner-commissions    ./cmd/partner-commissions && \
     go build -trimpath -ldflags="-s -w" -o /out/partner-admin          ./cmd/partner-admin && \

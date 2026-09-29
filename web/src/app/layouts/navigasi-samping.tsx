@@ -29,6 +29,7 @@ import { IZIN } from '@/lib/izin'
 import { inisialNama } from '@/bersama/util/inisial'
 import { cn } from '@/bersama/util/cn'
 import { stokApi } from '@/fitur/stok/api'
+import { useRingkasanUtang } from '@/fitur/stok/komponen/peringatan-utang'
 
 /** Kunci localStorage: judul kelompok yang sedang dilipat. */
 const KUNCI_TERLIPAT = 'navigasi.terlipat'
@@ -329,9 +330,12 @@ function TautanSamping({ item, aktif, ringkas }: { item: ItemMenu; aktif: boolea
 }
 
 /**
- * Jumlah yang perlu perhatian untuk satu menu. Saat ini hanya Stok: barang
- * hampir habis + habis + minus di toko aktif (GET /stocks/summary — dihitung
- * server atas SELURUH barang). Menu lain 0.
+ * Jumlah yang perlu perhatian untuk satu menu (dihitung server atas SELURUH
+ * data toko aktif):
+ * - Stok: barang hampir habis + habis + minus (GET /stocks/summary);
+ * - Utang Pemasok: nota lewat jatuh tempo + segera jatuh tempo
+ *   (GET /payables/summary — batas hari sama dengan pengingat WhatsApp).
+ * Menu lain 0.
  */
 function useLencana(ke: string): number {
   const { tokoAktif, boleh } = useSesi()
@@ -342,6 +346,8 @@ function useLencana(ke: string): number {
     enabled: aktif,
     staleTime: 60_000,
   })
+  const utang = useRingkasanUtang(ke === '/stok/utang')
+  if (ke === '/stok/utang') return utang.data ? utang.data.overdue_count + utang.data.due_soon_count : 0
   if (!aktif || !q.data) return 0
   return q.data.low + q.data.out + q.data.negative
 }
