@@ -211,6 +211,7 @@ koneksi DB; `GET /health` untuk liveness.
 |---|---|
 | harian, awal bulan | `/usr/local/bin/recognize-revenue` |
 | harian (mis. 07.00 WIB) | `/usr/local/bin/subscription-renewals` |
+| harian, pagi (mis. 06.30 WIB, sebelum belanja) | `/usr/local/bin/stock-reminders` — pengingat stok menipis: satu ringkasan WhatsApp ke pemilik saat ada barang yang BARU habis / di bawah batas minimum (per toko, dengan pemasok utamanya); barang yang pulih diingatkan lagi bila menipis lagi (migrasi 000051) |
 | harian, pagi (mis. 07.00 WIB) | `/usr/local/bin/payable-reminders` — pengingat utang pemasok: satu ringkasan WhatsApp ke pemilik saat ada nota yang BARU lewat / segera jatuh tempo (`PAYABLE_DUE_SOON_DAYS`, bawaan 3; migrasi 000048) |
 | tiap ~30 detik (atau daemon `-loop`) | `/usr/local/bin/process-outbox` |
 | tiap ~10 detik (atau daemon `-loop`) | `/usr/local/bin/process-channel-events` |

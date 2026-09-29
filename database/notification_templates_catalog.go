@@ -12,6 +12,13 @@ type notifTemplateSeed struct {
 
 var notifTemplateCatalog = []notifTemplateSeed{
 	{
+		// Pengingat stok menipis (cmd/stock-reminders): {{ringkasan}} disusun
+		// services.ringkasanStok.
+		Code: "stock.low_digest", Channel: "whatsapp", Subject: "",
+		Body: "Halo {{nama_usaha}},\n\nStok yang perlu dibeli:\n{{ringkasan}}\n\n" +
+			"Catat barang masuk atau pesan ke pemasok lewat menu Pemasok di aplikasi.",
+	},
+	{
 		// Pengingat utang pemasok (cmd/payable-reminders): {{ringkasan}}
 		// disusun services.ringkasanUtang.
 		Code: "payable.due_digest", Channel: "whatsapp", Subject: "",
