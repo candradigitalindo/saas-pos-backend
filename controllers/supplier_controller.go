@@ -163,8 +163,10 @@ func SupplierProducts(c *gin.Context) {
 		out[i] = structs.SupplierProductResponse{
 			ProductID: r.ProductID, ProductName: r.ProductName, BaseUnitName: r.BaseUnitName,
 			UnitCost: r.UnitCost, UnitName: r.UnitName, UnitConversion: r.UnitConversion.String(),
-			ProductUnitID: deref(r.ProductUnitID), LastBoughtAt: r.LastBoughtAt.UTC().Format(timeLayout),
-			Times: r.Times, Qty90d: r.Qty90d.String(),
+			ProductUnitID: deref(r.ProductUnitID), Times: r.Times, Qty90d: r.Qty90d.String(), Main: r.Utama,
+		}
+		if r.LastBoughtAt != nil {
+			out[i].LastBoughtAt = r.LastBoughtAt.UTC().Format(timeLayout)
 		}
 	}
 	c.JSON(http.StatusOK, structs.SuccessResponse[[]structs.SupplierProductResponse]{

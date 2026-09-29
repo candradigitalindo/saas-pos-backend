@@ -149,6 +149,15 @@ func CreateProduct(c *gin.Context) {
 	if handled {
 		return
 	}
+	var pemasok *models.Supplier
+	if req.SupplierID != "" {
+		var s models.Supplier
+		if err := repositories.FindSupplierInTenant(c.Request.Context(), nil, req.SupplierID, &s); err != nil {
+			badRequest(c, "supplier_id", "Pemasok tidak ditemukan")
+			return
+		}
+		pemasok = &s
+	}
 	if alamatUnggahanKita(req.ImageURL) {
 		badRequest(c, "image_url", pesanFotoLewatUnggah)
 		return
@@ -163,6 +172,7 @@ func CreateProduct(c *gin.Context) {
 	row := models.Product{
 		TenantID:    reqctx.TenantID(ctx),
 		CategoryID:  nilIfEmpty(req.CategoryID),
+		SupplierID:  nilIfEmpty(req.SupplierID),
 		UnitID:      req.UnitID,
 		Name:        req.Name,
 		SKU:         nilIfEmpty(req.SKU),
@@ -210,6 +220,7 @@ func CreateProduct(c *gin.Context) {
 
 	row.Unit = &unit
 	row.Category = cat
+	row.Supplier = pemasok
 	res := productToResponse(row)
 	res.WholesalePrices = wholesaleToResponse(grosir)
 	for _, s := range req.SpecialPrices {
@@ -266,6 +277,20 @@ func UpdateProduct(c *gin.Context) {
 			}
 			row.CategoryID = &cat.ID
 			row.Category = &cat
+		}
+	}
+	if req.SupplierID != nil {
+		if *req.SupplierID == "" {
+			row.SupplierID = nil
+			row.Supplier = nil
+		} else {
+			var sup models.Supplier
+			if err := repositories.FindSupplierInTenant(ctx, nil, *req.SupplierID, &sup); err != nil {
+				badRequest(c, "supplier_id", "Pemasok tidak ditemukan")
+				return
+			}
+			row.SupplierID = &sup.ID
+			row.Supplier = &sup
 		}
 	}
 	if req.SKU != nil {

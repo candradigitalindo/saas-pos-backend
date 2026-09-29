@@ -180,9 +180,11 @@ type SupplierProduct struct {
 	UnitName       string          // satuan beli terakhir
 	UnitConversion decimal.Decimal // isi satuan beli terakhir dalam satuan dasar
 	ProductUnitID  *string
-	LastBoughtAt   time.Time
+	LastBoughtAt   *time.Time      // nil = belum pernah dibeli dari pemasok ini
 	Times          int64           // berapa nota memuat barang ini
 	Qty90d         decimal.Decimal `gorm:"column:qty_90d"` // satuan dasar, 90 hari terakhir
+	// Utama: pemasok ini pemasok utama barangnya (products.supplier_id, 000050).
+	Utama bool
 }
 
 // SupplierProducts: barang yang biasa dibeli dari satu pemasok, terakhir
@@ -216,14 +218,25 @@ func SupplierProducts(ctx context.Context, supplierID, outletID string) ([]Suppl
 		), terakhir AS (
 			SELECT DISTINCT ON (product_id) * FROM baris ORDER BY product_id, occurred_at DESC
 		)
-		SELECT t.product_id, p.name AS product_name, COALESCE(un.name, '') AS base_unit_name,
-			t.unit_cost, t.unit_name, t.unit_conversion, t.product_unit_id,
-			t.occurred_at AS last_bought_at, a.times, a.qty_90d
-		FROM terakhir t
-		JOIN agg a ON a.product_id = t.product_id
-		JOIN products p ON p.tenant_id = ? AND p.id = t.product_id AND p.deleted_at IS NULL
-		LEFT JOIN units un ON un.tenant_id = p.tenant_id AND un.id = p.unit_id
-		ORDER BY t.occurred_at DESC
-		LIMIT 50`, append(args, reqctx.TenantID(ctx))...).Scan(&rows).Error
+		SELECT * FROM (
+			SELECT t.product_id, p.name AS product_name, COALESCE(un.name, '') AS base_unit_name,
+				t.unit_cost, t.unit_name, t.unit_conversion, t.product_unit_id,
+				t.occurred_at AS last_bought_at, a.times, a.qty_90d, COALESCE(p.supplier_id = ?, false) AS utama
+			FROM terakhir t
+			JOIN agg a ON a.product_id = t.product_id
+			JOIN products p ON p.tenant_id = ? AND p.id = t.product_id AND p.deleted_at IS NULL
+			LEFT JOIN units un ON un.tenant_id = p.tenant_id AND un.id = p.unit_id
+			UNION ALL
+			-- Pemasok utamanya pemasok ini, tapi belum pernah dibeli darinya:
+			-- harga terakhir = harga modal, satuan beli = satuan dasar.
+			SELECT p.id, p.name, COALESCE(un.name, ''), p.cost_price, COALESCE(un.name, ''), 1, NULL,
+				NULL, 0, 0, true
+			FROM products p
+			LEFT JOIN units un ON un.tenant_id = p.tenant_id AND un.id = p.unit_id
+			WHERE p.tenant_id = ? AND p.supplier_id = ? AND p.deleted_at IS NULL
+				AND p.id NOT IN (SELECT product_id FROM baris)
+		) x
+		ORDER BY last_bought_at DESC NULLS LAST, product_name
+		LIMIT 50`, append(args, supplierID, reqctx.TenantID(ctx), reqctx.TenantID(ctx), supplierID)...).Scan(&rows).Error
 	return rows, err
 }

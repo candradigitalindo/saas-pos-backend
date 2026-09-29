@@ -15,6 +15,9 @@ export interface Produk {
   name: string
   category_id?: string
   category_name?: string
+  /** Pemasok utama (000050). */
+  supplier_id?: string
+  supplier_name?: string
   unit_id: string
   unit_name?: string
   sku?: string
@@ -146,6 +149,9 @@ export interface SaldoStok {
   image_url?: string
   category_id?: string | null
   category_name?: string
+  /** Pemasok utama barang. */
+  supplier_id?: string | null
+  supplier_name?: string
   cost_price?: number
   /** max(qty, 0) × harga modal, rupiah */
   stock_value?: number

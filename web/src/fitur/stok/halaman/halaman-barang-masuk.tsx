@@ -261,6 +261,7 @@ export function HalamanBarangMasuk() {
 
         <SaranBelanja
           sudah={new Set(ids)}
+          pemasokId={pemasokId || undefined}
           terlipat={baris.length > 0 && !pakaiSaran}
           bisaDilipat={baris.length > 0}
           onTambah={(d) => {

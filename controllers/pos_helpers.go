@@ -80,6 +80,8 @@ func stockRowToResponse(s repositories.StockRow) structs.StockResponse {
 		ImageURL:     s.ImageURL,
 		CategoryID:   s.CategoryID,
 		CategoryName: s.CategoryName,
+		SupplierID:   s.SupplierID,
+		SupplierName: s.SupplierName,
 		CostPrice:    s.CostPrice,
 		StockValue:   s.StockValue,
 		Sold30d:      s.Sold30d.String(),

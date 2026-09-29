@@ -36,7 +36,10 @@ export function SaranBelanja({
   onTambah,
   terlipat: terlipatAwal = false,
   bisaDilipat = false,
+  pemasokId,
 }: {
+  /** Pemasok yang dipilih di formulir: barang yang pemasok utamanya dia didahulukan. */
+  pemasokId?: string
   /** product_id yang sudah ada di formulir. */
   sudah: Set<string>
   onTambah: (daftar: { saldo: SaldoStok; qty: number }[]) => void
@@ -59,8 +62,12 @@ export function SaranBelanja({
   const warna = petaWarnaKategori(kat.data?.data ?? [])
 
   if (q.isLoading) return <Kerangka className="h-40 w-full rounded-kartu" />
-  const daftar = q.data?.data ?? []
-  if (daftar.length === 0) return null
+  const semuaSaran = q.data?.data ?? []
+  if (semuaSaran.length === 0) return null
+  // Barang dari pemasok yang dipilih di formulir naik ke atas.
+  const daftar = pemasokId
+    ? [...semuaSaran].sort((a, b) => Number(b.supplier_id === pemasokId) - Number(a.supplier_id === pemasokId))
+    : semuaSaran
 
   const belum = daftar.filter((s) => !sudah.has(s.product_id))
   const tampil = semua ? daftar : daftar.slice(0, RINGKAS)
@@ -136,6 +143,16 @@ export function SaranBelanja({
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium text-teks-utama">{s.product_name}</span>
                   <Alasan s={s} />
+                  {s.supplier_name && (
+                    <span
+                      className={cn(
+                        'block truncate text-keterangan',
+                        pemasokId && s.supplier_id === pemasokId ? 'font-semibold text-utama' : 'text-teks-redup',
+                      )}
+                    >
+                      {s.supplier_name}
+                    </span>
+                  )}
                 </span>
                 {ada ? (
                   <span className="flex shrink-0 items-center gap-1 text-keterangan font-medium text-utama">

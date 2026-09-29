@@ -157,6 +157,7 @@ func productToResponse(p models.Product) structs.ProductResponse {
 		ID:          p.ID,
 		Name:        p.Name,
 		CategoryID:  deref(p.CategoryID),
+		SupplierID:  deref(p.SupplierID),
 		UnitID:      p.UnitID,
 		SKU:         deref(p.SKU),
 		Barcode:     deref(p.Barcode),
@@ -175,6 +176,9 @@ func productToResponse(p models.Product) structs.ProductResponse {
 	}
 	if p.Category != nil {
 		r.CategoryName = p.Category.Name
+	}
+	if p.Supplier != nil {
+		r.SupplierName = p.Supplier.Name
 	}
 	return r
 }

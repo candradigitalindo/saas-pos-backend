@@ -23,11 +23,14 @@ export interface BarangPemasok {
   /** Isi satuan beli terakhir, dalam satuan dasar ("1" = satuan dasar). */
   unit_conversion: string
   product_unit_id?: string
-  last_bought_at: string
+  /** Kosong = belum pernah dibeli dari pemasok ini (muncul karena pemasok utamanya). */
+  last_bought_at?: string
   /** Berapa nota memuat barang ini. */
   times: number
   /** Satuan dasar, 90 hari terakhir. */
   qty_90d: string
+  /** Pemasok ini pemasok utama barangnya. */
+  main: boolean
 }
 
 export interface InputPemasok {

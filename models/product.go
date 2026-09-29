@@ -19,6 +19,8 @@ type Product struct {
 	ID         string  `json:"id" gorm:"primaryKey;type:char(26)"`
 	TenantID   string  `json:"tenant_id" gorm:"type:char(26);not null;index"`
 	CategoryID *string `json:"category_id" gorm:"type:char(26)"`
+	// SupplierID: pemasok utama (000050) — dipakai mengelompokkan saran belanja.
+	SupplierID *string `json:"supplier_id" gorm:"type:char(26)"`
 	UnitID     string  `json:"unit_id" gorm:"type:char(26);not null"`
 
 	Name    string  `json:"name" gorm:"not null"`
@@ -37,6 +39,7 @@ type Product struct {
 	// Diisi lewat Joins pada query list/detail; kosong pada operasi tulis.
 	Unit     *Unit     `json:"unit,omitempty" gorm:"foreignKey:UnitID;references:ID"`
 	Category *Category `json:"category,omitempty" gorm:"foreignKey:CategoryID;references:ID"`
+	Supplier *Supplier `json:"supplier,omitempty" gorm:"foreignKey:SupplierID;references:ID"`
 
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`

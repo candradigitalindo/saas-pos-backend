@@ -5,6 +5,8 @@ export interface InputProduk {
   name: string
   unit_id: string
   category_id?: string
+  /** Pemasok utama; "" saat mengubah = dihapus. */
+  supplier_id?: string
   sku?: string
   barcode?: string
   sell_price?: number

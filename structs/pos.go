@@ -187,6 +187,8 @@ type StockResponse struct {
 	ImageURL     string  `json:"image_url,omitempty"`
 	CategoryID   *string `json:"category_id"`
 	CategoryName string  `json:"category_name,omitempty"`
+	SupplierID   *string `json:"supplier_id"` // pemasok utama barang
+	SupplierName string  `json:"supplier_name,omitempty"`
 	CostPrice    int64   `json:"cost_price"`
 	StockValue   int64   `json:"stock_value"`  // max(qty,0) × harga modal
 	Sold30d      string  `json:"sold_30d"`     // keluar bersih 30 hari terakhir

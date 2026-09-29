@@ -1,7 +1,7 @@
 import { useDeferredValue, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { MessageCircle, Plus, Search, Truck } from 'lucide-react'
+import { ChevronRight, MessageCircle, Plus, Search, ShoppingBasket, Truck } from 'lucide-react'
 import { Tombol } from '@/bersama/ui/tombol'
 import { KeadaanGagal, KeadaanKosong } from '@/bersama/komponen/keadaan-kosong'
 import { KerangkaBaris } from '@/bersama/komponen/kerangka'
@@ -13,8 +13,10 @@ import { formatLaluHari } from '@/bersama/util/tanggal'
 import { inisialNama } from '@/bersama/util/inisial'
 import { kelasAvatar } from '@/bersama/util/warna-kategori'
 import { cn } from '@/bersama/util/cn'
-import type { Pemasok } from '@/bersama/tipe/katalog'
+import type { Pemasok, SaldoStok } from '@/bersama/tipe/katalog'
 import { nomorWA } from '@/fitur/kasir/struk-wa'
+import { stokApi } from '@/fitur/stok/api'
+import { Kartu } from '@/bersama/ui/kartu'
 import { pemasokApi, type StatPemasok } from '../api'
 import { DialogPemasok } from '../komponen/dialog-pemasok'
 
@@ -79,6 +81,8 @@ export function HalamanPemasok() {
           className="h-12 w-full rounded-kontrol border border-garis bg-permukaan pl-10 pr-3 text-isi text-teks-utama placeholder:text-teks-redup"
         />
       </div>
+
+      {!cari && boleh(IZIN.stockView) && <PerluDipesan />}
 
       {q.isLoading ? (
         <KerangkaBaris jumlah={4} />
@@ -175,5 +179,86 @@ function KartuPemasok({ p, s }: { p: Pemasok; s?: StatPemasok }) {
         </div>
       </dl>
     </div>
+  )
+}
+
+/**
+ * "Perlu dipesan": barang di bawah batas / habis dalam seminggu (saran
+ * belanja), dikelompokkan menurut PEMASOK UTAMA-nya — satu ketukan membuka
+ * "Pesan lagi" pemasok itu dengan barangnya sudah tercentang. Barang tanpa
+ * pemasok utama disebut terpisah, dengan arahan mengaturnya.
+ */
+function PerluDipesan() {
+  const { tokoAktif } = useSesi()
+  const q = useQuery({
+    queryKey: ['stok', tokoAktif, 'saran-belanja'],
+    queryFn: () => stokApi.saldo(tokoAktif!, false, 1, 100, { keadaan: 'restock', urut: 'urgent' }),
+    enabled: !!tokoAktif,
+    staleTime: 30_000,
+  })
+  const daftar = q.data?.data ?? []
+  if (!daftar.length) return null
+
+  const kelompok = new Map<string, { nama: string; barang: SaldoStok[] }>()
+  for (const s of daftar) {
+    const k = s.supplier_id ?? ''
+    const g = kelompok.get(k) ?? { nama: s.supplier_name || '', barang: [] }
+    g.barang.push(s)
+    kelompok.set(k, g)
+  }
+  // Yang berpemasok dulu (bisa langsung dipesan), terbanyak dulu.
+  const urut = [...kelompok.entries()].sort(
+    ([a, x], [b, y]) => Number(a === '') - Number(b === '') || y.barang.length - x.barang.length,
+  )
+
+  return (
+    <Kartu className="flex flex-col gap-1 p-4">
+      <h2 className="flex items-center gap-2 text-judul-kartu font-semibold text-teks-utama">
+        <ShoppingBasket className="h-5 w-5 text-utama" aria-hidden />
+        Perlu dipesan
+      </h2>
+      <p className="text-keterangan text-teks-redup">
+        Di bawah batas minimum atau habis dalam seminggu — dikelompokkan menurut pemasok utamanya.
+      </p>
+      <ul className="-mx-1 mt-1 divide-y divide-garis">
+        {urut.map(([id, g]) => {
+          const nama = g.barang.slice(0, 3).map((b) => b.product_name).join(', ')
+          const lebih = g.barang.length > 3 ? ` +${g.barang.length - 3} lagi` : ''
+          const isi = (
+            <>
+              <span className="min-w-0 flex-1">
+                <span className="block font-medium text-teks-utama">{id ? g.nama : 'Tanpa pemasok utama'}</span>
+                <span className="block truncate text-keterangan text-teks-sekunder">
+                  {g.barang.length} barang: {nama}
+                  {lebih}
+                </span>
+                {!id && (
+                  <span className="block text-keterangan text-jingga-700">
+                    Atur pemasok utamanya di formulir barang supaya bisa dipesan dari sini.
+                  </span>
+                )}
+              </span>
+              {id && (
+                <span className="flex shrink-0 items-center gap-0.5 text-label font-semibold text-utama">
+                  Pesan
+                  <ChevronRight className="h-4 w-4" aria-hidden />
+                </span>
+              )}
+            </>
+          )
+          return (
+            <li key={id || '-'}>
+              {id ? (
+                <Link to={`/pemasok/${id}`} className="flex min-h-12 items-center gap-3 rounded-kontrol px-1 py-2.5 hover:bg-permukaan-2/60">
+                  {isi}
+                </Link>
+              ) : (
+                <div className="flex items-center gap-3 px-1 py-2.5">{isi}</div>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </Kartu>
   )
 }

@@ -333,6 +333,7 @@ func ListStocks(ctx context.Context, f StockFilter, limit, offset int) ([]StockR
 	var rows []StockRow
 	err := build().
 		Joins("LEFT JOIN categories c ON c.tenant_id = p.tenant_id AND c.id = p.category_id AND c.deleted_at IS NULL").
+		Joins("LEFT JOIN suppliers sp ON sp.tenant_id = p.tenant_id AND sp.id = p.supplier_id AND sp.deleted_at IS NULL").
 		Joins(`LEFT JOIN LATERAL (
 			SELECT GREATEST(COALESCE(-SUM(m.qty_delta), 0), 0) AS sold_30d
 			FROM stock_movements m
@@ -344,6 +345,7 @@ func ListStocks(ctx context.Context, f StockFilter, limit, offset int) ([]StockR
 			p.name AS product_name, p.min_stock, u.name AS unit_name,
 			COALESCE(p.sku, '') AS sku, COALESCE(p.image_url, '') AS image_url,
 			p.category_id, COALESCE(c.name, '') AS category_name, p.cost_price,
+			sp.id AS supplier_id, COALESCE(sp.name, '') AS supplier_name,
 			ROUND(GREATEST(stocks.qty, 0) * p.cost_price)::bigint AS stock_value,
 			v.sold_30d,
 			(SELECT m.occurred_at FROM stock_movements m WHERE ` + stockMoveMatch + ` AND m.kind = 'sale'
@@ -369,6 +371,8 @@ type StockRow struct {
 	ImageURL     string
 	CategoryID   *string
 	CategoryName string
+	SupplierID   *string // pemasok utama barang (000050)
+	SupplierName string
 	CostPrice    int64
 	StockValue   int64           // max(qty,0) × harga modal
 	Sold30d      decimal.Decimal `gorm:"column:sold_30d"` // keluar bersih 30 hari terakhir

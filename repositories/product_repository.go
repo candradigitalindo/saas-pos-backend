@@ -73,6 +73,7 @@ func ListProducts(ctx context.Context, f ProductFilter, limit, offset int) ([]mo
 	q := scopeTenantOn(ctx, tenantDB(ctx, nil), "products").
 		Joins("Unit").
 		Joins("Category").
+		Joins("Supplier").
 		Order("products.id DESC").
 		Limit(limit).
 		Offset(offset)
@@ -103,6 +104,7 @@ func FindProductInTenant(ctx context.Context, tx *gorm.DB, id string, out *model
 	err := scopeTenantOn(ctx, tenantDB(ctx, tx), "products").
 		Joins("Unit").
 		Joins("Category").
+		Joins("Supplier").
 		Where("products.id = ?", id).
 		First(out).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -114,7 +116,7 @@ func FindProductInTenant(ctx context.Context, tx *gorm.DB, id string, out *model
 // CreateProduct menyimpan produk baru (TenantID diisi pemanggil). tx opsional.
 func CreateProduct(ctx context.Context, tx *gorm.DB, row *models.Product) error {
 	// Omit association agar GORM tidak ikut menyisipkan/mengubah unit/kategori.
-	return tenantDB(ctx, tx).Omit("Unit", "Category").Create(row).Error
+	return tenantDB(ctx, tx).Omit("Unit", "Category", "Supplier").Create(row).Error
 }
 
 // CreateProductsBulk menyisipkan banyak produk sekaligus dalam satu transaksi
@@ -132,7 +134,7 @@ func CreateProductsBulk(ctx context.Context, rows []models.Product, sebelum func
 				return err
 			}
 		}
-		return tx.Omit("Unit", "Category").CreateInBatches(rows, 200).Error
+		return tx.Omit("Unit", "Category", "Supplier").CreateInBatches(rows, 200).Error
 	})
 }
 
@@ -141,9 +143,9 @@ func CreateProductsBulk(ctx context.Context, rows []models.Product, sebelum func
 func UpdateProduct(ctx context.Context, tx *gorm.DB, row *models.Product) error {
 	res := scopeTenant(ctx, tenantDB(ctx, tx)).
 		Model(row).
-		Omit("Unit", "Category").
+		Omit("Unit", "Category", "Supplier").
 		Select(
-			"category_id", "unit_id", "name", "sku", "barcode",
+			"category_id", "supplier_id", "unit_id", "name", "sku", "barcode",
 			"sell_price", "cost_price", "track_stock", "min_stock",
 			"is_active", "image_url", "description",
 		).
@@ -299,4 +301,16 @@ func CategoryLookup(ctx context.Context) (map[string]string, error) {
 		m[c.Name] = c.ID
 	}
 	return m, nil
+}
+
+// SetMainSupplierIfEmpty menjadikan `supplierID` pemasok utama barang-barang
+// yang BELUM punya pemasok utama (dipakai saat barang masuk pertama dari
+// pemasok). Barang yang sudah punya tidak diubah — pilihan pemilik menang.
+func SetMainSupplierIfEmpty(ctx context.Context, tx *gorm.DB, supplierID string, productIDs []string) error {
+	if supplierID == "" || len(productIDs) == 0 {
+		return nil
+	}
+	return scopeTenant(ctx, tenantDB(ctx, tx)).Model(&models.Product{}).
+		Where("id IN ? AND supplier_id IS NULL", productIDs).
+		UpdateColumn("supplier_id", supplierID).Error
 }

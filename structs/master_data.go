@@ -80,6 +80,7 @@ type SupplierResponse struct {
 type ProductCreateRequest struct {
 	Name       string `json:"name" binding:"required,min=1,max=200"`
 	CategoryID string `json:"category_id" binding:"omitempty,ulid"`
+	SupplierID string `json:"supplier_id" binding:"omitempty,ulid"` // pemasok utama
 	UnitID     string `json:"unit_id" binding:"required,ulid"`
 	SKU        string `json:"sku" binding:"omitempty,max=60"`
 	Barcode    string `json:"barcode" binding:"omitempty,max=60"`
@@ -134,6 +135,7 @@ type WholesalePriceResponse struct {
 type ProductUpdateRequest struct {
 	Name        *string `json:"name" binding:"omitempty,min=1,max=200"`
 	CategoryID  *string `json:"category_id" binding:"omitempty"`
+	SupplierID  *string `json:"supplier_id" binding:"omitempty"` // "" = hapus pemasok utama
 	UnitID      *string `json:"unit_id" binding:"omitempty,ulid"`
 	SKU         *string `json:"sku" binding:"omitempty,max=60"`
 	Barcode     *string `json:"barcode" binding:"omitempty,max=60"`
@@ -157,6 +159,8 @@ type ProductResponse struct {
 	Name         string `json:"name"`
 	CategoryID   string `json:"category_id,omitempty"`
 	CategoryName string `json:"category_name,omitempty"`
+	SupplierID   string `json:"supplier_id,omitempty"` // pemasok utama
+	SupplierName string `json:"supplier_name,omitempty"`
 	UnitID       string `json:"unit_id"`
 	UnitName     string `json:"unit_name,omitempty"`
 	SKU          string `json:"sku,omitempty"`
@@ -258,7 +262,8 @@ type SupplierProductResponse struct {
 	UnitName       string `json:"unit_name"`       // satuan beli terakhir (kemasan bila dus)
 	UnitConversion string `json:"unit_conversion"` // isi satuan beli terakhir (satuan dasar)
 	ProductUnitID  string `json:"product_unit_id,omitempty"`
-	LastBoughtAt   string `json:"last_bought_at"`
-	Times          int64  `json:"times"`   // jumlah nota yang memuatnya
-	Qty90d         string `json:"qty_90d"` // satuan dasar, 90 hari terakhir
+	LastBoughtAt   string `json:"last_bought_at,omitempty"` // kosong = belum pernah dibeli dari sini
+	Times          int64  `json:"times"`                    // jumlah nota yang memuatnya
+	Qty90d         string `json:"qty_90d"`                  // satuan dasar, 90 hari terakhir
+	Main           bool   `json:"main"`                     // pemasok ini pemasok utama barangnya
 }

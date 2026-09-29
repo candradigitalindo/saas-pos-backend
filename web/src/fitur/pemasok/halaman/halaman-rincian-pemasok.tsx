@@ -293,7 +293,12 @@ function PesanLagi({ pemasok: p }: { pemasok: Pemasok }) {
                   className="mt-0.5 h-5 w-5 shrink-0 accent-utama"
                 />
                 <span className="min-w-0 flex-1">
-                  <span className="block font-medium text-teks-utama">{k.b.product_name}</span>
+                  <span className="flex flex-wrap items-center gap-1.5 font-medium text-teks-utama">
+                    {k.b.product_name}
+                    {k.b.main && (
+                      <span className="rounded-full bg-sorot px-1.5 text-keterangan font-semibold text-hijau-800">utama</span>
+                    )}
+                  </span>
                   <span className="block text-keterangan text-teks-redup">
                     {k.s && (
                       <span
@@ -310,7 +315,9 @@ function PesanLagi({ pemasok: p }: { pemasok: Pemasok }) {
                       </span>
                     )}
                     {k.s && ' · '}
-                    terakhir {formatRupiah(k.b.unit_cost)}/{satuan} · {formatLaluHari(k.b.last_bought_at).toLowerCase()}
+                    {k.b.last_bought_at
+                      ? `terakhir ${formatRupiah(k.b.unit_cost)}/${satuan} · ${formatLaluHari(k.b.last_bought_at).toLowerCase()}`
+                      : `belum pernah dibeli dari sini · modal ${formatRupiah(k.b.unit_cost)}/${satuan}`}
                   </span>
                 </span>
               </label>

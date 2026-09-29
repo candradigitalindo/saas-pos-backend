@@ -9,7 +9,7 @@ import { KolomUang } from '@/bersama/ui/kolom-uang'
 import { Tombol } from '@/bersama/ui/tombol'
 import { KerangkaBaris } from '@/bersama/komponen/kerangka'
 import { useToast } from '@/bersama/komponen/toast'
-import { useDaftarHarga, useKategori, useSatuan } from '@/bersama/hooks/use-katalog'
+import { useDaftarHarga, useKategori, usePemasok, useSatuan } from '@/bersama/hooks/use-katalog'
 import { GalatAPI } from '@/lib/api-client'
 import { galatKolom } from '@/lib/galat-kolom'
 import { PemindaiBarcode } from '@/bersama/komponen/pemindai-barcode'
@@ -41,6 +41,7 @@ export function HalamanFormBarang() {
 
   const satuan = useSatuan()
   const kategori = useKategori()
+  const pemasok = usePemasok()
   const sedangUbah = !!id
 
   // Foto barang BARU tidak bisa langsung diunggah: endpointnya butuh id, dan
@@ -62,6 +63,7 @@ export function HalamanFormBarang() {
     cost_price: 0,
     unit_id: '',
     category_id: '',
+    supplier_id: '',
     sku: '',
     barcode: '',
     min_stock: '',
@@ -87,6 +89,7 @@ export function HalamanFormBarang() {
       cost_price: p.cost_price,
       unit_id: p.unit_id,
       category_id: p.category_id ?? '',
+      supplier_id: p.supplier_id ?? '',
       sku: p.sku ?? '',
       barcode: p.barcode ?? '',
       min_stock: p.min_stock === '0' ? '' : p.min_stock,
@@ -137,6 +140,8 @@ export function HalamanFormBarang() {
         sell_price: form.sell_price,
         cost_price: form.cost_price,
         category_id: form.category_id || undefined,
+        // Saat mengubah, "" berarti MENGHAPUS pemasok utama (bukan "tidak diubah").
+        supplier_id: sedangUbah ? form.supplier_id : form.supplier_id || undefined,
         sku: form.sku.trim() || undefined,
         barcode: form.barcode.trim() || undefined,
         min_stock: form.min_stock.trim() || undefined,
@@ -340,6 +345,21 @@ export function HalamanFormBarang() {
                 {kategori.data?.data.map((k) => (
                   <option key={k.id} value={k.id}>
                     {k.name}
+                  </option>
+                ))}
+              </Pilihan>
+
+              <Pilihan
+                label="Pemasok utama"
+                value={form.supplier_id}
+                onChange={(e) => setForm((f) => ({ ...f, supplier_id: e.target.value }))}
+                bantuan="Terisi otomatis dari barang masuk pertama. Dipakai mengelompokkan saran belanja per pemasok."
+                galat={galatKolom(kolomGalat, 'supplier_id')}
+              >
+                <option value="">Tanpa pemasok utama</option>
+                {pemasok.data?.data.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
                   </option>
                 ))}
               </Pilihan>

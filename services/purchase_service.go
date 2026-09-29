@@ -206,6 +206,13 @@ func ReceivePurchase(ctx context.Context, in PurchaseInput) (int, []byte, error)
 		}); err != nil {
 			return err
 		}
+		// Pemasok utama (000050): barang yang belum punya, mendapatkannya dari
+		// barang masuk pertama yang menyebut pemasok.
+		if in.SupplierID != "" {
+			if err := repositories.SetMainSupplierIfEmpty(ctx, tx, in.SupplierID, ids); err != nil {
+				return err
+			}
+		}
 		// Harga modal produk = harga beli terakhir (last-cost).
 		for id, biaya := range modalDasar {
 			if err := repositories.SetProductLastCost(ctx, tx, id, biaya); err != nil {
