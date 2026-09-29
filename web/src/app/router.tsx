@@ -38,6 +38,8 @@ const HalamanBarangMasuk = muat(() => import('@/fitur/stok/halaman/halaman-baran
 const HalamanOpname = muat(() => import('@/fitur/stok/halaman/halaman-opname'), 'HalamanOpname')
 const HalamanTransfer = muat(() => import('@/fitur/stok/halaman/halaman-transfer'), 'HalamanTransfer')
 const HalamanUtangPemasok = muat(() => import('@/fitur/stok/halaman/halaman-utang-pemasok'), 'HalamanUtangPemasok')
+const HalamanPemasok = muat(() => import('@/fitur/pemasok/halaman/halaman-pemasok'), 'HalamanPemasok')
+const HalamanRincianPemasok = muat(() => import('@/fitur/pemasok/halaman/halaman-rincian-pemasok'), 'HalamanRincianPemasok')
 const HalamanPelanggan = muat(() => import('@/fitur/pelanggan/halaman/halaman-pelanggan'), 'HalamanPelanggan')
 const HalamanKasbon = muat(() => import('@/fitur/pelanggan/halaman/halaman-kasbon'), 'HalamanKasbon')
 const HalamanPengaturan = muat(() => import('@/fitur/pengaturan/halaman/halaman-pengaturan'), 'HalamanPengaturan')
@@ -325,6 +327,26 @@ const router = createBrowserRouter([
           <ButuhIzin izin={[IZIN.stockTransfer]}>
             <Tunggu>
               <HalamanTransfer />
+            </Tunggu>
+          </ButuhIzin>
+        ),
+      },
+      {
+        path: '/pemasok',
+        element: (
+          <ButuhIzin izin={[IZIN.productView]}>
+            <Tunggu>
+              <HalamanPemasok />
+            </Tunggu>
+          </ButuhIzin>
+        ),
+      },
+      {
+        path: '/pemasok/:id',
+        element: (
+          <ButuhIzin izin={[IZIN.productView]}>
+            <Tunggu>
+              <HalamanRincianPemasok />
             </Tunggu>
           </ButuhIzin>
         ),

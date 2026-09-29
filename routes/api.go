@@ -321,6 +321,11 @@ func registerTenantRoutes(v1 *gin.RouterGroup) {
 		g.DELETE("/:id", middlewares.Require("product.edit"), res.del)
 	}
 
+	// Pemasok: angka belanja & barang yang biasa dibeli (butuh stock.view —
+	// memuat nilai pembelian).
+	t.GET("/supplier-stats", middlewares.Require("stock.view"), controllers.SupplierStats)
+	t.GET("/suppliers/:id/products", middlewares.Require("stock.view"), controllers.SupplierProducts)
+
 	// Daftar harga khusus (member, reseller) — seperti master data lain.
 	pl := t.Group("/price-lists")
 	pl.GET("", middlewares.Require("product.view"), controllers.ListPriceLists)

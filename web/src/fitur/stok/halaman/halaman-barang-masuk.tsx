@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ulid } from 'ulid'
 import { History, Info, Plus, Trash2, TrendingDown, TrendingUp } from 'lucide-react'
@@ -64,7 +64,9 @@ export function HalamanBarangMasuk() {
   const kat = useKategori()
   const warna = petaWarnaKategori(kat.data?.data ?? [])
 
-  const [pemasokId, setPemasokId] = useState('')
+  // Dari halaman Pemasok ("Catat barang masuk"): pemasoknya sudah terisi.
+  const [params] = useSearchParams()
+  const [pemasokId, setPemasokId] = useState(params.get('pemasok') ?? '')
   const [noNota, setNoNota] = useState('')
   const [baris, setBaris] = useState<BarisMasuk[]>([])
   const [bukaPemilih, setBukaPemilih] = useState(false)

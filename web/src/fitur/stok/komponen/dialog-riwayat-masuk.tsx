@@ -78,7 +78,18 @@ export function DialogRiwayatMasuk({ terbuka, onTutup }: { terbuka: boolean; onT
   )
 }
 
-function BarisNota({ p, terbuka, onKlik }: { p: Pembelian; terbuka: boolean; onKlik: () => void }) {
+export function BarisNota({
+  p,
+  terbuka,
+  onKlik,
+  tanpaPemasok = false,
+}: {
+  p: Pembelian
+  terbuka: boolean
+  onKlik: () => void
+  /** Di halaman satu pemasok: nama pemasok tidak diulang di tiap baris. */
+  tanpaPemasok?: boolean
+}) {
   const nama = p.item_names ?? []
   const lebih = p.item_count - nama.length
   return (
@@ -91,8 +102,14 @@ function BarisNota({ p, terbuka, onKlik }: { p: Pembelian; terbuka: boolean; onK
       >
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-baseline gap-x-2">
-            <span className="font-semibold text-teks-utama">{p.supplier_name || 'Tanpa pemasok'}</span>
-            {p.invoice_no && <span className="text-keterangan text-teks-redup">Nota {p.invoice_no}</span>}
+            {tanpaPemasok ? (
+              <span className="font-semibold text-teks-utama">{p.invoice_no ? `Nota ${p.invoice_no}` : 'Tanpa nomor nota'}</span>
+            ) : (
+              <>
+                <span className="font-semibold text-teks-utama">{p.supplier_name || 'Tanpa pemasok'}</span>
+                {p.invoice_no && <span className="text-keterangan text-teks-redup">Nota {p.invoice_no}</span>}
+              </>
+            )}
           </span>
           <span className="block truncate text-label text-teks-sekunder">
             {nama.join(', ')}

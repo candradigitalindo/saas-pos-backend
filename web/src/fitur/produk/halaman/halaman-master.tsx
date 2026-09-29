@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2 } from 'lucide-react'
 import { Kartu } from '@/bersama/ui/kartu'
@@ -128,6 +129,16 @@ export function HalamanMaster() {
         }}
         pilihan={(Object.keys(JUDUL) as Tab[]).map((t) => [t, JUDUL[t].label] as const)}
       />
+
+      {tab === 'pemasok' && (
+        <p className="rounded-kontrol bg-permukaan-2 px-3 py-2 text-label text-teks-sekunder">
+          Nomor WhatsApp, alamat, belanja, dan utang tiap pemasok ada di halaman{' '}
+          <Link to="/pemasok" className="font-semibold text-utama hover:underline">
+            Pemasok
+          </Link>
+          .
+        </p>
+      )}
 
       <Kartu className="p-4">
         <form

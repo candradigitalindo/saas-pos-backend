@@ -237,3 +237,28 @@ type SpecialPriceResponse struct {
 	PriceListID string `json:"price_list_id"`
 	Price       int64  `json:"price"`
 }
+
+// SupplierStatResponse: GET /supplier-stats — angka belanja satu pemasok.
+type SupplierStatResponse struct {
+	SupplierID     string `json:"supplier_id"`
+	PurchaseCount  int64  `json:"purchase_count"`
+	Spent30d       int64  `json:"spent_30d"`
+	LastPurchaseAt string `json:"last_purchase_at,omitempty"`
+	Outstanding    int64  `json:"outstanding"`
+	OverdueCount   int64  `json:"overdue_count"`
+}
+
+// SupplierProductResponse: GET /suppliers/:id/products — satu barang yang
+// pernah dibeli dari pemasok, dengan pembelian terakhirnya.
+type SupplierProductResponse struct {
+	ProductID      string `json:"product_id"`
+	ProductName    string `json:"product_name"`
+	BaseUnitName   string `json:"base_unit_name"`
+	UnitCost       int64  `json:"unit_cost"`       // per satuan beli terakhir
+	UnitName       string `json:"unit_name"`       // satuan beli terakhir (kemasan bila dus)
+	UnitConversion string `json:"unit_conversion"` // isi satuan beli terakhir (satuan dasar)
+	ProductUnitID  string `json:"product_unit_id,omitempty"`
+	LastBoughtAt   string `json:"last_bought_at"`
+	Times          int64  `json:"times"`   // jumlah nota yang memuatnya
+	Qty90d         string `json:"qty_90d"` // satuan dasar, 90 hari terakhir
+}

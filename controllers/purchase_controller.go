@@ -178,16 +178,7 @@ func PayPurchase(c *gin.Context) {
 func PayablesSummary(c *gin.Context) {
 	ctx := c.Request.Context()
 	outletID := c.Query("outlet_id")
-	hariIni := time.Now().UTC()
-	if outletID != "" {
-		var o models.Outlet
-		if err := repositories.FindOutletByID(ctx, nil, outletID, &o); err == nil {
-			if d, e := timez.BusinessDate(hariIni, o.Timezone, o.DayStartOffset()); e == nil {
-				hariIni = d
-			}
-		}
-	}
-	hariIni = time.Date(hariIni.Year(), hariIni.Month(), hariIni.Day(), 0, 0, 0, 0, time.UTC)
+	hariIni := hariUsahaOutlet(c, outletID)
 	segera := services.PayableDueSoonDays()
 	rows, err := repositories.PayablesSummary(ctx, outletID, hariIni, segera)
 	if err != nil {
@@ -216,4 +207,20 @@ func PayablesSummary(c *gin.Context) {
 	c.JSON(http.StatusOK, structs.SuccessResponse[structs.PayablesSummaryResponse]{
 		Success: true, Message: "Ringkasan utang pemasok", Data: out,
 	})
+}
+
+// hariUsahaOutlet: tanggal usaha HARI INI outlet (zona & jam tutup bukunya),
+// sebagai tengah malam UTC — pembanding jatuh tempo. Outlet kosong/tak
+// ditemukan → tanggal UTC.
+func hariUsahaOutlet(c *gin.Context, outletID string) time.Time {
+	h := time.Now().UTC()
+	if outletID != "" {
+		var o models.Outlet
+		if err := repositories.FindOutletByID(c.Request.Context(), nil, outletID, &o); err == nil {
+			if d, e := timez.BusinessDate(h, o.Timezone, o.DayStartOffset()); e == nil {
+				h = d
+			}
+		}
+	}
+	return time.Date(h.Year(), h.Month(), h.Day(), 0, 0, 0, 0, time.UTC)
 }

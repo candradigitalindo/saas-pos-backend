@@ -273,7 +273,9 @@ Semua endpoint bisnis di bawah prefiks `/api/v1`.
 | `GET/POST/PUT/DELETE /api/v1/outlets[/:id]` | `outlet.manage` | CRUD outlet. `tax_rate` & `service_charge_rate` = pecahan desimal string, 0 ≤ tarif < 1, maks. 4 desimal (`"0.11"` = 11%). `GET /outlets` juga untuk `stock.transfer` (memilih cabang tujuan) |
 | `GET/POST/PUT/DELETE /api/v1/categories[/:id]` | `product.view` / `product.edit` | CRUD kategori (maks 2 tingkat) |
 | `GET/POST/PUT/DELETE /api/v1/units[/:id]` | `product.view` / `product.edit` | CRUD satuan |
-| `GET/POST/PUT/DELETE /api/v1/suppliers[/:id]` | `product.view` / `product.edit` | CRUD supplier |
+| `GET/POST/PUT/DELETE /api/v1/suppliers[/:id]` | `product.view` / `product.edit` | CRUD supplier (nama, telepon/WhatsApp, alamat, catatan) |
+| `GET  /api/v1/supplier-stats?outlet_id=` | `stock.view` | Angka belanja per pemasok: `purchase_count`, `spent_30d`, `last_purchase_at`, `outstanding` (utang), `overdue_count` |
+| `GET  /api/v1/suppliers/:id/products?outlet_id=` | `stock.view` | Barang yang biasa dibeli dari pemasok (≤50, terakhir dibeli dulu): harga & satuan beli terakhir (`unit_cost`, `unit_name`, `unit_conversion`, `product_unit_id`), `times` (jumlah nota), `qty_90d` (satuan dasar) — dasar "pesan lagi" |
 | `GET  /api/v1/products?q=&category_id=&is_active=` | `product.view` | Cari produk (index trigram) |
 | `POST /api/v1/products` · `PUT /:id` | `product.edit` | Buat / ubah produk (termasuk `description` ≤500 karakter untuk menu aplikasi antar — GoFood menampilkan 250 pertama; migrasi 000043). `wholesale_prices: [{min_qty, price}]` = harga grosir per jumlah (≤5 tingkat, min_qty > 1, unik; PUT: tidak dikirim = tidak diubah, `[]` = dihapus) — disimpan sebagai `product_prices` pada daftar harga default ("Harga umum", dibuat otomatis). `GET /products/:id` & balasan buat/ubah membawa `wholesale_prices`. Checkout memakai tingkat ber-min_qty terbesar yang terpenuhi oleh TOTAL jumlah barang itu di transaksi (varian dijumlah), varian tetap menambah selisihnya |
 | `DELETE /api/v1/products/:id` | `product.delete` | Hapus produk |

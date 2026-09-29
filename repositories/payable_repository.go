@@ -9,6 +9,7 @@ import (
 	"candra/backend-api/internal/ulid"
 	"candra/backend-api/models"
 
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -136,4 +137,93 @@ func InsertPayableNoticeOnce(ctx context.Context, tx *gorm.DB, purchaseID, kind 
 		ON CONFLICT (tenant_id, purchase_id, kind) DO NOTHING RETURNING id`,
 		ulid.New(), reqctx.TenantID(ctx), purchaseID, kind).Scan(&id).Error
 	return id != "", err
+}
+
+// SupplierStat: angka belanja satu pemasok di satu outlet (atau semua outlet
+// yang boleh) — untuk daftar Pemasok.
+type SupplierStat struct {
+	SupplierID     string
+	PurchaseCount  int64
+	Spent30d       int64 `gorm:"column:spent_30d"`
+	LastPurchaseAt *time.Time
+	Outstanding    int64
+	OverdueCount   int64
+}
+
+// SupplierStats mengembalikan SupplierStat per pemasok yang pernah dibeli.
+func SupplierStats(ctx context.Context, outletID string, hariIni time.Time) ([]SupplierStat, error) {
+	q := tenantDB(ctx, nil).Table("purchases pu").
+		Where("pu.tenant_id = ? AND pu.status = 'received' AND pu.supplier_id IS NOT NULL", reqctx.TenantID(ctx))
+	if outletID != "" {
+		q = q.Where("pu.outlet_id = ?", outletID)
+	}
+	q = scopeOutlet(ctx, q, "pu.outlet_id")
+	var rows []SupplierStat
+	err := q.Select(`pu.supplier_id, COUNT(*) AS purchase_count,
+			COALESCE(SUM(pu.total) FILTER (WHERE pu.occurred_at >= now() - interval '30 days'), 0)::bigint AS spent_30d,
+			MAX(pu.occurred_at) AS last_purchase_at,
+			COALESCE(SUM(pu.total - pu.paid_amount), 0)::bigint AS outstanding,
+			COUNT(*) FILTER (WHERE pu.paid_amount < pu.total AND pu.due_date < ?::date) AS overdue_count`,
+		hariIni.Format("2006-01-02")).
+		Group("pu.supplier_id").
+		Scan(&rows).Error
+	return rows, err
+}
+
+// SupplierProduct: satu barang yang pernah dibeli dari pemasok — pembelian
+// terakhirnya (harga & satuan beli, bisa kemasan) dan seberapa sering.
+type SupplierProduct struct {
+	ProductID      string
+	ProductName    string
+	BaseUnitName   string
+	UnitCost       int64           // per satuan beli terakhir (kemasan bila dus)
+	UnitName       string          // satuan beli terakhir
+	UnitConversion decimal.Decimal // isi satuan beli terakhir dalam satuan dasar
+	ProductUnitID  *string
+	LastBoughtAt   time.Time
+	Times          int64           // berapa nota memuat barang ini
+	Qty90d         decimal.Decimal `gorm:"column:qty_90d"` // satuan dasar, 90 hari terakhir
+}
+
+// SupplierProducts: barang yang biasa dibeli dari satu pemasok, terakhir
+// dibeli dulu (paling banyak 50). Barang yang sudah dihapus tidak ikut —
+// daftar ini dipakai untuk memesan lagi.
+func SupplierProducts(ctx context.Context, supplierID, outletID string) ([]SupplierProduct, error) {
+	outletCond, args := "", []any{reqctx.TenantID(ctx), supplierID}
+	if outletID != "" {
+		outletCond = " AND pu.outlet_id = ?"
+		args = append(args, outletID)
+	}
+	if ids, terbatas := reqctx.OutletScope(ctx); terbatas {
+		if len(ids) == 0 {
+			return nil, nil
+		}
+		outletCond += " AND pu.outlet_id IN ?"
+		args = append(args, ids)
+	}
+	var rows []SupplierProduct
+	err := tenantDB(ctx, nil).Raw(`
+		WITH baris AS (
+			SELECT pi.product_id, pi.purchase_id, pi.qty, pi.unit_conversion, pi.unit_cost, pi.unit_name,
+				pi.product_unit_id, pu.occurred_at
+			FROM purchase_items pi
+			JOIN purchases pu ON pu.tenant_id = pi.tenant_id AND pu.id = pi.purchase_id
+			WHERE pi.tenant_id = ? AND pu.supplier_id = ? AND pu.status = 'received'`+outletCond+`
+		), agg AS (
+			SELECT product_id, COUNT(DISTINCT purchase_id) AS times,
+				COALESCE(SUM(qty * unit_conversion) FILTER (WHERE occurred_at >= now() - interval '90 days'), 0) AS qty_90d
+			FROM baris GROUP BY product_id
+		), terakhir AS (
+			SELECT DISTINCT ON (product_id) * FROM baris ORDER BY product_id, occurred_at DESC
+		)
+		SELECT t.product_id, p.name AS product_name, COALESCE(un.name, '') AS base_unit_name,
+			t.unit_cost, t.unit_name, t.unit_conversion, t.product_unit_id,
+			t.occurred_at AS last_bought_at, a.times, a.qty_90d
+		FROM terakhir t
+		JOIN agg a ON a.product_id = t.product_id
+		JOIN products p ON p.tenant_id = ? AND p.id = t.product_id AND p.deleted_at IS NULL
+		LEFT JOIN units un ON un.tenant_id = p.tenant_id AND un.id = p.unit_id
+		ORDER BY t.occurred_at DESC
+		LIMIT 50`, append(args, reqctx.TenantID(ctx))...).Scan(&rows).Error
+	return rows, err
 }
