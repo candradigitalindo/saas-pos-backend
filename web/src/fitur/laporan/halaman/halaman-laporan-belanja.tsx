@@ -51,7 +51,7 @@ export function HalamanLaporanBelanja() {
   const unduh = async (tipe: 'purchases' | 'purchase_payments') => {
     setMengunduh(tipe)
     try {
-      await laporanApi.unduhCSV(tipe, { from: dari, to: sampai, outlet_id: tokoAktif })
+      await laporanApi.unduh(tipe, { from: dari, to: sampai, outlet_id: tokoAktif })
     } catch (e) {
       toast.gagal(e instanceof Error ? e.message : 'Gagal mengunduh.')
     } finally {

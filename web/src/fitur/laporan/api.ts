@@ -77,17 +77,20 @@ export const laporanApi = {
     api.get<LaporanBelanja>('/reports/purchases', { query: { from, to, outlet_id } }),
 
   /**
-   * Unduh CSV.
+   * Unduh laporan sebagai berkas — bawaannya .xlsx (Excel sungguhan: terbuka
+   * benar di Excel berbahasa apa pun, angkanya tetap angka); "csv" untuk
+   * program.
    *
    * Endpoint ini mengembalikan berkas, bukan amplop JSON, jadi tidak lewat
    * api-client — tetapi tetap memakai token dari penyimpanan yang sama.
    */
-  async unduhCSV(
+  async unduh(
     /** purchases = baris barang per nota belanja; purchase_payments = pembayaran ke pemasok. */
     type: 'sales' | 'profit' | 'dashboard' | 'purchases' | 'purchase_payments',
     q: { from?: string; to?: string; group_by?: string; outlet_id?: string; date?: string },
+    format: 'xlsx' | 'csv' = 'xlsx',
   ): Promise<void> {
-    const p = new URLSearchParams({ type, format: 'csv' })
+    const p = new URLSearchParams({ type, format })
     for (const [k, v] of Object.entries(q)) if (v) p.set(k, v)
 
     const token = ambilSesi('tenant')?.access_token
@@ -99,7 +102,7 @@ export const laporanApi = {
     const blob = await res.blob()
     const namaBerkas =
       res.headers.get('Content-Disposition')?.match(/filename="(.+?)"/)?.[1] ??
-      `laporan-${type}.csv`
+      `laporan-${type}.${format}`
 
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')

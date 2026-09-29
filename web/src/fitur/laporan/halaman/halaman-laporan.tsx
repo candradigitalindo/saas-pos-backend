@@ -322,7 +322,7 @@ export function HalamanLaporan() {
               jenis="kedua"
               onClick={async () => {
                 try {
-                  await laporanApi.unduhCSV('sales', {
+                  await laporanApi.unduh('sales', {
                     from: dari,
                     to: sampai,
                     group_by: kelompok,

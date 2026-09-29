@@ -244,8 +244,8 @@ func TestReportExportCSV(t *testing.T) {
 	}
 
 	// Format tak didukung → 400.
-	call(t, "GET", "/api/v1/reports/export?type=sales&format=xlsx&from="+bd+"&to="+bd, f.token, nil).
-		mustCode(t, "format xlsx", 400)
+	call(t, "GET", "/api/v1/reports/export?type=sales&format=pdf&from="+bd+"&to="+bd, f.token, nil).
+		mustCode(t, "format pdf", 400)
 	// type tak dikenal → 422.
 	call(t, "GET", "/api/v1/reports/export?type=galaksi&format=csv&from="+bd+"&to="+bd, f.token, nil).
 		mustCode(t, "type ngawur", 422)

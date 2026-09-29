@@ -63,12 +63,12 @@ func ReportProfit(c *gin.Context) {
 }
 
 // ReportExport: GET /api/v1/reports/export?type=&format=csv&from=&to=&outlet_id=&group_by=&date=
-// Fase 5 hanya mendukung format csv; xlsx/pdf ditolak 422.
+// format = csv (bawaan, untuk program) | xlsx (untuk manusia — lihat services/xlsx.go); lainnya ditolak.
 func ReportExport(c *gin.Context) {
 	reportType := c.Query("type")
 	format := c.DefaultQuery("format", "csv")
-	if format != "csv" {
-		badRequest(c, "format", "Format "+format+" belum didukung pada fase ini — gunakan csv")
+	if format != "csv" && format != "xlsx" {
+		badRequest(c, "format", "Format "+format+" belum didukung — gunakan csv atau xlsx")
 		return
 	}
 	if reportType != "dashboard" {
@@ -78,16 +78,16 @@ func ReportExport(c *gin.Context) {
 		}
 	}
 
-	filename, body, err := services.ExportReportCSV(
-		c.Request.Context(), reportType,
+	berkas, err := services.ExportReport(
+		c.Request.Context(), reportType, format,
 		c.Query("outlet_id"), c.Query("from"), c.Query("to"), c.Query("group_by"), c.Query("date"),
 	)
 	if err != nil {
 		respondServiceError(c, err)
 		return
 	}
-	c.Header("Content-Disposition", `attachment; filename="`+filename+`"`)
-	c.Data(http.StatusOK, "text/csv; charset=utf-8", body)
+	c.Header("Content-Disposition", `attachment; filename="`+berkas.Nama+`"`)
+	c.Data(http.StatusOK, berkas.JenisMIME, berkas.Isi)
 }
 
 // RebuildReportSummaries: POST /api/v1/reports/rebuild-summaries?from=&to=&outlet_id=
